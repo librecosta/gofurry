@@ -1,0 +1,12 @@
+node_modules/
+.output/
+.nitro/
+.tanstack/
+dist/
+bin/
+playwright-report/
+test-results/
+.env
+.env.*
+!.env.example
+*.log

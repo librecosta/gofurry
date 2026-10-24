@@ -1,0 +1,53 @@
+version: '3'
+
+env:
+  GOTOOLCHAIN: go1.26.10
+
+tasks:
+  tools:
+    desc: Verify pinned runtime and package manager versions
+    cmds:
+      - pnpm exec node scripts/check-toolchains.mjs
+  install:
+    cmds:
+      - pnpm install --frozen-lockfile
+      - cmd: go mod download
+        dir: services/api
+  dev:web:
+    cmds:
+      - pnpm --filter @gofurry/web dev
+  dev:api:
+    dir: services/api
+    cmds:
+      - go run ./cmd/api
+  check:
+    desc: Verify toolchains, Go formatting/vet/tests/build, Web build/types and browser smoke tests
+    cmds:
+      - task: tools
+      - pnpm exec node scripts/check-go-format.mjs
+      - task: check:api
+      - task: build:web
+      - pnpm --filter @gofurry/web typecheck
+      - pnpm --filter @gofurry/web test:e2e
+  check:api:
+    dir: services/api
+    cmds:
+      - go vet ./...
+      - go test ./...
+      - go build -o ../../bin/api{{exeExt}} ./cmd/api
+  build:web:
+    cmds:
+      - pnpm --filter @gofurry/web build
+  check:hmr:
+    desc: Verify StyleX HMR and React Fast Refresh in the dev server
+    cmds:
+      - pnpm --filter @gofurry/web test:hmr
+  check:docker:
+    desc: Validate Compose and build independent local images (does not start services)
+    cmds:
+      - docker compose -f deploy/compose/compose.yaml config --quiet
+      - docker compose -f deploy/compose/compose.yaml build
+  check:containers:
+    desc: Smoke-test prebuilt images on random ports in an isolated disposable Compose project
+    cmds:
+      - pnpm exec node scripts/check-containers.mjs
