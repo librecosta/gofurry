@@ -1,0 +1,4 @@
+[submodule "third-party/go-furry"]
+	path = third-party/go-furry
+	url = https://github.com/gofurry/gofurry-nav-site.git
+	branch = dev
