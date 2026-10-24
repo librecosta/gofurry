@@ -11,8 +11,7 @@ tasks:
   install:
     cmds:
       - pnpm install --frozen-lockfile
-      - cmd: go mod download
-        dir: services/api
+      - go -C services/api mod download
   dev:web:
     cmds:
       - pnpm --filter @gofurry/web dev
