@@ -11,33 +11,52 @@ import (
 
 	"github.com/librecosta/gofurry/services/api/internal/platform"
 	"github.com/librecosta/gofurry/services/api/internal/server"
+	"github.com/spf13/cobra"
 )
 
+func newCommand() *cobra.Command {
+	var path string
+	var cfg platform.Config
+	cmd := &cobra.Command{
+		Use: "api", Short: "GoFurry API", SilenceUsage: true, SilenceErrors: true,
+		Args:              cobra.NoArgs,
+		PersistentPreRunE: func(*cobra.Command, []string) (err error) { cfg, err = platform.LoadConfig(path); return err },
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			logger := platform.NewLogger(cmd.OutOrStdout(), cfg.Server.Environment)
+			return server.New(logger, cfg).Listen(cmd.Context(), cfg.Server.Address)
+		},
+	}
+	cmd.PersistentFlags().StringVar(&path, "config", "", "single YAML configuration file (required)")
+	_ = cmd.MarkPersistentFlagRequired("config")
+	cmd.AddCommand(&cobra.Command{
+		Use: "healthcheck", Short: "Probe the listener configured by --config", Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			client := http.Client{Timeout: 2 * time.Second}
+			req, err := http.NewRequestWithContext(cmd.Context(), http.MethodGet, cfg.ProbeURL(), nil)
+			if err != nil {
+				return err
+			}
+			res, err := client.Do(req)
+			if err != nil {
+				return fmt.Errorf("healthcheck failed")
+			}
+			defer res.Body.Close()
+			if res.StatusCode != http.StatusOK {
+				return fmt.Errorf("healthcheck status %d", res.StatusCode)
+			}
+			return nil
+		},
+	})
+	return cmd
+}
+
 func main() {
-	// The same binary supplies a probe without a shell or curl in the runtime image.
-	if len(os.Args) == 2 && os.Args[1] == "healthcheck" {
-		client := http.Client{Timeout: 2 * time.Second}
-		res, err := client.Get("http://127.0.0.1:8080/readyz")
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "healthcheck failed")
-			os.Exit(1)
-		}
-		res.Body.Close()
-		if res.StatusCode != http.StatusOK {
-			os.Exit(1)
-		}
-		return
-	}
-	cfg, err := platform.LoadConfig()
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
-	logger := platform.NewLogger(os.Stdout, cfg.Environment)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	if err := server.New(logger).Listen(ctx, cfg.Address); err != nil {
-		logger.Error().Err(err).Msg("server failed")
+	cmd := newCommand()
+	cmd.SetOut(os.Stdout)
+	if err := cmd.ExecuteContext(ctx); err != nil {
+		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }

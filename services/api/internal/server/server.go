@@ -7,10 +7,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/bytedance/sonic"
 	"github.com/gofiber/fiber/v3"
 	"github.com/gofiber/fiber/v3/middleware/requestid"
 	"github.com/librecosta/gofurry/services/api/internal/middleware"
+	"github.com/librecosta/gofurry/services/api/internal/platform"
 	"github.com/librecosta/gofurry/services/api/routers"
 	"github.com/rs/zerolog"
 )
@@ -20,19 +20,25 @@ type Server struct {
 	ready atomic.Bool
 }
 
-func New(logger zerolog.Logger) *Server {
+func New(logger zerolog.Logger, cfg platform.Config) *Server {
+	logger = logger.With().Str("region", cfg.Deployment.Region).Logger()
 	s := &Server{}
 	s.App = fiber.New(fiber.Config{
 		AppName:      "gofurry-api",
-		JSONEncoder:  sonic.Marshal,
-		JSONDecoder:  sonic.Unmarshal,
+		JSONEncoder:  platform.MarshalJSON,
+		JSONDecoder:  platform.UnmarshalJSON,
 		ErrorHandler: errorHandler,
 		ReadTimeout:  5 * time.Second,
 		WriteTimeout: 10 * time.Second,
 		IdleTimeout:  30 * time.Second,
 		BodyLimit:    1024 * 1024,
 	})
-	middleware.Register(s.App, logger)
+	middleware.Register(s.App, logger, cfg.Server.Environment == "production", cfg.Logging.SlowRequest)
+	s.App.Use(func(c fiber.Ctx) error {
+		c.Set("X-GoFurry-Region", cfg.Deployment.Region)
+		c.Set("X-GoFurry-Content-Mode", "SFW")
+		return c.Next()
+	})
 	routers.Register(s.App, s.ready.Load)
 	s.App.Hooks().OnListen(func(data fiber.ListenData) error {
 		s.ready.Store(true)

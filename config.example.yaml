@@ -1,0 +1,7 @@
+server:
+  address: 127.0.0.1:17321
+  environment: development
+deployment:
+  region: CN
+logging:
+  slow_request: 1s

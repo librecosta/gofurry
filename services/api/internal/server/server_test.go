@@ -3,7 +3,8 @@ package server
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	json "encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -14,7 +15,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bytedance/sonic"
 	"github.com/gofiber/fiber/v3"
 	"github.com/librecosta/gofurry/services/api/internal/platform"
 	"github.com/rs/zerolog"
@@ -22,7 +22,7 @@ import (
 
 func TestHTTPRuntime(t *testing.T) {
 	var logs bytes.Buffer
-	s := New(platform.NewLogger(&logs, "production"))
+	s := New(platform.NewLogger(&logs, "production"), platform.Config{})
 	s.App.Post("/test/json", func(c fiber.Ctx) error {
 		var body map[string]any
 		if err := c.Bind().JSON(&body); err != nil {
@@ -38,11 +38,11 @@ func TestHTTPRuntime(t *testing.T) {
 	if encoder == nil || decoder == nil {
 		t.Fatal("JSON adapters missing")
 	}
-	if reflect.ValueOf(encoder).Pointer() != reflect.ValueOf(sonic.Marshal).Pointer() || reflect.ValueOf(decoder).Pointer() != reflect.ValueOf(sonic.Unmarshal).Pointer() {
-		t.Fatal("expected Sonic adapters")
+	if reflect.ValueOf(encoder).Pointer() != reflect.ValueOf(platform.MarshalJSON).Pointer() || reflect.ValueOf(decoder).Pointer() != reflect.ValueOf(platform.UnmarshalJSON).Pointer() {
+		t.Fatal("expected JSON v2 adapters")
 	}
 	encoded, err := encoder(map[string]string{"message": "你好"})
-	if err != nil || !sonic.Valid(encoded) {
+	if err != nil || !jsontext.Value(encoded).IsValid() {
 		t.Fatalf("encoder: %s %v", encoded, err)
 	}
 	var decoded map[string]string
@@ -85,16 +85,16 @@ func TestHTTPRuntime(t *testing.T) {
 			if res.Header.Get("X-Content-Type-Options") != "nosniff" {
 				t.Fatal("missing security headers")
 			}
-			if tc.method != "HEAD" && !json.Valid(body) {
+			if tc.method != "HEAD" && !jsontext.Value(body).IsValid() {
 				t.Fatalf("not JSON: %s", body)
 			}
 			if tc.status >= 400 && tc.path != "/readyz" {
 				var envelope struct {
 					RequestID string `json:"request_id"`
 					Error     struct {
-						Code    int
-						Message string
-					}
+						Code    int    `json:"code"`
+						Message string `json:"message"`
+					} `json:"error"`
 				}
 				if err := json.Unmarshal(body, &envelope); err != nil {
 					t.Fatal(err)
@@ -126,7 +126,7 @@ func TestHTTPRuntime(t *testing.T) {
 }
 
 func TestGracefulDrain(t *testing.T) {
-	s := New(zerolog.Nop())
+	s := New(zerolog.Nop(), platform.Config{})
 	address := make(chan string, 1)
 	s.App.Hooks().OnListen(func(data fiber.ListenData) error { address <- "http://127.0.0.1:" + data.Port; return nil })
 	entered, release := make(chan struct{}), make(chan struct{})

@@ -3,8 +3,8 @@ name: gofurry-local
 x-logging: &logging
   driver: local
   options:
-    max-size: '10m'
-    max-file: '5'
+    max-size: '5m'
+    max-file: '3'
     compress: 'true'
 
 services:
@@ -14,9 +14,10 @@ services:
       context: ../..
       dockerfile: apps/web/Dockerfile
     ports:
-      - '127.0.0.1:${WEB_PORT:-3000}:3000'
+      - '127.0.0.1:${WEB_PORT:-17320}:3000'
     environment:
       NODE_ENV: production
+      WEB_REGION: ${WEB_REGION:-CN}
     logging: *logging
     stop_grace_period: 20s
   api:
@@ -25,9 +26,13 @@ services:
       context: ../..
       dockerfile: services/api/Dockerfile
     ports:
-      - '127.0.0.1:${API_PORT:-8080}:8080'
-    environment:
-      APP_ENV: production
-      API_ADDR: 0.0.0.0:8080
+      - '127.0.0.1:${API_PORT:-17321}:8080'
+    volumes:
+      - type: bind
+        source: ${API_CONFIG_FILE:-./config.yaml}
+        target: /etc/gofurry/config.yaml
+        read_only: true
+        bind:
+          create_host_path: false
     logging: *logging
     stop_grace_period: 20s

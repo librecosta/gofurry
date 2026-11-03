@@ -6,6 +6,7 @@ test('StyleX updates CSS and Fast Refresh preserves open state', async ({ page, 
   const original = await readFile(source, 'utf8')
   const errors: string[] = []
   page.on('pageerror', (e) => errors.push(e.message))
+  page.on('console', (e) => { if (e.type() === 'error') errors.push(e.text()) })
   try {
     const html = await (await request.get('/')).text()
     expect(html).toContain('/virtual:stylex.css')

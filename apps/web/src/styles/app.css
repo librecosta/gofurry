@@ -1,7 +1,12 @@
+@import '@fontsource-variable/manrope';
+@import '@fontsource-variable/noto-sans-sc';
 @layer reset, priority1, priority2, priority3, priority4, priority5;
 @layer reset {
   * { box-sizing: border-box; }
-  html { color-scheme: light dark; font-family: system-ui, sans-serif; }
-  body { margin: 0; }
-  button { font: inherit; }
+  html { color-scheme: light; isolation: isolate; }
+  html[data-theme="dark"] { color-scheme: dark; }
+  button, select { font: inherit; }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { transition-duration: 0s !important; animation-duration: 0s !important; }
+  }
 }

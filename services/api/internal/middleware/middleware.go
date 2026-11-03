@@ -1,6 +1,8 @@
 package middleware
 
 import (
+	"time"
+
 	fiberzerolog "github.com/gofiber/contrib/v3/zerolog"
 	"github.com/gofiber/fiber/v3"
 	"github.com/gofiber/fiber/v3/middleware/helmet"
@@ -9,11 +11,20 @@ import (
 	"github.com/rs/zerolog"
 )
 
-func Register(app *fiber.App, logger zerolog.Logger) {
+type logStartKey struct{}
+
+func Register(app *fiber.App, logger zerolog.Logger, production bool, slowAfter time.Duration) {
 	// ID -> access logger -> recover -> headers -> handlers. Recover converts panics
 	// before the outer access logger renders the unified error and records its status.
 	app.Use(requestid.New())
+	app.Use(func(c fiber.Ctx) error {
+		fiber.Locals[time.Time](c, logStartKey{}, time.Now())
+		return c.Next()
+	})
 	app.Use(fiberzerolog.New(fiberzerolog.Config{
+		Skip: func(c fiber.Ctx) bool {
+			return production && c.Response().StatusCode() < 400 && time.Since(fiber.Locals[time.Time](c, logStartKey{})) < slowAfter
+		},
 		Logger:          &logger,
 		FieldsSnakeCase: true,
 		Fields: []string{fiberzerolog.FieldMethod, fiberzerolog.FieldRoute,
