@@ -1,6 +1,6 @@
 # GoFurry
 
-V0.1-B1 adds a minimal `/start` search page to the existing TanStack Start / React / StyleX Web and Go/Fiber API. No extension, accounts or business database yet.
+V0.1-B2 connects the minimal `/start` page to reviewed public SFW backgrounds through the Go API and development R2/CDN. No extension, accounts or business database yet.
 
 ## Setup and development
 
@@ -13,20 +13,20 @@ task dev:api
 task dev:web
 ```
 
-- Web: <http://127.0.0.1:17320>; development `/api/**` proxies through Nitro route rules to API port 17321. Production has no automatic API proxy or cross-region fallback.
+- Web: <http://127.0.0.1:17320>; development `/api/**` proxies through Nitro route rules to API port 17321. Production has no general automatic API proxy or cross-region fallback.
 - API: <http://127.0.0.1:17321/api/v1/status>. Both expose `/livez` and `/readyz`.
 - Standalone API: `bin/api --config config.yaml` (`bin/api.exe` on Windows). Probe: `bin/api healthcheck --config config.yaml`. The probe derives host/port from that YAML, including wildcard listeners.
 - Production Web: `task build:web`, then `pnpm --filter @gofurry/web start`. For local Node, set `HOST=127.0.0.1 PORT=17320` (PowerShell: `$env:HOST='127.0.0.1'; $env:PORT='17320'`). The container retains internal port 3000.
 
 ## API configuration and JSON
 
-`config.example.yaml` defines one schema: `server.address`, `server.environment` (`development` / `production`), `deployment.region` (`CN` / `INTL`) and positive `logging.slow_request` (e.g. `1s`). All fields are required; unknown YAML fields fail. Cobra requires `--config` for serving and probing. Viper reads exactly that file: no automatic search, merging, environment bindings, .env, or individual business-field flag overrides. Private `config.yaml` is ignored everywhere and excluded from build contexts.
+`config.example.yaml` defines one schema: required `server.address`, `server.environment` (`development` / `production`), `deployment.region` (`CN` / `INTL`) and positive `logging.slow_request` (e.g. `1s`), plus optional `storage`. Unknown YAML fields fail. Cobra requires `--config` for serving, probing and importing. Viper reads exactly that file: no automatic search, merging, environment bindings, .env, or individual business-field flag overrides. Private `config.yaml` is ignored everywhere and excluded from build contexts.
 
 Fiber uses standard-library `encoding/json/v2` and `encoding/json/jsontext` through non-variadic adapters. Existing status/error fields and null collections are preserved. Invalid UTF-8, duplicate JSON names and trailing JSON values are rejected; no Sonic dependency or JSON experiment flags remain.
 
 ## Region, language and theme
 
-`WEB_REGION=CN` (default) or `WEB_REGION=INTL` selects the Web deployment. Set it in the local shell or Web Compose environment. API region is selected only in its YAML. Operators must keep them in the same region and use separate hosts, secrets, databases and storage for CN/INTL. There are currently no user-data readers or database connections; future data clients must stay within their deployment with no cross-region fallback.
+`WEB_REGION=CN` (default) or `WEB_REGION=INTL` selects the Web deployment. Set it in the local shell or Web Compose environment. API region is selected only in its YAML. Operators must keep them in the same region and use separate hosts, secrets, databases and user-data storage for CN/INTL. Reviewed public SFW backgrounds may be shared between regions. There are currently no user-data readers or database connections; future data clients must stay within their deployment with no cross-region fallback.
 
 CN defaults to `zh`, INTL to `en`; both offer both languages. Locale never selects a region. Both currently expose SFW policy metadata; CN remains permanently SFW. INTL NSFW is deferred and has no configuration switch or implementation here.
 
@@ -36,11 +36,19 @@ Consumed StyleX semantic tokens come from the fixed legacy `apps/cn/web/app/asse
 
 ## Start page
 
-Open <http://127.0.0.1:17320/start> after `task dev:web`. The homepage `/` is unchanged. `/start` shows the original legacy Logo/GoFurry wordmark and one centered search field. Enter submits directly to Bing for CN or Google for INTL, independently of locale; the native GET form also works without JavaScript. No backend is involved.
+Open <http://127.0.0.1:17320/start> after `task dev:api` and `task dev:web`. The homepage `/` is unchanged. `/start` shows the original legacy Logo/GoFurry wordmark and one centered search field. Enter submits directly to Bing for CN or Google for INTL, independently of locale; the native GET form also works without JavaScript and does not wait for the background API.
 
-The page inherits theme/locale cookies without adding switches. Its Logo is copied unchanged from `third-party/go-furry` at `b186325`, `apps/cn/web/app/assets/svgs/logo-mini.svg`; icons use pinned `@phosphor-icons/react` SSR exports. Background, fonts, surfaces and focus colors reuse existing StyleX tokens; no remote images are loaded.
+The page inherits theme/locale cookies without adding switches. Its Logo is copied unchanged from `third-party/go-furry` at `b186325`, `apps/cn/web/app/assets/svgs/logo-mini.svg`; icons use pinned `@phosphor-icons/react` SSR exports. Fonts, surfaces and focus colors reuse existing StyleX tokens. The theme/dots render during SSR and remain the fallback until an image has decoded.
+
+`GET /api/v1/start/backgrounds` returns the reviewed catalog with live object HEAD metadata. It never proxies image bytes. After hydration, a Start server function fetches metadata from this deployment's `WEB_API_BASE_URL` (default `http://127.0.0.1:17321`; Compose uses `http://api:8080`). It forwards no user cookies and rejects a mismatched API region/SFW policy. There is no alternate-region fallback. The browser fetches the first background directly from the public CDN: decoded WebP first, then decoded AVIF fades in over it; failures retain the preview or theme. No selector, new controls or user-data access is added. Both regions may use these reviewed public SFW assets.
+
+Private YAML `storage` contains `endpoint`, `region`, `bucket`, `access_key_id`, `secret_access_key`, `public_base_url`; all six are required when enabled and URLs must be HTTPS. `storage: null` returns an empty catalog and preserves the theme-only mode. AWS SDK for Go v2 uses static credentials from that YAML, without loading AWS profiles, environment credentials or .env. The concrete adapter uses S3-compatible configuration; COS operations and replication are deferred.
+
+Development-only import: `bin/api background-import <file.avif-or.webp> --config config.yaml`. It derives `start/backgrounds/<full-sha256>.<extension>`, checks HEAD, and uses atomic `If-None-Match: *` writes. Existing keys are never overwritten; both new and existing objects must pass R2 HEAD/GET plus public CDN GET type/length/hash checks. Import first checks that the YAML environment is `development`. Curated public keys/dimensions/hashes live in `services/api/internal/handlers/backgrounds.json`; credentials and source/preview image files do not belong in Git. Only import into a separately verified development Bucket/CDN; legacy production objects are read-only.
 
 Focused checks: `task build:web`, `pnpm --filter @gofurry/web typecheck`, then `pnpm --filter @gofurry/web exec playwright test start.spec.ts`. Repeat the browser check with `WEB_REGION=INTL`; it covers defaults, both themes/locales, hydration, no-JavaScript submission, mobile/desktop layout, focus and Enter navigation (search-provider requests are intercepted locally).
+
+Live background check, with the configured API already running: `pnpm --filter @gofurry/web exec playwright test --config playwright.background.config.ts`. It starts only a loopback Web test process on 17322, uses real Go/R2/CDN responses, holds then releases the actual AVIF request, checks decoding/fade/screenshots, and aborts the AVIF once to verify WebP retention/search. Set `PLAYWRIGHT_CHANNEL=chrome` for installed Chrome. For INTL, run a separate API from its own `--config` YAML and set test-only `START_API_URL` plus `WEB_REGION=INTL`. Normal CI does not require private storage credentials. See [B2 evidence](docs/v0.1-b2.md) for the actual development import and focused results.
 
 ## Local containers and logs
 

@@ -6,3 +6,4 @@ deployment:
   region: CN
 logging:
   slow_request: 1s
+storage: null

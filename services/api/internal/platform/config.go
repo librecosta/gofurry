@@ -3,6 +3,7 @@ package platform
 import (
 	"fmt"
 	"net"
+	"net/url"
 	"strconv"
 	"time"
 
@@ -20,6 +21,18 @@ type Config struct {
 	Logging struct {
 		SlowRequest time.Duration `mapstructure:"slow_request"`
 	} `mapstructure:"logging"`
+	Storage *StorageConfig `mapstructure:"storage"`
+}
+
+// S3-compatible configuration, initially used with R2. Credentials have no
+// environment/instance-profile fallback and must never be serialized to clients.
+type StorageConfig struct {
+	Endpoint        string `mapstructure:"endpoint"`
+	Region          string `mapstructure:"region"`
+	Bucket          string `mapstructure:"bucket"`
+	AccessKeyID     string `mapstructure:"access_key_id" json:"-"`
+	SecretAccessKey string `mapstructure:"secret_access_key" json:"-"`
+	PublicBaseURL   string `mapstructure:"public_base_url"`
 }
 
 // LoadConfig reads one explicit YAML file. No search paths, environment bindings,
@@ -54,6 +67,17 @@ func LoadConfig(path string) (Config, error) {
 	}
 	if cfg.Logging.SlowRequest <= 0 {
 		return cfg, fmt.Errorf("logging.slow_request must be a positive duration")
+	}
+	if s := cfg.Storage; s != nil {
+		for _, address := range []string{s.Endpoint, s.PublicBaseURL} {
+			u, err := url.Parse(address)
+			if err != nil || u.Scheme != "https" || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
+				return cfg, fmt.Errorf("storage endpoint/public_base_url must be public HTTPS URLs without credentials, query or fragment")
+			}
+		}
+		if s.Region == "" || s.Bucket == "" || s.AccessKeyID == "" || s.SecretAccessKey == "" {
+			return cfg, fmt.Errorf("storage requires region, bucket and explicit credentials")
+		}
 	}
 	return cfg, nil
 }

@@ -96,7 +96,7 @@ test('start: both themes and locales render consistently through SSR and hydrati
   const remote: string[] = []
   page.on('pageerror', (error) => errors.push(error.message))
   page.on('console', (entry) => { if (entry.type() === 'error') errors.push(entry.text()) })
-  page.on('request', (request) => { if (new URL(request.url()).origin !== 'http://127.0.0.1:17320') remote.push(request.url()) })
+  page.on('request', (request) => { if (new URL(request.url()).origin !== 'http://127.0.0.1:17320' && (new URL(request.url()).protocol !== 'https:' || request.resourceType() !== 'image')) remote.push(request.url()) })
   for (const theme of ['light', 'dark'] as const) {
     for (const locale of ['zh', 'en'] as const) {
       await page.context().addCookies([

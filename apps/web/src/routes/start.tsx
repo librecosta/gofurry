@@ -5,6 +5,7 @@ import * as stylex from '@stylexjs/stylex'
 import logo from '../assets/logo-mini.svg'
 import { useMessages, usePreferences } from '../preferences'
 import { tokens } from '../styles/tokens.stylex'
+import { StartBackground } from '../start-background'
 
 export const Route = createFileRoute('/start')({
   head: () => ({ meta: [{ title: 'GoFurry · Start' }] }),
@@ -18,6 +19,7 @@ function Start() {
   // native CSS fallback, but suppress the keyboard frame for that focus session.
   const [pointerFocus, setPointerFocus] = useState(false)
   return <>
+    <StartBackground />
     <header {...stylex.props(styles.brand)}>
       <img src={logo} width={40} height={32} alt="" {...stylex.props(styles.logo)} />
       <span>GoFurry</span>

@@ -9,8 +9,10 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/gofiber/fiber/v3/middleware/requestid"
+	"github.com/librecosta/gofurry/services/api/internal/handlers"
 	"github.com/librecosta/gofurry/services/api/internal/middleware"
 	"github.com/librecosta/gofurry/services/api/internal/platform"
+	"github.com/librecosta/gofurry/services/api/internal/storage"
 	"github.com/librecosta/gofurry/services/api/routers"
 	"github.com/rs/zerolog"
 )
@@ -39,7 +41,11 @@ func New(logger zerolog.Logger, cfg platform.Config) *Server {
 		c.Set("X-GoFurry-Content-Mode", "SFW")
 		return c.Next()
 	})
-	routers.Register(s.App, s.ready.Load)
+	var objects *storage.Store
+	if cfg.Storage != nil {
+		objects = storage.New(*cfg.Storage)
+	}
+	routers.Register(s.App, s.ready.Load, handlers.Backgrounds(objects))
 	s.App.Hooks().OnListen(func(data fiber.ListenData) error {
 		s.ready.Store(true)
 		logger.Info().Str("host", data.Host).Str("port", data.Port).Msg("listening")

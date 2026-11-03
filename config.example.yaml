@@ -5,3 +5,14 @@ deployment:
   region: CN
 logging:
   slow_request: 1s
+
+# Optional S3-compatible public assets. null keeps the theme-only fallback.
+# Set the complete mapping in private config.yaml; do not use environment keys.
+storage: null
+# storage:
+#   endpoint: https://<account-id>.r2.cloudflarestorage.com
+#   region: auto
+#   bucket: <development-bucket>
+#   access_key_id: <private>
+#   secret_access_key: <private>
+#   public_base_url: https://<verified-development-cdn>

@@ -1,0 +1,23 @@
+[
+  {
+    "id": "legacy-hero-4",
+    "sfw": true,
+    "source_url": "https://assets.gofurry.com/nav/hero/desktop/6257f01df8b78ea8117eac7152e9ef1f.avif",
+    "preview": {
+      "key": "start/backgrounds/5f802a62b374253e5f7d006aeb5a9c59b7fd512b55e44eecb917f83b9165692f.webp",
+      "bytes": 11730,
+      "content_type": "image/webp",
+      "sha256": "5f802a62b374253e5f7d006aeb5a9c59b7fd512b55e44eecb917f83b9165692f",
+      "width": 480,
+      "height": 270
+    },
+    "image": {
+      "key": "start/backgrounds/6257f01df8b78ea8117eac7152e9ef1f87a769176e609b38f5fb613ded39cd6c.avif",
+      "bytes": 481698,
+      "content_type": "image/avif",
+      "sha256": "6257f01df8b78ea8117eac7152e9ef1f87a769176e609b38f5fb613ded39cd6c",
+      "width": 1920,
+      "height": 1080
+    }
+  }
+]
