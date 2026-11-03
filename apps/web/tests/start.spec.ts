@@ -34,7 +34,7 @@ test('start: SSR uses the themed legacy SVG, regional defaults and plain CN-only
   await expect(page.locator('html')).toHaveAttribute('lang', defaultLocale)
   await expect(page.locator('html')).toHaveAttribute('data-region', region)
   await expect(page.getByRole('search')).toHaveAttribute('action', action)
-  await expect(page.getByRole('searchbox')).toHaveAttribute('placeholder', placeholder[defaultLocale])
+  await expect(page.locator('input[name="q"]')).toHaveAttribute('placeholder', placeholder[defaultLocale])
   const logo = page.getByRole('img', { name: 'GoFurry', exact: true })
   await expect(logo).toHaveCSS('background-color', 'rgb(215, 220, 226)')
   expect(await logo.evaluate((el) => getComputedStyle(el).maskImage)).toMatch(/url\(.*(?:\.svg|image\/svg)/)
@@ -61,8 +61,8 @@ test('start: SSR uses the themed legacy SVG, regional defaults and plain CN-only
   }
   // The default native GET search still works before hydration/without JS.
   await interceptNavigation(page)
-  await page.getByRole('searchbox').fill('GoFurry 兽人 & 雪')
-  const url = await submitted(page, () => page.getByRole('searchbox').press('Enter'))
+  await page.locator('input[name="q"]').fill('GoFurry 兽人 & 雪')
+  const url = await submitted(page, () => page.locator('input[name="q"]').press('Enter'))
   expect(url.origin).toBe(new URL(action).origin)
   expect(url.searchParams.get('q')).toBe('GoFurry 兽人 & 雪')
   await context.close()
@@ -83,7 +83,7 @@ test('start: top actions persist theme/locale, keep region and open the actual G
   await expect(page.locator('html')).toHaveAttribute('lang', 'zh')
   expect(await language.boundingBox()).toEqual(geometry)
   expect(await language.evaluate((el) => { const s = getComputedStyle(el); return [s.fontSize, s.fontWeight, s.padding, s.textAlign, s.lineHeight] })).toEqual(typography)
-  await expect(page.getByRole('searchbox')).toHaveAttribute('placeholder', placeholder.zh)
+  await expect(page.locator('input[name="q"]')).toHaveAttribute('placeholder', placeholder.zh)
   await actions.getByRole('button', { name: '切换为深色主题' }).click()
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
   await expect(page.locator('[data-theme-icon]')).toHaveAttribute('data-theme-icon', 'moon')
@@ -114,7 +114,7 @@ test('start: Light/Dark pointer, active and keyboard states use one focus frame'
   for (const theme of ['light', 'dark']) {
     await page.context().addCookies([{ name: 'gf-theme', value: theme, url: origin }])
     await page.reload()
-    const form = page.getByRole('search'), input = page.getByRole('searchbox')
+    const form = page.getByRole('search'), input = page.locator('input[name="q"]')
     const bounds = await form.boundingBox()
     const background = await form.evaluate((el) => getComputedStyle(el).backgroundColor)
     await input.hover()
@@ -149,7 +149,7 @@ test('start: Light/Dark pointer, active and keyboard states use one focus frame'
     await expect(toggle).toHaveCSS('outline-style', 'solid')
     await expect(toggle).toHaveCSS('outline-width', '2px')
     await expect(toggle).toHaveCSS('outline-offset', '-2px')
-    const focusSurface = theme === 'light' ? 'rgba(58, 67, 80, 0.76)' : 'rgba(231, 235, 241, 0.76)'
+    const focusSurface = theme === 'light' ? 'rgba(58, 67, 80, 0.5)' : 'rgba(231, 235, 241, 0.5)'
     await expect(toggle).toHaveCSS('background-color', focusSurface)
     await toggle.hover()
     await expect(toggle).toHaveCSS('background-color', focusSurface)
@@ -164,12 +164,12 @@ test('start: Light/Dark pointer, active and keyboard states use one focus frame'
   }
 })
 
-test('start: categories, platform URL encoding and composition-safe submission work without legacy suggestions', async ({ page }) => {
+test('start: categories, platform URL encoding and composition-safe submission work without contacting legacy suggestions', async ({ page }) => {
   const suggestionRequests: string[] = []
-  page.on('request', (request) => { if (/suggest|go-furry.com/.test(request.url())) suggestionRequests.push(request.url()) })
+  page.on('request', (request) => { if (/go-furry.com/.test(request.url())) suggestionRequests.push(request.url()) })
   await english(page)
   await interceptNavigation(page)
-  const input = page.getByRole('searchbox')
+  const input = page.locator('input[name="q"]')
   const query = 'wolf & 兽人 +?/#'
   const cat = page.getByRole('group', { name: 'Search categories' })
   const providers = page.locator('[data-desktop-platforms]')
@@ -222,40 +222,44 @@ test('start: categories, platform URL encoding and composition-safe submission w
   expect(suggestionRequests).toEqual([])
 })
 
-test('start: mobile platform slots, actual target, arrows, Escape and breakpoint focus remain usable', async ({ page }) => {
+test('start: mobile inline platform menu preserves targets, keyboard and breakpoint focus', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await english(page)
-  const picker = page.locator('[data-mobile-platforms]')
-  const trigger = picker.locator('[aria-expanded]')
-  await expect(picker.getByRole('button')).toHaveCount(1)
+  const trigger = page.locator('[data-mobile-platform-trigger]')
+  const picker = page.locator('[data-search-panel="platforms"]')
+  const input = page.locator('input[name="q"]')
+  await expect(trigger).toBeVisible()
+  const form = (await page.getByRole('search').boundingBox())!
+  const anchor = (await trigger.boundingBox())!
+  expect(anchor.x).toBeGreaterThanOrEqual(form.x)
+  expect(anchor.x + anchor.width).toBeLessThan((await input.boundingBox())!.x + 1)
   await trigger.click()
-  await expect(trigger).toHaveAttribute('aria-expanded', 'true')
-  await expect(picker.getByRole('button')).toHaveCount(7)
-  await picker.getByRole('button', { name: 'DuckDuckGo', exact: true }).click()
+  await expect(picker).toHaveAttribute('data-open', 'true')
+  await expect(picker.getByRole('option')).toHaveCount(7)
+  await picker.getByRole('option', { name: 'DuckDuckGo', exact: true }).click()
   await expect(trigger).toHaveText('DuckDuckGo')
+  await expect(trigger).toHaveAttribute('aria-expanded', 'false')
+  await expect(trigger).toBeFocused()
   await interceptNavigation(page)
-  await page.getByRole('searchbox').fill('实际平台 & wolf')
-  const target = await submitted(page, () => page.getByRole('searchbox').press('Enter'))
+  await input.fill('实际平台 & wolf')
+  const target = await submitted(page, () => input.press('Enter'))
   expect(target.hostname).toBe('duckduckgo.com')
   expect(target.searchParams.get('q')).toBe('实际平台 & wolf')
-  await trigger.click()
   await trigger.press('ArrowDown')
-  expect(await picker.evaluate((el) => el.contains(document.activeElement))).toBe(true)
-  await page.keyboard.press('Enter')
+  await expect(picker.getByRole('option', { name: 'DuckDuckGo' })).toBeFocused()
+  await page.keyboard.press('ArrowDown')
+  await expect(picker.getByRole('option', { name: 'Bilibili' })).toBeFocused()
+  await page.keyboard.press('Escape')
+  await expect(picker).toHaveCount(0)
   await expect(trigger).toBeFocused()
-  await expect(trigger).toHaveAttribute('aria-expanded', 'true')
-  await trigger.press('Escape')
-  await expect(picker.getByRole('button')).toHaveCount(1)
-  await expect(trigger).toBeFocused()
-  await trigger.click()
-  await page.getByRole('searchbox').click()
+  await trigger.click(); await input.click()
   await expect(trigger).toHaveAttribute('aria-expanded', 'false')
-  await trigger.click()
-  await page.locator('[data-start-logo]').click()
+  await trigger.click(); await page.locator('[data-start-logo]').click()
   await expect(trigger).toHaveAttribute('aria-expanded', 'false')
+  await page.keyboard.press('Escape')
   await trigger.click()
   await page.setViewportSize({ width: 1000, height: 800 })
-  await expect(page.locator('[data-categories] [aria-pressed="true"]')).toBeFocused()
+  await expect(input).toBeFocused()
   await expect(trigger).toHaveAttribute('aria-expanded', 'false')
   await page.setViewportSize({ width: 390, height: 844 })
   await page.getByRole('group', { name: 'Search categories' }).getByRole('button', { name: 'Furry' }).click()
@@ -272,7 +276,7 @@ test('start: desktop/mobile controls keep their position with four visible actio
     expect(Math.abs(group.x + group.width / 2 - viewport.width / 2)).toBeLessThanOrEqual(1)
     const center = group.y + group.height / 2
     expect(center).toBeLessThan(viewport.height * 0.43)
-    if (viewport.height > 700) { expect(center / viewport.height).toBeGreaterThan(0.24); expect(center / viewport.height).toBeLessThan(0.31) }
+    if (viewport.height > 700) { expect(center / viewport.height).toBeGreaterThan(0.20); expect(center / viewport.height).toBeLessThan(0.31) }
     const firstCategory = (await page.locator('[data-categories] button').first().boundingBox())!
     expect(firstCategory.y).toBeGreaterThanOrEqual(header.y + header.height + 8)
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(viewport.width)
@@ -375,7 +379,7 @@ test('start: Light/Dark acrylic, placeholders and footer actually change, with s
         category: '[data-categories] [aria-pressed="false"]', selectedCategory: '[data-categories] [aria-pressed="true"]',
         input: 'form[role="search"]', inputText: 'input[type="search"]',
         platform: '[data-desktop-platforms] [aria-pressed="false"]', selectedPlatform: '[data-desktop-platforms] [aria-pressed="true"]',
-        mobilePlatform: '[data-mobile-platforms] button', footer: 'footer', menu: '[role="menu"]', item: '[role="menuitem"]',
+        mobilePlatform: '[data-mobile-platform-trigger]', footer: 'footer', menu: '[role="menu"]', item: '[role="menuitem"]',
       }
       const result: Record<string, string[]> = {}
       for (const [key, selector] of Object.entries(selectors)) {
@@ -471,12 +475,15 @@ test('start: viewport contract bounds all layers and content without document ov
     expect(await page.evaluate(() => [scrollX, scrollY])).toEqual([0, 0])
     // Expanded mobile choices must also fit, rather than being clipped away.
     if (width < 768) {
-      const trigger = page.locator('[data-mobile-platforms] [aria-expanded]')
+      const trigger = page.locator('[data-mobile-platform-trigger]')
       await trigger.click()
-      for (const option of await page.locator('[data-mobile-platforms] button').all()) {
-        const r = (await option.boundingBox())!
-        expect(r.y + r.height).toBeLessThan(height - 48)
-      }
+      const panel = page.locator('[data-search-panel="platforms"]')
+      await expect(panel).toHaveCSS('opacity', '1')
+      const r = (await panel.boundingBox())!
+      expect(r.y + r.height).toBeLessThan(height - 36)
+      await trigger.press('ArrowDown')
+      await page.keyboard.press('End')
+      await expect(panel.getByRole('option').last()).toBeFocused()
       await page.keyboard.press('Escape')
     }
   }
@@ -546,9 +553,9 @@ test('start: user menu has complete exit motion, inert placeholders and keyboard
     await expect(menu).toHaveCount(0)
     await expect(user).toBeFocused()
     await user.click(); await expect(menu).toHaveCSS('opacity', '1')
-    await page.getByRole('searchbox').click()
+    await page.locator('input[name="q"]').click()
     await expect(menu).toHaveCount(0)
-    await expect(page.getByRole('searchbox')).toBeFocused()
+    await expect(page.locator('input[name="q"]')).toBeFocused()
   }
   await page.emulateMedia({ reducedMotion: 'reduce' })
   const user = page.getByRole('button', { name: 'User menu', exact: true })

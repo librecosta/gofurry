@@ -34,9 +34,3 @@ export function defaultPlatform(category: Category, region: Region) {
 export function searchURL(target: Platform, keyword: string, locale: Locale) {
   return target.template.replace('{locale}', locale).replace('{kw}', encodeURIComponent(keyword.trim()))
 }
-
-export function pickerOrder(category: Category, selected: string) {
-  const ids = platforms[category].map((item) => item.id).filter((id) => id !== selected)
-  ids.splice(Math.min(3, ids.length), 0, selected)
-  return ids
-}

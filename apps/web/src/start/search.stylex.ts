@@ -2,22 +2,22 @@ import * as stylex from '@stylexjs/stylex'
 
 // Search keeps the migrated geometry with its own Light/Dark acrylic material.
 export const search = stylex.defineVars({
-  chipBackground: 'rgba(246, 248, 251, 0.46)', chipHoverBackground: 'rgba(248, 250, 252, 0.64)',
+  chipBackground: 'rgba(246, 248, 251, 0.29)', chipHoverBackground: 'rgba(248, 250, 252, 0.45)',
   chipText: 'rgba(38, 45, 55, 0.92)', chipHoverText: 'rgba(25, 31, 39, 0.98)',
-  selectedBackground: 'rgba(250, 251, 253, 0.78)', selectedText: 'rgba(25, 31, 39, 0.98)',
-  selectedHoverBackground: 'rgba(252, 253, 254, 0.88)', selectedHoverText: 'rgba(25, 31, 39, 0.98)',
-  inputBackground: 'rgba(250, 251, 253, 0.62)',
-  inputFocusBackground: 'rgba(250, 251, 253, 0.76)', inputText: 'rgba(30, 37, 46, 0.94)', inputPlaceholder: 'rgba(52, 61, 73, 0.72)',
-  focusRing: 'rgba(39, 47, 58, 0.72)', motion: '300ms', easing: 'cubic-bezier(0.22, 1, 0.36, 1)',
+  selectedBackground: 'rgba(250, 251, 253, 0.50)', selectedText: 'rgba(25, 31, 39, 0.98)',
+  selectedHoverBackground: 'rgba(252, 253, 254, 0.63)', selectedHoverText: 'rgba(25, 31, 39, 0.98)',
+  inputBackground: 'rgba(250, 251, 253, 0.40)',
+  inputFocusBackground: 'rgba(250, 251, 253, 0.52)', inputText: 'rgba(30, 37, 46, 0.94)', inputPlaceholder: 'rgba(52, 61, 73, 0.72)',
+  focusRing: 'rgba(39, 47, 58, 0.72)', motion: '420ms', easing: 'cubic-bezier(0.22, 1, 0.36, 1)',
 })
 
 export const darkSearch = stylex.createTheme(search, {
-  chipBackground: 'rgba(25, 29, 36, 0.48)', chipHoverBackground: 'rgba(32, 38, 47, 0.66)',
+  chipBackground: 'rgba(25, 29, 36, 0.30)', chipHoverBackground: 'rgba(32, 38, 47, 0.46)',
   chipText: 'rgba(224, 230, 239, 0.92)', chipHoverText: 'rgba(242, 245, 249, 0.98)',
-  selectedBackground: 'rgba(172, 186, 206, 0.32)', selectedText: 'rgba(242, 245, 249, 0.98)',
-  selectedHoverBackground: 'rgba(188, 201, 220, 0.44)', selectedHoverText: 'rgba(242, 245, 249, 0.98)',
-  inputBackground: 'rgba(25, 30, 38, 0.55)',
-  inputFocusBackground: 'rgba(30, 36, 46, 0.70)', inputText: 'rgba(233, 238, 245, 0.96)', inputPlaceholder: 'rgba(209, 218, 231, 0.76)',
+  selectedBackground: 'rgba(172, 186, 206, 0.21)', selectedText: 'rgba(242, 245, 249, 0.98)',
+  selectedHoverBackground: 'rgba(188, 201, 220, 0.34)', selectedHoverText: 'rgba(242, 245, 249, 0.98)',
+  inputBackground: 'rgba(25, 30, 38, 0.36)',
+  inputFocusBackground: 'rgba(30, 36, 46, 0.49)', inputText: 'rgba(233, 238, 245, 0.96)', inputPlaceholder: 'rgba(209, 218, 231, 0.76)',
   focusRing: 'rgba(213, 223, 236, 0.78)',
 })
 
@@ -43,8 +43,10 @@ export const searchStyles = stylex.create({
     outlineColor: { default: search.selectedText, ':active': search.chipText },
   },
   category: { flexShrink: 0, paddingBlock: 6, paddingInline: 12, fontSize: 14, lineHeight: 1.42857 },
+  // The popup is a sibling of the form, outside its backdrop-filter root.
+  anchor: { position: 'relative', zIndex: 1, width: '100%', maxWidth: 500 },
   search: {
-    position: 'relative', zIndex: 1, width: '100%', maxWidth: 500, height: 48,
+    position: 'relative', zIndex: 1, display: 'flex', alignItems: 'center', width: '100%', maxWidth: 500, height: 48,
     borderWidth: 0, borderRadius: 12, backgroundColor: { default: search.inputBackground, ':has(input:enabled):active': search.inputFocusBackground, ':has(input:focus)': search.inputFocusBackground },
     color: search.inputText, boxShadow: 'none',
     backdropFilter: { default: 'blur(18px) saturate(1.08)', '@media (max-width: 639px)': 'blur(12px) saturate(1.04)' },
@@ -54,7 +56,7 @@ export const searchStyles = stylex.create({
   // One keyboard-only ring; pointer focus only brightens the acrylic surface.
   keyboardFocus: { ':has(input:focus-visible)': { boxShadow: `0 0 0 2px ${search.focusRing}` } },
   input: {
-    width: '100%', minWidth: 0, height: 48, paddingBlock: 0, paddingInlineStart: 16, paddingInlineEnd: 40,
+    flex: 1, width: 0, minWidth: 0, height: 48, paddingBlock: 0, paddingInlineStart: { default: 16, '@media (max-width: 767px)': 10 }, paddingInlineEnd: 40,
     borderWidth: 0, borderRadius: 12, outlineStyle: 'none', backgroundColor: 'transparent', color: search.inputText,
     cursor: { default: 'text', ':disabled': 'not-allowed' },
     fontFamily: 'inherit', fontWeight: 400, fontSize: 16, lineHeight: '24px', '::placeholder': { color: search.inputPlaceholder, opacity: 1 },
@@ -72,17 +74,36 @@ export const searchStyles = stylex.create({
     width: '100%', maxWidth: 620, paddingInline: 12, paddingBlock: 10, marginTop: { default: 4, '@media (max-width: 639px)': 8 },
   },
   platform: { paddingBlock: 6, paddingInline: 10, fontSize: 12, lineHeight: 1.33333 },
-  mobilePlatforms: { position: 'relative', display: { default: 'none', '@media (max-width: 767px)': 'block' }, width: '100%', maxWidth: 500, height: 44, marginTop: 8, pointerEvents: 'none' },
-  grid: (columns: number) => ({ position: 'absolute', right: 0, top: 0, display: 'grid', width: '100%', gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`, gap: 6 }),
-  slot: (column: number, row: number) => ({ gridColumn: column, gridRow: row }),
-  mobileOption: {
-    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, minWidth: 0, minHeight: 44, paddingBlock: 0, paddingInline: 8,
-    borderWidth: 0, borderRadius: 6, fontFamily: 'inherit', fontSize: 12, fontWeight: 400, lineHeight: 1.33333, whiteSpace: 'nowrap',
+  mobileTrigger: {
+    display: { default: 'none', '@media (max-width: 767px)': 'flex' }, alignItems: 'center', justifyContent: 'center', gap: 4,
+    flexShrink: 0, minWidth: 0, maxWidth: '36%', height: 40, marginInlineStart: 4, paddingInline: 10,
+    borderWidth: 0, borderRadius: 8, fontFamily: 'inherit', fontSize: 12, fontWeight: 500, lineHeight: 1.33333, whiteSpace: 'nowrap',
+    backgroundColor: { default: 'transparent', ':enabled:hover:not(:active)': search.chipHoverBackground, ':enabled:active': search.selectedBackground },
+    color: search.inputText, cursor: { default: 'pointer', ':disabled': 'default' },
+    outlineStyle: { default: 'none', ':focus-visible': 'solid' }, outlineWidth: 2, outlineOffset: -2, outlineColor: search.focusRing,
+    transitionProperty: 'background-color, color', transitionDuration: '300ms', transitionTimingFunction: search.easing,
+  },
+  caret: { flexShrink: 0 },
+  panel: {
+    position: 'absolute', top: 'calc(100% + 8px)', insetInline: 0, zIndex: 2, borderRadius: 12,
+    padding: 4, borderWidth: 0, boxShadow: 'none', backgroundColor: search.inputBackground, color: search.inputText,
+    backdropFilter: 'blur(18px) saturate(1.08)',
+    maxHeight: 'max(48px, min(320px, calc(100dvh - 260px)))', overflowY: 'auto', overscrollBehavior: 'contain',
+    opacity: { default: 0, ':is([data-open="true"])': 1 },
+    transform: { default: 'translateY(-4px)', ':is([data-open="true"])': 'translateY(0)' },
+    pointerEvents: { default: 'none', ':is([data-open="true"])': 'auto' },
+    transitionProperty: 'opacity, transform', transitionDuration: { default: '420ms', '@media (prefers-reduced-motion: reduce)': '0ms' }, transitionTimingFunction: search.easing,
+  },
+  option: {
+    display: 'flex', alignItems: 'center', width: '100%', minHeight: 36, paddingBlock: 8, paddingInline: 12,
+    borderWidth: 0, borderRadius: 8, fontFamily: 'inherit', fontSize: 14, fontWeight: 500, lineHeight: 1.42857, textAlign: 'start',
     backgroundColor: { default: search.chipBackground, ':enabled:hover:not(:active)': search.chipHoverBackground, ':enabled:active': search.selectedBackground },
     color: { default: search.chipText, ':enabled:hover:not(:active)': search.chipHoverText, ':enabled:active': search.selectedText },
-    backdropFilter: 'blur(10px)', pointerEvents: 'auto', cursor: { default: 'pointer', ':disabled': 'not-allowed' }, opacity: { default: 1, ':disabled': 0.5 },
+    cursor: 'pointer', whiteSpace: 'normal', overflowWrap: 'anywhere',
     outlineStyle: { default: 'none', ':focus-visible': 'solid' }, outlineWidth: 2, outlineOffset: -2, outlineColor: { default: search.chipText, ':active': search.selectedText },
     transitionProperty: 'background-color, color', transitionDuration: { default: search.motion, ':active': '120ms' }, transitionTimingFunction: search.easing,
   },
+  optionBase: { backgroundColor: 'transparent' },
+  highlight: { backgroundColor: 'transparent', color: 'inherit', fontWeight: 800 },
   truncate: { minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' },
 })

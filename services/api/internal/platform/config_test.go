@@ -28,6 +28,12 @@ func TestConfigSingleSource(t *testing.T) {
 		{"invalid duration", strings.ReplaceAll(validYAML, "1s", "0s"), false},
 		{"duplicate", validYAML + "server: {}\n", false},
 		{"invalid YAML", "server: [", false},
+		{"suggestions disabled CN", validYAML + "search_suggestions:\n  enabled: false\n", true},
+		{"suggestions unreviewed CN", validYAML + "search_suggestions:\n  enabled: true\n", false},
+		{"suggestions reviewed CN", validYAML + "search_suggestions:\n  enabled: true\n  cn_allowlist: [golang tutorial]\n  proxy_url: http://127.0.0.1:7897\n", true},
+		{"suggestions INTL", strings.ReplaceAll(validYAML, "region: CN", "region: INTL") + "search_suggestions:\n  enabled: true\n", true},
+		{"invalid proxy", validYAML + "search_suggestions:\n  proxy_url: file:///private\n", false},
+		{"proxy endpoint path", validYAML + "search_suggestions:\n  proxy_url: https://proxy.example/api?q=x\n", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if err := os.WriteFile(path, []byte(tc.data), 0600); err != nil {

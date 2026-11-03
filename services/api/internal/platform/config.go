@@ -21,7 +21,16 @@ type Config struct {
 	Logging struct {
 		SlowRequest time.Duration `mapstructure:"slow_request"`
 	} `mapstructure:"logging"`
-	Storage *StorageConfig `mapstructure:"storage"`
+	Storage           *StorageConfig           `mapstructure:"storage"`
+	SearchSuggestions *SearchSuggestionsConfig `mapstructure:"search_suggestions"`
+}
+
+// Online autocomplete is opt-in. CN only returns exact, locally reviewed phrases;
+// DuckDuckGo autocomplete does not inherit its search-results Safe Search setting.
+type SearchSuggestionsConfig struct {
+	Enabled     bool     `mapstructure:"enabled"`
+	ProxyURL    string   `mapstructure:"proxy_url" json:"-"`
+	CNAllowlist []string `mapstructure:"cn_allowlist"`
 }
 
 // S3-compatible configuration, initially used with R2. Credentials have no
@@ -77,6 +86,25 @@ func LoadConfig(path string) (Config, error) {
 		}
 		if s.Region == "" || s.Bucket == "" || s.AccessKeyID == "" || s.SecretAccessKey == "" {
 			return cfg, fmt.Errorf("storage requires region, bucket and explicit credentials")
+		}
+	}
+	if s := cfg.SearchSuggestions; s != nil {
+		if s.ProxyURL != "" {
+			u, err := url.Parse(s.ProxyURL)
+			if err != nil || u.Hostname() == "" || (u.Scheme != "http" && u.Scheme != "https" && u.Scheme != "socks5" && u.Scheme != "socks5h") || (u.Path != "" && u.Path != "/") || u.RawQuery != "" || u.Fragment != "" {
+				return cfg, fmt.Errorf("search_suggestions.proxy_url must be an explicit HTTP(S)/SOCKS proxy URL")
+			}
+		}
+		if len(s.CNAllowlist) > 256 {
+			return cfg, fmt.Errorf("search_suggestions.cn_allowlist exceeds 256 phrases")
+		}
+		for _, phrase := range s.CNAllowlist {
+			if len(phrase) == 0 || len([]rune(phrase)) > 128 {
+				return cfg, fmt.Errorf("search_suggestions.cn_allowlist phrases must contain 1..128 characters")
+			}
+		}
+		if s.Enabled && cfg.Deployment.Region == "CN" && len(s.CNAllowlist) == 0 {
+			return cfg, fmt.Errorf("CN online suggestions require a reviewed cn_allowlist; otherwise set enabled: false")
 		}
 	}
 	return cfg, nil

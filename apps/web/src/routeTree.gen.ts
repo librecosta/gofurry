@@ -14,6 +14,7 @@ import { Route as LivezRouteImport } from './routes/livez'
 import { Route as ReadyzRouteImport } from './routes/readyz'
 import { Route as StartRouteImport } from './routes/start'
 import { Route as StatusRouteImport } from './routes/status'
+import { Route as ApiV1StartSearchSuggestionsRouteImport } from './routes/api.v1.start.search.suggestions'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -40,6 +41,12 @@ const StatusRoute = StatusRouteImport.update({
   path: '/status',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiV1StartSearchSuggestionsRoute =
+  ApiV1StartSearchSuggestionsRouteImport.update({
+    id: '/api/v1/start/search/suggestions',
+    path: '/api/v1/start/search/suggestions',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -47,6 +54,7 @@ export interface FileRoutesByFullPath {
   '/readyz': typeof ReadyzRoute
   '/start': typeof StartRoute
   '/status': typeof StatusRoute
+  '/api/v1/start/search/suggestions': typeof ApiV1StartSearchSuggestionsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -54,6 +62,7 @@ export interface FileRoutesByTo {
   '/readyz': typeof ReadyzRoute
   '/start': typeof StartRoute
   '/status': typeof StatusRoute
+  '/api/v1/start/search/suggestions': typeof ApiV1StartSearchSuggestionsRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -62,13 +71,33 @@ export interface FileRoutesById {
   '/readyz': typeof ReadyzRoute
   '/start': typeof StartRoute
   '/status': typeof StatusRoute
+  '/api/v1/start/search/suggestions': typeof ApiV1StartSearchSuggestionsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/livez' | '/readyz' | '/start' | '/status'
+  fullPaths:
+    | '/'
+    | '/livez'
+    | '/readyz'
+    | '/start'
+    | '/status'
+    | '/api/v1/start/search/suggestions'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/livez' | '/readyz' | '/start' | '/status'
-  id: '__root__' | '/' | '/livez' | '/readyz' | '/start' | '/status'
+  to:
+    | '/'
+    | '/livez'
+    | '/readyz'
+    | '/start'
+    | '/status'
+    | '/api/v1/start/search/suggestions'
+  id:
+    | '__root__'
+    | '/'
+    | '/livez'
+    | '/readyz'
+    | '/start'
+    | '/status'
+    | '/api/v1/start/search/suggestions'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -77,6 +106,7 @@ export interface RootRouteChildren {
   ReadyzRoute: typeof ReadyzRoute
   StartRoute: typeof StartRoute
   StatusRoute: typeof StatusRoute
+  ApiV1StartSearchSuggestionsRoute: typeof ApiV1StartSearchSuggestionsRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -116,6 +146,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof StatusRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/v1/start/search/suggestions': {
+      id: '/api/v1/start/search/suggestions'
+      path: '/api/v1/start/search/suggestions'
+      fullPath: '/api/v1/start/search/suggestions'
+      preLoaderRoute: typeof ApiV1StartSearchSuggestionsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -125,6 +162,7 @@ const rootRouteChildren: RootRouteChildren = {
   ReadyzRoute: ReadyzRoute,
   StartRoute: StartRoute,
   StatusRoute: StatusRoute,
+  ApiV1StartSearchSuggestionsRoute: ApiV1StartSearchSuggestionsRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

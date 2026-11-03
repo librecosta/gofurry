@@ -1,0 +1,145 @@
+import { test, expect, type Page } from '@playwright/test'
+
+const endpoint = '**/api/v1/start/search/suggestions?*'
+const headers = { 'X-GoFurry-Region': process.env.WEB_REGION ?? 'CN', 'X-GoFurry-Content-Mode': 'SFW' }
+const input = (page: Page) => page.locator('input[name="q"]')
+const panel = (page: Page) => page.locator('[data-search-panel="suggestions"][data-open="true"]')
+async function open(page: Page, width = 1280) {
+  await page.setViewportSize({ width, height: 844 })
+  await page.context().addCookies([{ name: 'gf-locale', value: 'en', url: 'http://127.0.0.1:17320' }])
+  await page.goto('/start')
+  await page.evaluate(() => { (window as unknown as { submitted: string[] }).submitted = []; window.open = (url) => { (window as unknown as { submitted: string[] }).submitted.push(String(url)); return null } })
+}
+
+test('suggestions: 600ms debounce, IME, keyboard highlight and selected destination', async ({ page }) => {
+  const queries: string[] = []
+  await page.route(endpoint, async (route) => {
+    queries.push(new URL(route.request().url()).searchParams.get('q')!)
+    await route.fulfill({ headers, json: { suggestions: ['golang download', 'golang tutorial'] } })
+  })
+  await open(page)
+  await input(page).fill('go'); await page.waitForTimeout(200); await input(page).fill('golang')
+  await page.waitForTimeout(450); expect(queries).toEqual([])
+  await expect(panel(page)).toHaveCSS('opacity', '1')
+  expect(queries).toEqual(['golang'])
+  await expect(panel(page).locator('mark')).toHaveText(['golang', 'golang'])
+  await expect(input(page)).toHaveAttribute('aria-activedescendant', (await panel(page).getByRole('option').first().getAttribute('id'))!)
+  await input(page).press('ArrowDown')
+  await expect(panel(page).getByRole('option').last()).toHaveAttribute('aria-selected', 'true')
+  await input(page).press('Escape')
+  await page.locator('[data-desktop-platforms]').getByRole('button', { name: 'DuckDuckGo' }).click()
+  await input(page).focus(); await expect(panel(page)).toHaveCSS('opacity', '1')
+  await input(page).press('ArrowDown'); await input(page).press('Enter')
+  let urls = await page.evaluate(() => (window as unknown as { submitted: string[] }).submitted)
+  expect(new URL(urls[0]).hostname).toBe('duckduckgo.com')
+  expect(new URL(urls[0]).searchParams.get('q')).toBe('golang tutorial')
+  await input(page).dispatchEvent('compositionstart')
+  await input(page).fill('中文'); await page.waitForTimeout(650)
+  await input(page).press('Enter')
+  expect(queries).toHaveLength(2)
+  await input(page).dispatchEvent('compositionend', { data: '中文' })
+  await expect.poll(() => queries.length).toBe(3)
+  await input(page).press('Escape')
+  await expect(panel(page)).toHaveCount(0)
+  const prevented = await input(page).evaluate((el) => ['ArrowUp', 'ArrowDown'].map((key) => { const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }); el.dispatchEvent(event); return event.defaultPrevented }))
+  expect(prevented).toEqual([false, false])
+  urls = await page.evaluate(() => (window as unknown as { submitted: string[] }).submitted)
+  expect(urls).toHaveLength(1)
+})
+
+test('suggestions: stale responses, blur, non-search categories, empty and 429 stay quiet', async ({ page }) => {
+  const calls: string[] = []
+  await page.route(endpoint, async (route) => {
+    const q = new URL(route.request().url()).searchParams.get('q')!
+    calls.push(q)
+    if (q === 'old') await new Promise((resolve) => setTimeout(resolve, 1300))
+    await route.fulfill(q === 'limited' ? { headers, status: 429, json: { error: { code: 429 } } } : { headers, json: { suggestions: q === 'empty' ? [] : [`${q} result`] } }).catch(() => {})
+  })
+  await open(page)
+  await input(page).fill('old'); await expect.poll(() => calls.includes('old')).toBe(true)
+  await input(page).fill('new'); await expect(panel(page)).toContainText('new result')
+  await page.waitForTimeout(800); await expect(panel(page)).not.toContainText('old result')
+  await page.locator('[data-start-actions] > a').focus()
+  await expect(panel(page)).toHaveCount(0)
+  for (const q of ['empty', 'limited']) { await input(page).fill(q); await expect.poll(() => calls.includes(q)).toBe(true); await page.waitForTimeout(200); await expect(panel(page)).toHaveCount(0) }
+  await page.getByRole('group', { name: 'Search categories' }).getByRole('button', { name: 'Games' }).click()
+  const count = calls.length
+  await input(page).fill('no suggestions'); await page.waitForTimeout(700)
+  expect(calls).toHaveLength(count)
+  await expect(page.getByRole('alert')).toHaveCount(0)
+})
+
+test('suggestions: mobile menus share one panel, fully exit, restore focus and fit 375/390px', async ({ page }) => {
+  await page.route(endpoint, (route) => route.fulfill({ headers, json: { suggestions: ['golang tutorial', 'golang download'] } }))
+  for (const width of [375, 390]) {
+    await open(page, width)
+    const trigger = page.locator('[data-mobile-platform-trigger]')
+    await input(page).fill('golang'); await expect(panel(page)).toHaveCSS('opacity', '1')
+    await trigger.click()
+    const picker = page.locator('[data-search-panel="platforms"]')
+    await expect(picker).toHaveCSS('opacity', '1')
+    await expect(page.locator('[data-search-panel]')).toHaveCount(1)
+    await expect(trigger).toBeFocused()
+    await trigger.press('ArrowDown')
+    await expect(picker.locator('[aria-selected="true"]')).toBeFocused()
+    await picker.getByRole('option', { name: 'DuckDuckGo', exact: true }).click()
+    await expect(trigger).toHaveText('DuckDuckGo')
+    await expect(trigger).toBeFocused()
+    await expect(picker).toHaveAttribute('data-open', 'false')
+    const exit = await picker.evaluate((el) => {
+      const transitions = el.getAnimations()
+      for (const animation of transitions) { animation.pause(); animation.currentTime = 210 }
+      return { count: transitions.length, opacity: Number(getComputedStyle(el).opacity), inert: (el as HTMLElement).inert }
+    })
+    expect(exit.count).toBe(2); expect(exit.inert).toBe(true)
+    expect(exit.opacity).toBeGreaterThan(0); expect(exit.opacity).toBeLessThan(1)
+    await picker.evaluate((el) => el.getAnimations().forEach((animation) => animation.play()))
+    await expect(picker).toHaveCount(0)
+    await input(page).focus(); await expect(panel(page)).toHaveCSS('opacity', '1')
+    await panel(page).getByRole('option').last().click()
+    const urls = await page.evaluate(() => (window as unknown as { submitted: string[] }).submitted)
+    expect(new URL(urls[0]).hostname).toBe('duckduckgo.com')
+    expect(new URL(urls[0]).searchParams.get('q')).toBe('golang download')
+    await trigger.click(); await expect(picker).toHaveCSS('opacity', '1')
+    await page.keyboard.press('Escape'); await expect(trigger).toBeFocused()
+    await expect(picker).toHaveCount(0)
+    expect(await page.evaluate(() => [document.documentElement.scrollWidth, document.documentElement.scrollHeight])).toEqual([width, 844])
+    await page.emulateMedia({ reducedMotion: 'reduce' }); await trigger.click()
+    await expect(picker).toHaveCSS('transition-duration', '0s')
+    await page.keyboard.press('Escape'); await expect(picker).toHaveCount(0)
+    await page.emulateMedia({ reducedMotion: 'no-preference' })
+  }
+})
+
+test('suggestions: region mismatch and timed-out requests publish nothing and normal search remains immediate', async ({ page }) => {
+  await page.route(endpoint, async (route) => {
+    const q = new URL(route.request().url()).searchParams.get('q')
+    if (q === 'timeout') await new Promise((resolve) => setTimeout(resolve, 6000))
+    await route.fulfill({ headers: { ...headers, 'X-GoFurry-Region': headers['X-GoFurry-Region'] === 'CN' ? 'INTL' : 'CN' }, json: { suggestions: ['unreviewed'] } }).catch(() => {})
+  })
+  await open(page)
+  await input(page).fill('mismatch'); await page.waitForTimeout(900)
+  await expect(panel(page)).toHaveCount(0)
+  await input(page).fill('timeout'); await page.waitForTimeout(5800)
+  await expect(panel(page)).toHaveCount(0)
+  await input(page).press('Enter')
+  const urls = await page.evaluate(() => (window as unknown as { submitted: string[] }).submitted)
+  expect(new URL(urls[0]).searchParams.get('q')).toBe('timeout')
+  await expect(page.getByRole('alert')).toHaveCount(0)
+})
+
+test('suggestions: touch selection retains the current platform and submits a real option', async ({ browser }) => {
+  const context = await browser.newContext({ baseURL: 'http://127.0.0.1:17320', isMobile: true, hasTouch: true, viewport: { width: 375, height: 667 } })
+  const page = await context.newPage()
+  await page.route(endpoint, (route) => route.fulfill({ headers, json: { suggestions: ['golang tutorial'] } }))
+  await open(page, 375)
+  await page.locator('[data-mobile-platform-trigger]').tap()
+  await page.getByRole('option', { name: 'DuckDuckGo', exact: true }).tap()
+  await input(page).fill('golang'); await expect(panel(page)).toHaveCSS('opacity', '1')
+  await panel(page).getByRole('option').tap()
+  const urls = await page.evaluate(() => (window as unknown as { submitted: string[] }).submitted)
+  expect(new URL(urls[0]).hostname).toBe('duckduckgo.com')
+  expect(new URL(urls[0]).searchParams.get('q')).toBe('golang tutorial')
+  expect(await page.evaluate(() => [document.documentElement.scrollWidth, document.documentElement.scrollHeight])).toEqual([375, 844])
+  await context.close()
+})

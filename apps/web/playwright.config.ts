@@ -1,7 +1,7 @@
 import { defineConfig } from '@playwright/test'
 export default defineConfig({
   testDir: './tests',
-  testMatch: ['runtime.spec.ts', 'governance.spec.ts', 'start.spec.ts'],
+  testMatch: ['runtime.spec.ts', 'governance.spec.ts', 'start.spec.ts', 'start-suggestions.spec.ts'],
   use: { baseURL: 'http://127.0.0.1:17320', browserName: 'chromium', channel: process.env.PLAYWRIGHT_CHANNEL },
   webServer: {
     command: 'node .output/server/index.mjs',

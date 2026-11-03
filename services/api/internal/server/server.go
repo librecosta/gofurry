@@ -12,6 +12,7 @@ import (
 	"github.com/librecosta/gofurry/services/api/internal/handlers"
 	"github.com/librecosta/gofurry/services/api/internal/middleware"
 	"github.com/librecosta/gofurry/services/api/internal/platform"
+	"github.com/librecosta/gofurry/services/api/internal/search"
 	"github.com/librecosta/gofurry/services/api/internal/storage"
 	"github.com/librecosta/gofurry/services/api/routers"
 	"github.com/rs/zerolog"
@@ -45,7 +46,8 @@ func New(logger zerolog.Logger, cfg platform.Config) *Server {
 	if cfg.Storage != nil {
 		objects = storage.New(*cfg.Storage)
 	}
-	routers.Register(s.App, s.ready.Load, handlers.Backgrounds(objects))
+	suggestions := search.New(cfg.SearchSuggestions, cfg.Deployment.Region)
+	routers.Register(s.App, s.ready.Load, handlers.Backgrounds(objects), handlers.Suggestions(suggestions))
 	s.App.Hooks().OnListen(func(data fiber.ListenData) error {
 		s.ready.Store(true)
 		logger.Info().Str("host", data.Host).Str("port", data.Port).Msg("listening")
@@ -57,7 +59,7 @@ func New(logger zerolog.Logger, cfg platform.Config) *Server {
 		return nil
 	})
 	s.App.Hooks().OnPostShutdown(func(err error) error {
-		// Future owned resources must be closed here, after request draining.
+		suggestions.Close()
 		if err != nil {
 			logger.Error().Err(err).Msg("shutdown failed")
 		} else {

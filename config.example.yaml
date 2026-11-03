@@ -6,6 +6,14 @@ deployment:
 logging:
   slow_request: 1s
 
+# Explicit opt-in. Blank proxy_url means direct access (no HTTP_PROXY lookup).
+# CN requires exact reviewed phrases; disable if no reliable review is available.
+# INTL uses the conservative SFW filter; no NSFW mode is implemented.
+search_suggestions:
+  enabled: false
+  proxy_url: ""
+  cn_allowlist: []
+
 # Optional S3-compatible public assets. null keeps the theme-only fallback.
 # Set the complete mapping in private config.yaml; do not use environment keys.
 storage: null

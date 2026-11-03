@@ -1,11 +1,25 @@
 package routers
 
 import (
+	"time"
+
 	"github.com/gofiber/fiber/v3"
+	"github.com/gofiber/fiber/v3/middleware/limiter"
 	"github.com/librecosta/gofurry/services/api/internal/handlers"
 )
 
-func registerURLs(v1 fiber.Router, backgrounds fiber.Handler) {
+func registerURLs(v1 fiber.Router, backgrounds, suggestions fiber.Handler) {
 	v1.Get("/status", handlers.Status)
 	v1.Get("/start/backgrounds", backgrounds)
+	// Per-client and deployment-wide bounds also cover cache misses/unique queries.
+	limited := func(max int, key func(fiber.Ctx) string) fiber.Handler {
+		return limiter.New(limiter.Config{Max: max, Expiration: time.Minute, KeyGenerator: key,
+			LimitReached: func(c fiber.Ctx) error {
+				c.Set("Cache-Control", "no-store")
+				c.Set("Retry-After", "60")
+				return fiber.ErrTooManyRequests
+			},
+		})
+	}
+	v1.Get("/start/search/suggestions", limited(240, func(fiber.Ctx) string { return "suggestions" }), limited(60, func(c fiber.Ctx) string { return c.IP() }), suggestions)
 }
