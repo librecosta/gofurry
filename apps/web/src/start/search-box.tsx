@@ -4,12 +4,12 @@ import { CaretDownIcon } from '@phosphor-icons/react/dist/ssr/CaretDown'
 import { CaretUpIcon } from '@phosphor-icons/react/dist/ssr/CaretUp'
 import * as stylex from '@stylexjs/stylex'
 import { usePreferences } from '../preferences'
-import { searchStyles as styles } from './search.stylex'
+import { darkSearch, searchStyles as styles } from './search.stylex'
 import { useStartMessages } from './messages'
 import { categories, defaultPlatform, pickerOrder, platforms, searchURL, type Category } from './search-platforms'
 
 export function SearchBox() {
-  const { region, locale } = usePreferences()
+  const { region, locale, theme } = usePreferences()
   const m = useStartMessages()
   const [category, setCategory] = useState<Category>('search')
   const [selected, setSelected] = useState(defaultPlatform('search', region).id)
@@ -94,7 +94,7 @@ export function SearchBox() {
     // No suggestions exist: leave native Up/Down caret behavior untouched.
   }
   const defaultAction = region === 'CN' ? 'https://www.bing.com/search' : 'https://www.google.com/search'
-  return <div ref={shell} data-start-search {...stylex.props(styles.shell)}>
+  return <div ref={shell} data-start-search {...stylex.props(styles.shell, theme === 'dark' && darkSearch)}>
     <div data-category-track {...stylex.props(styles.categoryTrack)}>
       <div role="group" aria-label={m.categories} data-categories onKeyDown={(event) => groupKeys(event)} {...stylex.props(styles.categories)}>
         {categories.map((id) => <button key={id} type="button" aria-pressed={category === id}

@@ -36,13 +36,13 @@ test('start: SSR uses the themed legacy SVG, regional defaults and plain CN-only
   await expect(page.getByRole('search')).toHaveAttribute('action', action)
   await expect(page.getByRole('searchbox')).toHaveAttribute('placeholder', placeholder[defaultLocale])
   const logo = page.getByRole('img', { name: 'GoFurry', exact: true })
-  await expect(logo).toHaveCSS('background-color', 'rgb(196, 95, 44)')
+  await expect(logo).toHaveCSS('background-color', 'rgb(39, 43, 48)')
   expect(await logo.evaluate((el) => getComputedStyle(el).maskImage)).toMatch(/url\(.*(?:\.svg|image\/svg)/)
   const bounds = (await logo.boundingBox())!
   expect(bounds.width / bounds.height).toBeCloseTo(1287 / 1024, 2)
   expect(await page.locator('header').innerText()).not.toContain('GoFurry')
-  await expect(page.locator('[data-start-actions] > *')).toHaveCount(5)
-  await expect(page.locator('[data-start-actions] > button:disabled')).toHaveCount(2)
+  await expect(page.locator('[data-start-actions] > *')).toHaveCount(4)
+  await expect(page.locator('[data-start-actions] > button:disabled')).toHaveCount(0)
   await expect(page.locator('[data-start-filing]')).toHaveCount(region === 'CN' ? 1 : 0)
   await expect(page.locator('[data-start-filing] a')).toHaveCount(0)
   if (region === 'CN') {
@@ -84,7 +84,7 @@ test('start: top actions persist theme/locale, keep region and open the actual G
   await actions.getByRole('button', { name: '切换为深色主题' }).click()
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
   await expect(page.locator('[data-theme-icon]')).toHaveAttribute('data-theme-icon', 'moon')
-  await expect(page.locator('[data-start-logo]')).toHaveCSS('background-color', 'rgb(255, 189, 122)')
+  await expect(page.locator('[data-start-logo]')).toHaveCSS('background-color', 'rgb(215, 220, 226)')
   const response = await page.reload()
   expect(await response!.text()).toContain('data-theme="dark"')
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
@@ -94,8 +94,8 @@ test('start: top actions persist theme/locale, keep region and open the actual G
   await actions.getByRole('button', { name: 'Switch to light theme' }).click()
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light')
   if (region === 'CN') await expect(page.locator('footer')).toContainText('Chengdu Yuanan Kaiwu Technology Co., Ltd.')
-  await expect(actions.getByRole('button', { name: 'Settings (not available yet)', exact: true })).toBeDisabled()
-  await expect(actions.getByRole('button', { name: 'User (not available yet)', exact: true })).toBeDisabled()
+  await expect(actions.getByRole('button', { name: 'User menu', exact: true })).toBeEnabled()
+  await expect(actions.getByRole('button', { name: /Settings/ })).toHaveCount(0)
   await expect(page.getByRole('dialog')).toHaveCount(0)
   const github = actions.getByRole('link')
   await expect(github).toHaveAttribute('href', 'https://github.com/gofurry')
@@ -106,7 +106,7 @@ test('start: top actions persist theme/locale, keep region and open the actual G
   expect(errors).toEqual([])
 })
 
-test('start: Light/Dark pointer, active, keyboard and disabled states use one focus frame', async ({ page }) => {
+test('start: Light/Dark pointer, active and keyboard states use one focus frame', async ({ page }) => {
   await english(page)
   for (const theme of ['light', 'dark']) {
     await page.context().addCookies([{ name: 'gf-theme', value: theme, url: origin }])
@@ -129,7 +129,7 @@ test('start: Light/Dark pointer, active, keyboard and disabled states use one fo
     await expect(form).toHaveCSS('outline-style', 'none')
     await expect(form).toHaveCSS('border-top-width', '0px')
     await expect(input).toHaveCSS('outline-style', 'none')
-    await expect.poll(() => form.evaluate((el) => getComputedStyle(el).boxShadow)).toContain('0px 0px 0px 4px')
+    await expect.poll(() => form.evaluate((el) => getComputedStyle(el).boxShadow)).toContain('0px 0px 0px 2px')
     expect(await form.boundingBox()).toEqual(bounds)
     await input.click()
     await expect(form).toHaveCSS('outline-style', 'none')
@@ -146,17 +146,18 @@ test('start: Light/Dark pointer, active, keyboard and disabled states use one fo
     await expect(toggle).toHaveCSS('outline-style', 'solid')
     await expect(toggle).toHaveCSS('outline-width', '2px')
     await expect(toggle).toHaveCSS('outline-offset', '-2px')
-    await expect(toggle).toHaveCSS('background-color', 'rgba(255, 248, 241, 0.92)')
+    const focusSurface = theme === 'light' ? 'rgba(58, 67, 80, 0.76)' : 'rgba(231, 235, 241, 0.76)'
+    await expect(toggle).toHaveCSS('background-color', focusSurface)
     await toggle.hover()
-    await expect(toggle).toHaveCSS('background-color', 'rgba(255, 248, 241, 0.92)')
+    await expect(toggle).toHaveCSS('background-color', focusSurface)
     expect(await toggle.evaluate((el) => getComputedStyle(el).outlineColor)).not.toBe('rgb(0, 0, 0)')
     await page.keyboard.press('Tab')
     const github = page.locator('[data-start-actions] > a')
     await expect(github).toBeFocused()
     await expect(github).toHaveCSS('outline-style', 'solid')
     await expect(github).toHaveCSS('border-top-width', '0px')
-    await expect(github).toHaveCSS('background-color', 'rgba(255, 248, 241, 0.92)')
-    await expect(page.locator('[data-start-actions] > button:disabled').first()).toHaveCSS('cursor', 'not-allowed')
+    await expect(github).toHaveCSS('background-color', focusSurface)
+    await expect(github).toHaveCSS('box-shadow', 'none')
   }
 })
 
@@ -259,7 +260,7 @@ test('start: mobile platform slots, actual target, arrows, Escape and breakpoint
   await expect(trigger).toHaveText('WikiFur')
 })
 
-test('start: desktop/mobile controls sit above center with five visible actions and unobstructed CN footer', async ({ page }, testInfo) => {
+test('start: desktop/mobile controls keep their position with four visible actions and unobstructed CN footer', async ({ page }, testInfo) => {
   await english(page)
   for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }, { width: 320, height: 568 }, { width: 844, height: 390 }]) {
     await page.setViewportSize(viewport)
@@ -271,6 +272,7 @@ test('start: desktop/mobile controls sit above center with five visible actions 
     if (viewport.height > 700) { expect(center / viewport.height).toBeGreaterThan(0.24); expect(center / viewport.height).toBeLessThan(0.31) }
     expect(group.y).toBeGreaterThan(header.y + header.height + 16)
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(viewport.width)
+    await expect(page.locator('[data-start-actions] > *')).toHaveCount(4)
     for (const button of await page.locator('[data-start-actions] > *').all()) {
       await expect(button).toBeVisible()
       const bounds = (await button.boundingBox())!
@@ -287,8 +289,9 @@ test('start: desktop/mobile controls sit above center with five visible actions 
 })
 
 test('start: native theme reveal uses the button center, final snapshots and legacy timing with clean fallbacks', async ({ page }) => {
-  await page.addInitScript(() => {
-    const probe = { starts: 0, animations: [] as { frames: unknown; options: unknown; theme: string | null; oldZ: string; newZ: string; oldAnimation: string; newAnimation: string }[] }
+  const selectors = ['[data-start-logo]', '[data-start-actions] > a', '[data-categories] [aria-pressed="true"]', '[data-categories] [aria-pressed="false"]', 'form[role="search"]', 'input[type="search"]', '[data-desktop-platforms] [aria-pressed="true"]', '[data-desktop-platforms] [aria-pressed="false"]', 'footer']
+  await page.addInitScript((selectors) => {
+    const probe = { starts: 0, animations: [] as { frames: unknown; options: unknown; theme: string | null; oldZ: string; newZ: string; oldAnimation: string; newAnimation: string; colors: string[] }[] }
     ;(window as unknown as { revealProbe: typeof probe }).revealProbe = probe
     const start = document.startViewTransition?.bind(document)
     if (start) document.startViewTransition = (update) => { probe.starts++; return start(update) }
@@ -299,19 +302,22 @@ test('start: native theme reveal uses the button center, final snapshots and leg
         const old = getComputedStyle(document.documentElement, '::view-transition-old(root)')
         const next = getComputedStyle(document.documentElement, '::view-transition-new(root)')
         probe.animations.push({ frames, options, theme: document.documentElement.getAttribute('data-theme'),
-          oldZ: old.zIndex, newZ: next.zIndex, oldAnimation: old.animationName, newAnimation: next.animationName })
+          oldZ: old.zIndex, newZ: next.zIndex, oldAnimation: old.animationName, newAnimation: next.animationName,
+          colors: selectors.map((selector) => { const el = document.querySelector(selector); if (!el) return ''; const s = getComputedStyle(el); return `${s.backgroundColor}|${s.color}` }) })
       }
       return animation
     }
-  })
+  }, selectors)
   await english(page)
   const button = page.locator('[data-start-actions] > button').nth(1)
   const root = page.locator('html')
-  const probe = () => page.evaluate(() => (window as unknown as { revealProbe: { starts: number; animations: { frames: unknown; options: unknown; theme: string; oldZ: string; newZ: string; oldAnimation: string; newAnimation: string }[] } }).revealProbe)
+  const probe = () => page.evaluate(() => (window as unknown as { revealProbe: { starts: number; animations: { frames: unknown; options: unknown; theme: string; oldZ: string; newZ: string; oldAnimation: string; newAnimation: string; colors: string[] }[] } }).revealProbe)
+  const colors = () => page.evaluate((selectors) => selectors.map((selector) => { const el = document.querySelector(selector); if (!el) return ''; const s = getComputedStyle(el); return `${s.backgroundColor}|${s.color}` }), selectors)
   for (const target of ['dark', 'light']) {
     const bounds = (await button.boundingBox())!, viewport = page.viewportSize()!
     const x = bounds.x + bounds.width / 2, y = bounds.y + bounds.height / 2
     const before = (await probe()).starts
+    const beforeColors = await colors()
     await button.click({ clickCount: 2, delay: 20 })
     await expect(root).toHaveAttribute('data-theme', target)
     await expect(root).not.toHaveAttribute('data-gf-theme-reveal')
@@ -321,7 +327,10 @@ test('start: native theme reveal uses the button center, final snapshots and leg
       frames: { clipPath: [`circle(0px at ${x}px ${y}px)`, `circle(${Math.hypot(Math.max(x, viewport.width - x), Math.max(y, viewport.height - y))}px at ${x}px ${y}px)`] },
       options: { duration: 420, easing: 'cubic-bezier(0.22, 1, 0.36, 1)', pseudoElement: '::view-transition-new(root)', fill: 'both' },
       theme: target, oldZ: '1', newZ: '2', oldAnimation: 'none', newAnimation: 'none',
+      colors: await colors(),
     })
+    const revealed = result.animations.at(-1)!.colors
+    revealed.forEach((color, index) => { if (color) expect(color).not.toBe(beforeColors[index]) })
     expect((await page.context().cookies()).find((cookie) => cookie.name === 'gf-theme')?.value).toBe(target)
   }
   // A resize interrupts the live snapshot without a second theme commit or a
@@ -344,4 +353,122 @@ test('start: native theme reveal uses the button center, final snapshots and leg
   await expect(root).not.toHaveAttribute('data-gf-theme-reveal')
   const response = await page.reload()
   expect(await response!.text()).toContain('data-theme="dark"')
+})
+
+test('start: Light/Dark acrylic, placeholders and footer actually change, with smooth flat hover states', async ({ page }) => {
+  await english(page)
+  const palettes: Record<string, Record<string, string[]>> = {}
+  for (const theme of ['light', 'dark']) {
+    await page.context().addCookies([{ name: 'gf-theme', value: theme, url: origin }])
+    await page.reload()
+    const user = page.getByRole('button', { name: 'User menu', exact: true })
+    await user.click()
+    const menu = page.getByRole('menu')
+    await expect(menu).toHaveCSS('opacity', '1')
+    palettes[theme] = await page.evaluate(() => {
+      const selectors = {
+        logo: '[data-start-logo]', toolbar: '[data-start-actions] > a',
+        category: '[data-categories] [aria-pressed="false"]', selectedCategory: '[data-categories] [aria-pressed="true"]',
+        input: 'form[role="search"]', inputText: 'input[type="search"]',
+        platform: '[data-desktop-platforms] [aria-pressed="false"]', selectedPlatform: '[data-desktop-platforms] [aria-pressed="true"]',
+        mobilePlatform: '[data-mobile-platforms] button', footer: 'footer', menu: '[role="menu"]', item: '[role="menuitem"]',
+      }
+      const result: Record<string, string[]> = {}
+      for (const [key, selector] of Object.entries(selectors)) {
+        const el = document.querySelector(selector)
+        if (el) { const s = getComputedStyle(el); result[key] = [s.backgroundColor, s.color] }
+      }
+      result.placeholder = [getComputedStyle(document.querySelector('input[type="search"]')!, '::placeholder').color]
+      return result
+    })
+    for (const control of await page.locator('[data-start-actions] > *, [role="menu"]').all()) {
+      await expect(control).toHaveCSS('box-shadow', 'none')
+      await expect(control).toHaveCSS('border-top-width', '0px')
+    }
+    const github = page.locator('[data-start-actions] > a')
+    const background = await github.evaluate((el) => getComputedStyle(el).backgroundColor)
+    await expect(github).toHaveCSS('transition-duration', '0.3s')
+    await expect(github).toHaveCSS('transition-timing-function', 'cubic-bezier(0.22, 1, 0.36, 1)')
+    await github.hover()
+    await expect.poll(() => github.evaluate((el) => getComputedStyle(el).backgroundColor)).not.toBe(background)
+    await expect(github).toHaveCSS('transform', 'none')
+    await expect(github).toHaveCSS('outline-style', 'none')
+    await page.mouse.move(0, 0)
+    await page.keyboard.press('Escape')
+    await expect(menu).toHaveCount(0)
+  }
+  expect(Object.keys(palettes.light)).toEqual(Object.keys(palettes.dark))
+  for (const role of Object.keys(palettes.light)) expect(palettes.light[role]).not.toEqual(palettes.dark[role])
+})
+
+test('start: user menu has complete exit motion, inert placeholders and keyboard focus on desktop/mobile', async ({ page }) => {
+  for (const [width, height, locale, theme] of [[1440, 900, 'zh', 'light'], [1440, 900, 'en', 'dark'], [390, 844, 'zh', 'dark'], [390, 844, 'en', 'light']] as const) {
+    await page.setViewportSize({ width, height })
+    await page.context().addCookies([{ name: 'gf-locale', value: locale, url: origin }, { name: 'gf-theme', value: theme, url: origin }])
+    await page.goto('/start')
+    const user = page.getByRole('button', { name: locale === 'zh' ? '用户菜单' : 'User menu', exact: true })
+    const menu = page.getByRole('menu')
+    const layout = await page.locator('[data-start-search]').boundingBox()
+    await user.click()
+    await expect(user).toHaveAttribute('aria-expanded', 'true')
+    await expect(user).toHaveAttribute('aria-controls', (await menu.getAttribute('id'))!)
+    await expect(menu).toHaveCSS('opacity', '1')
+    await expect(menu).toHaveCSS('transition-duration', '0.42s')
+    const bounds = (await menu.boundingBox())!, anchor = (await user.boundingBox())!
+    expect(bounds.x + bounds.width).toBeCloseTo(anchor.x + anchor.width, 0)
+    expect(bounds.y).toBeCloseTo(anchor.y + anchor.height + 8, 0)
+    expect(await page.locator('[data-start-search]').boundingBox()).toEqual(layout)
+    const items = menu.getByRole('menuitem')
+    await expect(items).toHaveText(locale === 'zh' ? ['登录', '设置'] : ['Sign in', 'Settings'])
+    await expect(menu.locator('svg')).toHaveCount(2)
+    for (const item of await items.all()) await expect(item).toBeDisabled()
+    await items.first().hover()
+    await expect.poll(() => items.first().evaluate((el) => getComputedStyle(el).backgroundColor)).not.toBe('rgba(0, 0, 0, 0)')
+    const itemBounds = (await items.first().boundingBox())!
+    await page.mouse.click(itemBounds.x + itemBounds.width / 2, itemBounds.y + itemBounds.height / 2)
+    await expect(user).toHaveAttribute('aria-expanded', 'true')
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+    expect(page.context().pages()).toHaveLength(1)
+    expect(new URL(page.url()).pathname).toBe('/start')
+    await user.click()
+    await expect(user).toHaveAttribute('aria-expanded', 'false')
+    // Inspect the real CSS exit halfway through, before Base UI unmounts it.
+    await expect(menu).toHaveAttribute('data-ending-style')
+    const exit = await menu.evaluate((el) => {
+      const animations = el.getAnimations().filter((a) => ['opacity', 'transform'].includes((a as CSSTransition).transitionProperty))
+      for (const animation of animations) { animation.pause(); animation.currentTime = 210 }
+      return { count: animations.length, opacity: Number(getComputedStyle(el).opacity), transform: getComputedStyle(el).transform, connected: el.isConnected }
+    })
+    expect(exit).toMatchObject({ count: 2, connected: true })
+    expect(exit.opacity).toBeGreaterThan(0); expect(exit.opacity).toBeLessThan(1)
+    expect(exit.transform).not.toBe('none')
+    await menu.evaluate((el) => { for (const animation of el.getAnimations()) animation.play() })
+    await expect(menu).toHaveCount(0)
+    await user.focus(); await user.press('ArrowDown')
+    // Base UI initially focuses the popup when every item is disabled. Arrows
+    // still visit those placeholders so keyboard users can discover their state.
+    await expect(menu).toBeFocused()
+    await page.keyboard.press('ArrowDown')
+    await expect(items.first()).toBeFocused()
+    await expect(items.first()).toHaveCSS('outline-style', 'solid')
+    await items.first().press('ArrowDown')
+    await expect(items.last()).toBeFocused()
+    await expect(items.last()).toHaveCSS('outline-width', '2px')
+    await items.last().press('Enter')
+    await expect(user).toHaveAttribute('aria-expanded', 'true')
+    await page.keyboard.press('Escape')
+    await expect(menu).toHaveCount(0)
+    await expect(user).toBeFocused()
+    await user.click(); await expect(menu).toHaveCSS('opacity', '1')
+    await page.getByRole('searchbox').click()
+    await expect(menu).toHaveCount(0)
+    await expect(page.getByRole('searchbox')).toBeFocused()
+  }
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  const user = page.getByRole('button', { name: 'User menu', exact: true })
+  await user.click()
+  await expect(page.getByRole('menu')).toHaveCSS('transition-duration', '0s')
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('menu')).toHaveCount(0)
+  await expect(user).toBeFocused()
 })

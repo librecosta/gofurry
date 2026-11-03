@@ -50,7 +50,7 @@ test('live: real Go/R2 metadata and CDN WebP decode precede the AVIF handoff', a
   await expect(page.locator('[data-start-preview]')).toHaveCSS('opacity', '1')
   expect(await page.locator('[data-start-hd]').evaluate((img) => (img as HTMLImageElement).naturalWidth)).toBe(item.image.width)
   await expect(page.locator('[data-start-hd]')).toHaveCSS('object-fit', 'cover')
-  await expect(page.locator('[data-start-actions] > *')).toHaveCount(5)
+  await expect(page.locator('[data-start-actions] > *')).toHaveCount(4)
   for (const theme of ['light', 'dark']) {
     await page.context().addCookies([{ name: 'gf-theme', value: theme, url: 'http://127.0.0.1:17322' }])
     await page.reload()

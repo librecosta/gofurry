@@ -1,20 +1,24 @@
 import * as stylex from '@stylexjs/stylex'
 
-// Only the consumed SearchBox/nav.less roles. The legacy Hero search material is
-// deliberately identical in Light/Dark; it is independent of toolbar glass.
+// Search keeps the migrated geometry with its own Light/Dark acrylic material.
 export const search = stylex.defineVars({
-  chipBackground: 'rgba(15, 23, 42, 0.50)', chipHoverBackground: 'rgba(15, 23, 42, 0.68)',
-  chipText: 'rgba(248, 250, 252, 0.92)', chipHoverText: 'rgba(255, 255, 255, 0.98)',
-  selectedBackground: 'rgba(255, 248, 241, 0.92)', selectedText: 'rgba(15, 23, 42, 0.94)',
-  selectedHoverBackground: 'rgba(255, 255, 255, 0.96)', selectedHoverText: 'rgba(15, 23, 42, 0.96)',
-  chipShadow: { default: 'inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 8px 24px rgba(2, 6, 23, 0.14)', '@media (max-width: 639px)': 'inset 0 1px 0 rgba(255, 255, 255, 0.10)' },
-  chipHoverShadow: { default: 'inset 0 1px 0 rgba(255, 255, 255, 0.16), 0 10px 28px rgba(2, 6, 23, 0.18)', '@media (max-width: 639px)': 'inset 0 1px 0 rgba(255, 255, 255, 0.10)' },
-  selectedShadow: { default: 'inset 0 1px 0 rgba(255, 255, 255, 0.65), 0 12px 30px rgba(2, 6, 23, 0.20)', '@media (max-width: 639px)': 'inset 0 1px 0 rgba(255, 255, 255, 0.52)' },
-  inputBackground: { default: 'rgba(255, 255, 255, 0.78)', '@media (max-width: 639px)': 'rgba(255, 255, 255, 0.82)' },
-  inputFocusBackground: 'rgba(255, 255, 255, 0.90)', inputText: 'rgba(15, 23, 42, 0.94)', inputPlaceholder: 'rgba(71, 85, 105, 0.72)',
-  inputShadow: { default: 'inset 0 1px 0 rgba(255, 255, 255, 0.86), 0 12px 36px rgba(2, 6, 23, 0.22), 0 0 0 1px rgba(255, 255, 255, 0.18)', '@media (max-width: 639px)': 'inset 0 1px 0 rgba(255, 255, 255, 0.82), 0 0 0 1px rgba(255, 255, 255, 0.28)' },
-  inputFocusShadow: { default: 'inset 0 1px 0 rgba(255, 255, 255, 0.90), 0 16px 42px rgba(2, 6, 23, 0.26), 0 0 0 1px rgba(255, 255, 255, 0.34), 0 0 0 4px rgba(15, 23, 42, 0.20)', '@media (max-width: 639px)': 'inset 0 1px 0 rgba(255, 255, 255, 0.88), 0 0 0 1px rgba(255, 255, 255, 0.38), 0 0 0 3px rgba(15, 23, 42, 0.12)' },
-  iconFilter: { default: 'drop-shadow(0 1px 1px rgba(255, 255, 255, 0.42))', '@media (max-width: 639px)': 'none' },
+  chipBackground: 'rgba(246, 248, 251, 0.46)', chipHoverBackground: 'rgba(248, 250, 252, 0.64)',
+  chipText: 'rgba(38, 45, 55, 0.92)', chipHoverText: 'rgba(25, 31, 39, 0.98)',
+  selectedBackground: 'rgba(250, 251, 253, 0.78)', selectedText: 'rgba(25, 31, 39, 0.98)',
+  selectedHoverBackground: 'rgba(252, 253, 254, 0.88)', selectedHoverText: 'rgba(25, 31, 39, 0.98)',
+  inputBackground: 'rgba(250, 251, 253, 0.62)',
+  inputFocusBackground: 'rgba(250, 251, 253, 0.76)', inputText: 'rgba(30, 37, 46, 0.94)', inputPlaceholder: 'rgba(52, 61, 73, 0.72)',
+  focusRing: 'rgba(39, 47, 58, 0.72)', motion: '300ms', easing: 'cubic-bezier(0.22, 1, 0.36, 1)',
+})
+
+export const darkSearch = stylex.createTheme(search, {
+  chipBackground: 'rgba(25, 29, 36, 0.48)', chipHoverBackground: 'rgba(32, 38, 47, 0.66)',
+  chipText: 'rgba(224, 230, 239, 0.92)', chipHoverText: 'rgba(242, 245, 249, 0.98)',
+  selectedBackground: 'rgba(172, 186, 206, 0.32)', selectedText: 'rgba(242, 245, 249, 0.98)',
+  selectedHoverBackground: 'rgba(188, 201, 220, 0.44)', selectedHoverText: 'rgba(242, 245, 249, 0.98)',
+  inputBackground: 'rgba(25, 30, 38, 0.55)',
+  inputFocusBackground: 'rgba(30, 36, 46, 0.70)', inputText: 'rgba(233, 238, 245, 0.96)', inputPlaceholder: 'rgba(209, 218, 231, 0.76)',
+  focusRing: 'rgba(213, 223, 236, 0.78)',
 })
 
 export const searchStyles = stylex.create({
@@ -28,29 +32,27 @@ export const searchStyles = stylex.create({
     borderWidth: 0, borderRadius: 12, fontFamily: 'inherit', fontWeight: 500, whiteSpace: 'nowrap',
     backgroundColor: { default: search.chipBackground, ':enabled:hover:not(:active)': search.chipHoverBackground, ':enabled:active': search.selectedBackground },
     color: { default: search.chipText, ':enabled:hover:not(:active)': search.chipHoverText, ':enabled:active': search.selectedText },
-    boxShadow: { default: search.chipShadow, ':enabled:hover:not(:active)': search.chipHoverShadow, ':enabled:active': search.selectedShadow },
+    boxShadow: 'none',
     backdropFilter: 'blur(14px) saturate(1.12)', cursor: { default: 'pointer', ':disabled': 'not-allowed' }, opacity: { default: 1, ':disabled': 0.5 },
     outlineStyle: { default: 'none', ':focus-visible': 'solid' }, outlineColor: { default: search.chipText, ':active': search.selectedText }, outlineWidth: 2, outlineOffset: -2,
-    transitionProperty: 'background-color, box-shadow, color', transitionDuration: '500ms', transitionTimingFunction: 'ease',
+    transitionProperty: 'background-color, color', transitionDuration: { default: search.motion, ':active': '120ms' }, transitionTimingFunction: search.easing,
   },
   selected: {
     backgroundColor: { default: search.selectedBackground, ':enabled:hover:not(:active)': search.selectedHoverBackground, ':enabled:active': search.chipHoverBackground },
     color: { default: search.selectedText, ':enabled:hover:not(:active)': search.selectedHoverText, ':enabled:active': search.chipHoverText },
-    boxShadow: { default: search.selectedShadow, ':enabled:hover:not(:active)': search.selectedShadow, ':enabled:active': search.chipShadow },
     outlineColor: { default: search.selectedText, ':active': search.chipText },
   },
   category: { flexShrink: 0, paddingBlock: 6, paddingInline: 12, fontSize: 14, lineHeight: 1.42857 },
   search: {
     position: 'relative', zIndex: 1, width: '100%', maxWidth: 500, height: 48,
     borderWidth: 0, borderRadius: 12, backgroundColor: { default: search.inputBackground, ':has(input:enabled):active': search.inputFocusBackground, ':has(input:focus)': search.inputFocusBackground },
-    color: search.inputText, boxShadow: search.inputShadow,
+    color: search.inputText, boxShadow: 'none',
     backdropFilter: { default: 'blur(18px) saturate(1.08)', '@media (max-width: 639px)': 'blur(12px) saturate(1.04)' },
     outlineStyle: 'none', opacity: { default: 1, ':has(input:disabled)': 0.5 },
-    transitionProperty: 'background-color, box-shadow, color', transitionDuration: '500ms', transitionTimingFunction: 'ease',
+    transitionProperty: 'background-color, box-shadow, color', transitionDuration: search.motion, transitionTimingFunction: search.easing,
   },
-  // Preserve the legacy soft shadow/halo only for keyboard focus. Pointer focus
-  // gets the brighter glass without layering a native outline over that halo.
-  keyboardFocus: { ':has(input:focus-visible)': { boxShadow: search.inputFocusShadow } },
+  // One keyboard-only ring; pointer focus only brightens the acrylic surface.
+  keyboardFocus: { ':has(input:focus-visible)': { boxShadow: `0 0 0 2px ${search.focusRing}` } },
   input: {
     width: '100%', minWidth: 0, height: 48, paddingBlock: 0, paddingInlineStart: 16, paddingInlineEnd: 40,
     borderWidth: 0, borderRadius: 12, outlineStyle: 'none', backgroundColor: 'transparent', color: search.inputText,
@@ -58,12 +60,12 @@ export const searchStyles = stylex.create({
     fontFamily: 'inherit', fontWeight: 400, fontSize: 16, lineHeight: '24px', '::placeholder': { color: search.inputPlaceholder, opacity: 1 },
   },
   submit: {
-    position: 'absolute', top: '50%', right: 12, transform: { default: 'translateY(-50%)', ':enabled:hover': 'translateY(-50%) scale(1.1)', ':enabled:active': 'translateY(-50%)' },
+    position: 'absolute', top: '50%', right: 12, transform: 'translateY(-50%)',
     display: 'grid', placeItems: 'center', width: 20, height: 20, padding: 0, borderWidth: 0, borderRadius: 2,
-    backgroundColor: 'transparent', color: search.inputText, filter: search.iconFilter,
+    backgroundColor: 'transparent', color: search.inputText,
     cursor: { default: 'pointer', ':disabled': 'not-allowed' }, opacity: { default: 0.72, ':enabled:hover': 0.96, ':enabled:active': 1, ':disabled': 0.4 },
     outlineStyle: { default: 'none', ':focus-visible': 'solid' }, outlineWidth: 2, outlineOffset: 3, outlineColor: search.inputText,
-    transitionProperty: 'opacity, transform', transitionDuration: '500ms', transitionTimingFunction: 'ease',
+    transitionProperty: 'opacity', transitionDuration: { default: search.motion, ':active': '120ms' }, transitionTimingFunction: search.easing,
   },
   desktopPlatforms: {
     display: { default: 'flex', '@media (max-width: 767px)': 'none' }, flexWrap: 'wrap', justifyContent: 'center', gap: 8,
@@ -80,6 +82,7 @@ export const searchStyles = stylex.create({
     color: { default: search.chipText, ':enabled:hover:not(:active)': search.chipHoverText, ':enabled:active': search.selectedText },
     backdropFilter: 'blur(10px)', pointerEvents: 'auto', cursor: { default: 'pointer', ':disabled': 'not-allowed' }, opacity: { default: 1, ':disabled': 0.5 },
     outlineStyle: { default: 'none', ':focus-visible': 'solid' }, outlineWidth: 2, outlineOffset: -2, outlineColor: { default: search.chipText, ':active': search.selectedText },
+    transitionProperty: 'background-color, color', transitionDuration: { default: search.motion, ':active': '120ms' }, transitionTimingFunction: search.easing,
   },
   truncate: { minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' },
 })

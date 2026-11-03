@@ -3,6 +3,8 @@ import { MoonIcon } from '@phosphor-icons/react/dist/ssr/Moon'
 import { GithubLogoIcon } from '@phosphor-icons/react/dist/ssr/GithubLogo'
 import { GearSixIcon } from '@phosphor-icons/react/dist/ssr/GearSix'
 import { UserCircleIcon } from '@phosphor-icons/react/dist/ssr/UserCircle'
+import { SignInIcon } from '@phosphor-icons/react/dist/ssr/SignIn'
+import { Menu } from '@base-ui/react/menu'
 import * as stylex from '@stylexjs/stylex'
 import { usePreferences } from '../preferences'
 import { tokens } from '../styles/tokens.stylex'
@@ -28,8 +30,21 @@ export function StartHeader() {
       </button>
       <a href="https://github.com/gofurry" target="_blank" rel="noopener noreferrer" aria-label={m.github} title={m.github}
         {...stylex.props(controls.glass, styles.action, styles.link)}><GithubLogoIcon size={21} aria-hidden="true" /></a>
-      <button type="button" disabled aria-label={m.settings} title={m.settings} {...stylex.props(controls.glass, styles.action)}><GearSixIcon size={21} aria-hidden="true" /></button>
-      <button type="button" disabled aria-label={m.user} title={m.user} {...stylex.props(controls.glass, styles.action)}><UserCircleIcon size={21} aria-hidden="true" /></button>
+      <Menu.Root modal={false} highlightItemOnHover={false}>
+        <Menu.Trigger aria-label={m.user} title={m.user} {...stylex.props(controls.glass, styles.action)}><UserCircleIcon size={21} aria-hidden="true" /></Menu.Trigger>
+        <Menu.Portal>
+          <Menu.Positioner align="end" sideOffset={8} {...stylex.props(styles.menuPositioner)}>
+            <Menu.Popup aria-label={m.user} data-start-user-menu {...stylex.props(styles.menu)}>
+              <Menu.Item disabled closeOnClick={false} aria-label={`${m.login} (${m.unavailable})`} title={m.unavailable} {...stylex.props(styles.menuItem)}>
+                <SignInIcon size={18} aria-hidden="true" />{m.login}
+              </Menu.Item>
+              <Menu.Item disabled closeOnClick={false} aria-label={`${m.settings} (${m.unavailable})`} title={m.unavailable} {...stylex.props(styles.menuItem)}>
+                <GearSixIcon size={18} aria-hidden="true" />{m.settings}
+              </Menu.Item>
+            </Menu.Popup>
+          </Menu.Positioner>
+        </Menu.Portal>
+      </Menu.Root>
     </div>
   </header>
 }
@@ -71,12 +86,31 @@ const styles = stylex.create({
     fontSize: 13, fontWeight: 600, lineHeight: 1, textAlign: 'center', letterSpacing: 'normal',
   },
   link: { textDecoration: 'none' },
+  menuPositioner: { zIndex: 3 },
+  menu: {
+    minWidth: 136, padding: 4, borderWidth: 0, borderRadius: tokens.radiusSmall,
+    backgroundColor: tokens.overlaySurface, color: tokens.overlayText, backdropFilter: 'blur(14px) saturate(1.05)', boxShadow: 'none',
+    outlineStyle: 'none',
+    opacity: { default: 1, ':is([data-starting-style], [data-ending-style])': 0 },
+    transform: { default: 'translateY(0)', ':is([data-starting-style], [data-ending-style])': 'translateY(-4px)' },
+    pointerEvents: { default: 'auto', ':is([data-ending-style])': 'none' },
+    transitionProperty: 'opacity, transform', transitionDuration: { default: '420ms', '@media (prefers-reduced-motion: reduce)': '0ms' }, transitionTimingFunction: tokens.overlayEasing,
+  },
+  menuItem: {
+    display: 'flex', alignItems: 'center', gap: 8, minHeight: 36, paddingInline: 10, borderWidth: 0, borderRadius: 5,
+    fontSize: 13, fontWeight: 500, lineHeight: 1.4, cursor: 'default', userSelect: 'none',
+    backgroundColor: { default: 'transparent', ':hover:not(:focus-visible)': tokens.overlaySurfaceHover, ':active:not([data-disabled]):not(:focus-visible)': tokens.overlaySelectedSurface, ':focus-visible': tokens.overlaySelectedSurface },
+    color: { default: tokens.overlayText, ':hover:not(:focus-visible)': tokens.overlayHoverText },
+    opacity: { default: 1, ':is([data-disabled])': 0.7 },
+    outlineStyle: { default: 'none', ':focus-visible': 'solid' }, outlineWidth: 2, outlineOffset: -2, outlineColor: tokens.overlayFocus,
+    transitionProperty: 'background-color, color', transitionDuration: tokens.overlayMotion, transitionTimingFunction: tokens.overlayEasing,
+  },
   footer: {
     position: 'fixed', bottom: 'max(12px, env(safe-area-inset-bottom))',
     insetInline: { default: 24, '@media (max-width: 767px)': 12 },
     display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'flex-end', gap: 6,
     pointerEvents: 'none', fontSize: { default: 11, '@media (max-width: 767px)': 10 }, fontWeight: 400, lineHeight: 1.5,
-    color: tokens.overlayText, opacity: 0.7, textShadow: '0 1px 2px rgba(0, 0, 0, 0.35)',
+    color: tokens.filingText, textShadow: tokens.filingTextShadow,
   },
   text: { maxWidth: '100%', pointerEvents: 'auto' },
   filings: { display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '2px 8px', marginInlineStart: 'auto' },
