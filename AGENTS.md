@@ -14,3 +14,13 @@ Read `.agents/architecture.md` for boundaries and `README.md` for setup. `docs/v
 - Go application configuration comes from one required `--config` YAML only: no environment lookup/binding, .env, search or merge. Use Go 1.27.3 standard-library JSON v2/jsontext and preserve response contracts.
 - Region belongs to deployment, independently of locale/theme. CN is permanently SFW; no cross-region user-data access or NSFW implementation here.
 - Use focused checks from `README.md` for governance changes; `task check` remains the general entry point. Run `task check:hmr` after styling/build-plugin changes and container checks after container changes. Report checks that could not run.
+
+## StyleX / Base UI interaction states
+
+- Define applicable Default, Hover, Active, Focus Visible and Disabled states for interactive components.
+- Do not substitute `:focus` or `:focus-within` for `:focus-visible`. Check pointer behavior too: text inputs can match `:focus-visible` after a click.
+- With Base UI, inspect default behavior, state attributes and existing styles before adding focus styles; avoid duplicate rings, outlines and borders.
+- With StyleX, verify the emitted pseudo-class selectors, actual matching and precedence in the browser, including overlapping states.
+- Use existing semantic tokens for focus feedback; suppress native black outlines only within components that provide their own accessible focus indicator.
+- Never clear outlines globally. Each component owns its keyboard accessibility.
+- For new inputs, buttons, menus and dialogs, check pointer hover/click and keyboard Tab focus in both Light and Dark themes.
