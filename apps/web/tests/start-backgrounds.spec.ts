@@ -50,7 +50,7 @@ test('live: real Go/R2 metadata and CDN WebP decode precede the AVIF handoff', a
   await expect(page.locator('[data-start-preview]')).toHaveCSS('opacity', '1')
   expect(await page.locator('[data-start-hd]').evaluate((img) => (img as HTMLImageElement).naturalWidth)).toBe(item.image.width)
   await expect(page.locator('[data-start-hd]')).toHaveCSS('object-fit', 'cover')
-  await expect(page.locator('button, select, a')).toHaveCount(0)
+  await expect(page.locator('[data-start-actions] > *')).toHaveCount(5)
   for (const theme of ['light', 'dark']) {
     await page.context().addCookies([{ name: 'gf-theme', value: theme, url: 'http://127.0.0.1:17322' }])
     await page.reload()
@@ -61,8 +61,10 @@ test('live: real Go/R2 metadata and CDN WebP decode precede the AVIF handoff', a
   await page.setViewportSize({ width: 390, height: 844 })
   const form = (await page.getByRole('search').boundingBox())!
   expect(Math.abs(form.x + form.width / 2 - 195)).toBeLessThanOrEqual(1)
-  expect(Math.abs(form.y + form.height / 2 - 422)).toBeLessThanOrEqual(1)
+  expect(form.y + form.height / 2).toBeLessThan(844 * 0.35)
   await page.screenshot({ path: testInfo.outputPath(`start-${region}-dark-mobile.png`) })
+  await page.locator('[data-mobile-platforms] [aria-expanded]').click()
+  await page.screenshot({ path: testInfo.outputPath(`start-${region}-mobile-platforms.png`) })
   expect(errors).toEqual([])
 })
 
@@ -74,9 +76,12 @@ test('live: AVIF failure keeps the real WebP and does not block search', async (
   await expect(page.locator('[data-start-preview]')).toHaveCSS('opacity', '1')
   const action = region === 'CN' ? 'https://www.bing.com/search' : 'https://www.google.com/search'
   await expect(page.getByRole('search')).toHaveAttribute('action', action)
-  await page.route(`${new URL(action).origin}/**`, (route) => route.fulfill({ contentType: 'text/html', body: '<!doctype html><title>Search intercepted</title>' }))
+  await page.context().route(`${new URL(action).origin}/**`, (route) => route.fulfill({ contentType: 'text/html', body: '<!doctype html><title>Search intercepted</title>' }))
   await page.getByRole('searchbox').fill('GoFurry 狼 & SFW')
+  const opened = page.waitForEvent('popup')
   await page.getByRole('searchbox').press('Enter')
-  await page.waitForURL((url) => url.origin === new URL(action).origin)
-  expect(new URL(page.url()).searchParams.get('q')).toBe('GoFurry 狼 & SFW')
+  const result = await opened
+  await result.waitForURL((url) => url.origin === new URL(action).origin)
+  expect(new URL(result.url()).searchParams.get('q')).toBe('GoFurry 狼 & SFW')
+  await result.close()
 })

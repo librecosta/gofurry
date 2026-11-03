@@ -17,6 +17,13 @@ export const tokens = stylex.defineVars({
   textMuted: 'rgba(87, 83, 78, 0.72)',
   accent: 'rgba(124, 45, 18, 0.86)',
   focusRing: 'rgba(249, 115, 22, 0.32)',
+  // Hero-backed glass roles from legacy nav.less, independent of the page theme.
+  overlaySurface: 'rgba(15, 23, 42, 0.50)',
+  overlaySurfaceHover: 'rgba(15, 23, 42, 0.68)',
+  overlayText: 'rgba(248, 250, 252, 0.92)',
+  overlaySelectedSurface: 'rgba(255, 248, 241, 0.92)',
+  overlaySelectedText: 'rgba(15, 23, 42, 0.94)',
+  overlayHighlight: 'inset 0 1px 0 rgba(255, 255, 255, 0.12)',
   radiusSmall: '8px', radiusMedium: '12px', radiusLarge: '16px',
   motionFast: '160ms', motionBase: '220ms',
 })
