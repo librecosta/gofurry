@@ -5,6 +5,75 @@ const region = process.env.WEB_REGION ?? 'CN'
 type Asset = { key: string; url: string; sha256: string; bytes: number; content_type: string; width: number; height: number }
 type Background = { id: string; sfw: boolean; preview: Asset; image: Asset }
 
+test('live: continuous resize retains the decoded wallpaper, full viewport coverage and zero overflow', async ({ page }, testInfo) => {
+  test.setTimeout(90000)
+  const requests: string[] = []
+  page.on('request', (request) => {
+    if (['image', 'fetch', 'xhr'].includes(request.resourceType())) requests.push(request.url())
+  })
+  await page.goto('/start')
+  const image = page.locator('[data-start-hd]')
+  await expect(image).toHaveCSS('opacity', '1', { timeout: 20000 })
+  const original = await image.elementHandle()
+  const requestCount = requests.length
+  await page.evaluate(() => {
+    const samples: { viewport: number[]; client: number[]; scroll: number[]; image: number[]; opacity: string }[] = []
+    const probe = { running: true, samples }
+    ;(window as unknown as { viewportProbe: typeof probe }).viewportProbe = probe
+    const sample = () => {
+      const root = document.documentElement, image = document.querySelector('[data-start-hd]')!
+      const r = image.getBoundingClientRect()
+      samples.push({ viewport: [innerWidth, innerHeight], client: [root.clientWidth, root.clientHeight], scroll: [root.scrollWidth, root.scrollHeight], image: [r.x, r.y, r.right, r.bottom], opacity: getComputedStyle(image).opacity })
+      if (probe.running) requestAnimationFrame(sample)
+    }
+    requestAnimationFrame(sample)
+  })
+  const growing = Array.from({ length: 21 }, (_, i) => ({ width: 960 + i * 48, height: 600 + i * 24 }))
+  const sizes = [...growing, ...[...growing].reverse(), { width: 390, height: 844 }, { width: 375, height: 667 }, { width: 844, height: 390 }]
+  const theme = page.locator('[data-start-actions] > button').nth(1)
+  for (const [index, size] of sizes.entries()) {
+    if (index === 12) await theme.click() // Resize during the native reveal too.
+    await page.setViewportSize(size)
+    expect(await image.evaluate((element, first) => element === first, original)).toBe(true)
+    await expect(image).toHaveCSS('opacity', '1')
+    if (index % 4 === 0 || index >= sizes.length - 3) {
+      // Inspect painted pixels at the right edge, not just CSS dimensions.
+      const edge = await page.screenshot({ clip: { x: size.width - 12, y: Math.floor(size.height * 0.2), width: 12, height: Math.floor(size.height * 0.5) } })
+      const blank = await page.evaluate(async (base64) => {
+        const bitmap = new Image(); bitmap.src = `data:image/png;base64,${base64}`; await bitmap.decode()
+        const canvas = new OffscreenCanvas(bitmap.width, bitmap.height), ctx = canvas.getContext('2d')!
+        ctx.drawImage(bitmap, 0, 0)
+        const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data
+        let white = 0, black = 0
+        for (let i = 0; i < data.length; i += 4) {
+          if (data[i] > 245 && data[i + 1] > 245 && data[i + 2] > 245) white++
+          if (data[i] < 10 && data[i + 1] < 10 && data[i + 2] < 10) black++
+        }
+        return { white: white / (data.length / 4), black: black / (data.length / 4) }
+      }, edge.toString('base64'))
+      expect(blank.white).toBeLessThan(0.95); expect(blank.black).toBeLessThan(0.95)
+    }
+  }
+  await expect(page.locator('html')).not.toHaveAttribute('data-gf-theme-reveal')
+  await theme.click()
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light')
+  await expect(page.locator('html')).not.toHaveAttribute('data-gf-theme-reveal')
+  const samples = await page.evaluate(() => {
+    const probe = (window as unknown as { viewportProbe: { running: boolean; samples: { viewport: number[]; client: number[]; scroll: number[]; image: number[]; opacity: string }[] } }).viewportProbe
+    probe.running = false
+    return probe.samples
+  })
+  expect(samples.length).toBeGreaterThan(40)
+  for (const sample of samples) {
+    expect(sample.client).toEqual(sample.viewport)
+    expect(sample.scroll).toEqual(sample.client)
+    expect(sample.image).toEqual([0, 0, ...sample.viewport])
+    expect(sample.opacity).toBe('1')
+  }
+  expect(requests).toHaveLength(requestCount)
+  await testInfo.attach('viewport-frames', { body: JSON.stringify(samples), contentType: 'application/json' })
+})
+
 test('live: real Go/R2 metadata and CDN WebP decode precede the AVIF handoff', async ({ page, request }, testInfo) => {
   test.setTimeout(90000)
   const response = await request.get(`${api}/api/v1/start/backgrounds`)

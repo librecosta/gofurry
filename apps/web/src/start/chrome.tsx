@@ -5,6 +5,7 @@ import { GearSixIcon } from '@phosphor-icons/react/dist/ssr/GearSix'
 import { UserCircleIcon } from '@phosphor-icons/react/dist/ssr/UserCircle'
 import { SignInIcon } from '@phosphor-icons/react/dist/ssr/SignIn'
 import { Menu } from '@base-ui/react/menu'
+import { Popover } from '@base-ui/react/popover'
 import * as stylex from '@stylexjs/stylex'
 import { usePreferences } from '../preferences'
 import { tokens } from '../styles/tokens.stylex'
@@ -20,7 +21,18 @@ export function StartHeader() {
   const m = useStartMessages()
   const themeLabel = theme === 'light' ? m.themeDark : m.themeLight
   return <header {...stylex.props(styles.header)}>
-    <span role="img" aria-label="GoFurry" data-start-logo {...stylex.props(styles.logo(logo))} />
+    <Popover.Root>
+      <Popover.Trigger aria-label={m.brand} {...stylex.props(styles.brandTrigger)}>
+        <span role="img" aria-label="GoFurry" data-start-logo {...stylex.props(styles.logo(logo))} />
+      </Popover.Trigger>
+      <Popover.Portal>
+        <Popover.Positioner align="start" sideOffset={8} {...stylex.props(styles.menuPositioner)}>
+          <Popover.Popup initialFocus={false} data-start-brand {...stylex.props(styles.menu, styles.brandPopup)}>
+            <Popover.Title {...stylex.props(styles.brandTitle)}>GoFurry</Popover.Title>
+          </Popover.Popup>
+        </Popover.Positioner>
+      </Popover.Portal>
+    </Popover.Root>
     <div data-start-actions {...stylex.props(styles.actions)}>
       <button type="button" aria-label={m.language} title={m.language}
         onClick={() => setLocale(locale === 'zh' ? 'en' : 'zh')} {...stylex.props(controls.glass, styles.action)}>{locale === 'zh' ? '中' : 'EN'}</button>
@@ -79,6 +91,14 @@ const styles = stylex.create({
     display: 'block', flexShrink: 0, width: { default: 40, '@media (max-width: 767px)': 36 }, aspectRatio: '1287 / 1024',
     backgroundColor: tokens.logoBrand, maskImage: `url("${url}")`, maskSize: 'contain', maskPosition: 'center', maskRepeat: 'no-repeat',
   }),
+  brandTrigger: {
+    display: 'grid', placeItems: 'center', flexShrink: 0, padding: 0,
+    width: { default: 40, '@media (max-width: 767px)': 36 }, height: { default: 40, '@media (max-width: 767px)': 36 },
+    borderWidth: 0, borderRadius: tokens.radiusSmall, boxShadow: 'none', cursor: 'pointer',
+    backgroundColor: { default: 'transparent', ':hover:not(:focus-visible)': 'rgba(224, 230, 238, 0.14)', ':active:not(:focus-visible)': 'rgba(224, 230, 238, 0.22)', ':focus-visible': 'rgba(224, 230, 238, 0.14)' },
+    outlineStyle: { default: 'none', ':focus-visible': 'solid' }, outlineWidth: 2, outlineOffset: -2, outlineColor: tokens.logoBrand,
+    transitionProperty: 'background-color', transitionDuration: tokens.overlayMotion, transitionTimingFunction: tokens.overlayEasing,
+  },
   actions: { display: 'flex', gap: { default: 8, '@media (max-width: 767px)': 6 } },
   action: {
     display: 'grid', placeItems: 'center', padding: 0, flexShrink: 0,
@@ -87,6 +107,8 @@ const styles = stylex.create({
   },
   link: { textDecoration: 'none' },
   menuPositioner: { zIndex: 3 },
+  brandPopup: { minWidth: 0, paddingBlock: 10, paddingInline: 12 },
+  brandTitle: { margin: 0, fontSize: 14, fontWeight: 500, lineHeight: 1.4 },
   menu: {
     minWidth: 136, padding: 4, borderWidth: 0, borderRadius: tokens.radiusSmall,
     backgroundColor: tokens.overlaySurface, color: tokens.overlayText, backdropFilter: 'blur(14px) saturate(1.05)', boxShadow: 'none',
@@ -110,7 +132,7 @@ const styles = stylex.create({
     insetInline: { default: 24, '@media (max-width: 767px)': 12 },
     display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'flex-end', gap: 6,
     pointerEvents: 'none', fontSize: { default: 11, '@media (max-width: 767px)': 10 }, fontWeight: 400, lineHeight: 1.5,
-    color: tokens.filingText, textShadow: tokens.filingTextShadow,
+    color: tokens.filingText, zIndex: 2,
   },
   text: { maxWidth: '100%', pointerEvents: 'auto' },
   filings: { display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '2px 8px', marginInlineStart: 'auto' },

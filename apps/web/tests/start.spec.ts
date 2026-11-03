@@ -36,7 +36,7 @@ test('start: SSR uses the themed legacy SVG, regional defaults and plain CN-only
   await expect(page.getByRole('search')).toHaveAttribute('action', action)
   await expect(page.getByRole('searchbox')).toHaveAttribute('placeholder', placeholder[defaultLocale])
   const logo = page.getByRole('img', { name: 'GoFurry', exact: true })
-  await expect(logo).toHaveCSS('background-color', 'rgb(39, 43, 48)')
+  await expect(logo).toHaveCSS('background-color', 'rgb(215, 220, 226)')
   expect(await logo.evaluate((el) => getComputedStyle(el).maskImage)).toMatch(/url\(.*(?:\.svg|image\/svg)/)
   const bounds = (await logo.boundingBox())!
   expect(bounds.width / bounds.height).toBeCloseTo(1287 / 1024, 2)
@@ -54,6 +54,9 @@ test('start: SSR uses the themed legacy SVG, regional defaults and plain CN-only
       await expect(text).toHaveCSS('backdrop-filter', 'none')
       await expect(text).toHaveCSS('padding', '0px')
       await expect(text).toHaveCSS('border-radius', '0px')
+      await expect(text).toHaveCSS('text-shadow', 'none')
+      await expect(text).toHaveCSS('filter', 'none')
+      await expect(text).toHaveCSS('-webkit-text-stroke-width', '0px')
     }
   }
   // The default native GET search still works before hydration/without JS.
@@ -270,7 +273,8 @@ test('start: desktop/mobile controls keep their position with four visible actio
     const center = group.y + group.height / 2
     expect(center).toBeLessThan(viewport.height * 0.43)
     if (viewport.height > 700) { expect(center / viewport.height).toBeGreaterThan(0.24); expect(center / viewport.height).toBeLessThan(0.31) }
-    expect(group.y).toBeGreaterThan(header.y + header.height + 16)
+    const firstCategory = (await page.locator('[data-categories] button').first().boundingBox())!
+    expect(firstCategory.y).toBeGreaterThanOrEqual(header.y + header.height + 8)
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(viewport.width)
     await expect(page.locator('[data-start-actions] > *')).toHaveCount(4)
     for (const button of await page.locator('[data-start-actions] > *').all()) {
@@ -330,7 +334,7 @@ test('start: native theme reveal uses the button center, final snapshots and leg
       colors: await colors(),
     })
     const revealed = result.animations.at(-1)!.colors
-    revealed.forEach((color, index) => { if (color) expect(color).not.toBe(beforeColors[index]) })
+    revealed.forEach((color, index) => { if (color && index !== 0) expect(color).not.toBe(beforeColors[index]) })
     expect((await page.context().cookies()).find((cookie) => cookie.name === 'gf-theme')?.value).toBe(target)
   }
   // A resize interrupts the live snapshot without a second theme commit or a
@@ -398,7 +402,89 @@ test('start: Light/Dark acrylic, placeholders and footer actually change, with s
     await expect(menu).toHaveCount(0)
   }
   expect(Object.keys(palettes.light)).toEqual(Object.keys(palettes.dark))
-  for (const role of Object.keys(palettes.light)) expect(palettes.light[role]).not.toEqual(palettes.dark[role])
+  expect(palettes.light.logo[0]).toBe(palettes.dark.logo[0])
+  for (const role of Object.keys(palettes.light)) if (role !== 'logo') expect(palettes.light[role]).not.toEqual(palettes.dark[role])
+})
+
+test('start: constant-gray logo button has flat hover, a reversible brand-only popup and keyboard dismissal', async ({ page }) => {
+  await english(page)
+  const logo = page.locator('[data-start-logo]')
+  const trigger = page.getByRole('button', { name: 'GoFurry brand', exact: true })
+  const popup = page.locator('[data-start-brand]')
+  for (const theme of ['light', 'dark']) {
+    await page.context().addCookies([{ name: 'gf-theme', value: theme, url: origin }])
+    await page.reload()
+    await page.mouse.move(0, 0)
+    await expect(logo).toHaveCSS('background-color', 'rgb(215, 220, 226)')
+    await expect(trigger).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
+    await expect(trigger).toHaveCSS('border-top-width', '0px')
+    await expect(trigger).toHaveCSS('box-shadow', 'none')
+    await expect(trigger).toHaveCSS('transition-duration', '0.3s')
+    const actions = await page.locator('[data-start-actions]').boundingBox()
+    const geometry = await logo.boundingBox()
+    await trigger.hover()
+    await expect(trigger).toHaveCSS('background-color', 'rgba(224, 230, 238, 0.14)')
+    await expect(trigger).toHaveCSS('outline-style', 'none')
+    await trigger.click()
+    await expect(trigger).toHaveAttribute('aria-expanded', 'true')
+    await expect(trigger).toHaveAttribute('aria-controls', (await popup.getAttribute('id'))!)
+    await expect(popup).toHaveCSS('opacity', '1')
+    await expect(popup).toHaveText('GoFurry')
+    await expect(popup.getByRole('button')).toHaveCount(0)
+    expect(await page.locator('[data-start-actions]').boundingBox()).toEqual(actions)
+    expect(await logo.boundingBox()).toEqual(geometry)
+    await trigger.click()
+    await expect(trigger).toHaveAttribute('aria-expanded', 'false')
+    await expect(popup).toHaveAttribute('data-ending-style')
+    await expect(popup).toHaveCount(0)
+    await trigger.focus(); await trigger.press('Enter')
+    await expect(popup).toHaveCSS('opacity', '1')
+    await expect(trigger).toHaveCSS('outline-style', 'solid')
+    await page.keyboard.press('Escape')
+    await expect(popup).toHaveCount(0)
+    await expect(trigger).toBeFocused()
+  }
+})
+
+test('start: viewport contract bounds all layers and content without document overflow or changing other routes', async ({ page }) => {
+  await english(page)
+  for (const [width, height] of [[960, 600], [1280, 720], [1920, 1080], [390, 844], [375, 667], [844, 390], [600, 360]]) {
+    await page.setViewportSize({ width, height })
+    const dimensions = await page.evaluate(() => {
+      const size = (el: Element) => ({ client: [el.clientWidth, el.clientHeight], scroll: [el.scrollWidth, el.scrollHeight] })
+      const bounds = (selector: string) => { const r = document.querySelector(selector)!.getBoundingClientRect(); return [r.x, r.y, r.right, r.bottom] }
+      return { viewport: [innerWidth, innerHeight], html: size(document.documentElement), body: size(document.body), main: size(document.querySelector('main')!),
+        page: bounds('[data-start-page]'), background: bounds('[data-start-background]'), dots: bounds('[data-page-dots]'), header: bounds('header'), search: bounds('[data-start-search]'),
+        footer: document.querySelector('footer') ? bounds('footer') : null }
+    })
+    for (const element of [dimensions.html, dimensions.body, dimensions.main]) {
+      expect(element.client).toEqual([width, height])
+      expect(element.scroll).toEqual(element.client)
+    }
+    expect(dimensions.page).toEqual([0, 0, width, height])
+    expect(dimensions.background).toEqual(dimensions.page)
+    for (const bounds of [dimensions.dots, dimensions.header, dimensions.search, dimensions.footer].filter(Boolean) as number[][]) {
+      expect(bounds[0]).toBeGreaterThanOrEqual(0); expect(bounds[1]).toBeGreaterThanOrEqual(0)
+      expect(bounds[2]).toBeLessThanOrEqual(width); expect(bounds[3]).toBeLessThanOrEqual(height)
+    }
+    await page.evaluate(() => window.scrollTo(1000, 1000))
+    expect(await page.evaluate(() => [scrollX, scrollY])).toEqual([0, 0])
+    // Expanded mobile choices must also fit, rather than being clipped away.
+    if (width < 768) {
+      const trigger = page.locator('[data-mobile-platforms] [aria-expanded]')
+      await trigger.click()
+      for (const option of await page.locator('[data-mobile-platforms] button').all()) {
+        const r = (await option.boundingBox())!
+        expect(r.y + r.height).toBeLessThan(height - 48)
+      }
+      await page.keyboard.press('Escape')
+    }
+  }
+  await page.setViewportSize({ width: 960, height: 600 })
+  await page.goto('/')
+  await expect(page.locator('[data-start-page]')).toHaveCount(0)
+  await expect(page.locator('body')).toHaveCSS('min-height', '600px')
+  await expect(page.locator('[data-page-dots]')).toHaveCSS('max-height', 'none')
 })
 
 test('start: user menu has complete exit motion, inert placeholders and keyboard focus on desktop/mobile', async ({ page }) => {

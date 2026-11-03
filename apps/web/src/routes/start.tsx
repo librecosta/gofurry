@@ -10,18 +10,20 @@ export const Route = createFileRoute('/start')({
 })
 
 function Start() {
-  return <>
+  return <div data-start-page {...stylex.props(styles.viewport)}>
     <StartBackground />
     <StartHeader />
     <main {...stylex.props(styles.page)}><SearchBox /></main>
     <StartFooter />
-  </>
+  </div>
 }
 
 const styles = stylex.create({
+  viewport: { position: 'fixed', inset: 0, height: '100dvh', isolation: 'isolate', overflow: 'clip' },
   page: {
-    minHeight: '100dvh', paddingInline: { default: 24, '@media (max-width: 767px)': 16 },
+    position: 'relative', zIndex: 1, height: '100%', minWidth: 0, paddingInline: { default: 24, '@media (max-width: 767px)': 16 },
     // Keep the whole group near 27% of the first viewport, with header clearance.
-    paddingTop: 'max(84px, calc(27svh - 76px))', paddingBottom: 130,
+    paddingTop: { default: 'max(84px, calc(27dvh - 76px))', '@media (max-height: 420px)': 68 },
+    paddingBottom: 'clamp(36px, 12dvh, 130px)',
   },
 })

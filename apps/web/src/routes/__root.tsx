@@ -30,7 +30,7 @@ function Document() {
     <html lang={locale} data-theme={theme} data-region={region} data-content-mode="SFW" {...stylex.props(styles.document, theme === 'dark' && darkTheme)}>
       <head><HeadContent /><DevStyleX /></head>
       <body {...stylex.props(styles.body)}>
-        <div aria-hidden="true" {...stylex.props(styles.dots)} />
+        <div aria-hidden="true" data-page-dots {...stylex.props(styles.dots)} />
         <Outlet /><Scripts />
       </body>
     </html>

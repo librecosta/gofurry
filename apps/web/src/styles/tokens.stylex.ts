@@ -17,7 +17,7 @@ export const tokens = stylex.defineVars({
   textMuted: 'rgba(87, 83, 78, 0.72)',
   accent: 'rgba(124, 45, 18, 0.86)',
   focusRing: 'rgba(249, 115, 22, 0.32)',
-  logoBrand: '#272b30',
+  logoBrand: '#d7dce2',
   // Flat Start toolbar/menu acrylic. Search owns its independent material roles.
   overlaySurface: 'rgba(245, 247, 250, 0.52)',
   overlaySurfaceHover: 'rgba(248, 250, 252, 0.68)',
@@ -27,8 +27,7 @@ export const tokens = stylex.defineVars({
   overlaySelectedText: 'rgba(24, 29, 36, 0.98)',
   overlayFocus: 'rgba(39, 47, 58, 0.86)',
   overlayMotion: '300ms', overlayEasing: 'cubic-bezier(0.22, 1, 0.36, 1)',
-  filingText: 'rgba(32, 38, 46, 0.82)',
-  filingTextShadow: '0 1px 2px rgba(255, 255, 255, 0.65)',
+  filingText: 'rgba(232, 236, 242, 0.78)',
   radiusSmall: '8px', radiusMedium: '12px', radiusLarge: '16px',
   motionFast: '160ms', motionBase: '220ms',
 })
@@ -39,7 +38,6 @@ export const darkTheme = stylex.createTheme(tokens, {
   border: 'rgba(226, 232, 240, 0.18)', text: 'rgba(248, 250, 252, 0.94)',
   textMuted: 'rgba(203, 213, 225, 0.76)', accent: 'rgba(203, 213, 225, 0.82)',
   focusRing: 'rgba(56, 189, 248, 0.34)',
-  logoBrand: '#d7dce2',
   overlaySurface: 'rgba(27, 31, 38, 0.50)',
   overlaySurfaceHover: 'rgba(34, 40, 49, 0.68)',
   overlayText: 'rgba(224, 230, 238, 0.92)',
@@ -47,6 +45,5 @@ export const darkTheme = stylex.createTheme(tokens, {
   overlaySelectedSurface: 'rgba(58, 67, 80, 0.76)',
   overlaySelectedText: 'rgba(242, 245, 249, 0.98)',
   overlayFocus: 'rgba(213, 223, 236, 0.88)',
-  filingText: 'rgba(224, 230, 238, 0.78)',
-  filingTextShadow: '0 1px 2px rgba(0, 0, 0, 0.65)',
+  filingText: 'rgba(34, 39, 46, 0.76)',
 })

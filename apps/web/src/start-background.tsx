@@ -49,7 +49,7 @@ export function StartBackground() {
 }
 
 const styles = stylex.create({
-  container: { position: 'fixed', inset: 0, zIndex: -1, pointerEvents: 'none', overflow: 'hidden' },
+  container: { position: 'absolute', inset: 0, zIndex: 0, pointerEvents: 'none', overflow: 'clip' },
   image: { position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', opacity: 0 },
   visible: { opacity: 1 },
   fade: { transitionProperty: 'opacity', transitionDuration: tokens.motionBase, transitionTimingFunction: 'ease-out' },
