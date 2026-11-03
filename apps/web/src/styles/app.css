@@ -5,6 +5,7 @@
   * { box-sizing: border-box; }
   html { color-scheme: light; isolation: isolate; }
   html[data-theme="dark"] { color-scheme: dark; }
+  html[data-theme-preference="system"] { color-scheme: light dark; }
   button, select { font: inherit; }
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { transition-duration: 0s !important; animation-duration: 0s !important; }

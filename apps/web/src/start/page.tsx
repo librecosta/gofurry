@@ -1,20 +1,16 @@
-import { createFileRoute } from '@tanstack/react-router'
 import * as stylex from '@stylexjs/stylex'
+import { Outlet } from '@tanstack/react-router'
 import { StartBackground } from '../start-background'
-import { StartHeader, StartFooter } from '../start/chrome'
-import { SearchBox } from '../start/search-box'
+import { StartHeader, StartFooter } from './chrome'
+import { SearchBox } from './search-box'
 
-export const Route = createFileRoute('/start')({
-  head: () => ({ meta: [{ title: 'GoFurry · Start' }] }),
-  component: Start,
-})
-
-function Start() {
+export function StartPage() {
   return <div data-start-page {...stylex.props(styles.viewport)}>
     <StartBackground />
     <StartHeader />
     <main {...stylex.props(styles.page)}><SearchBox /></main>
     <StartFooter />
+    <Outlet />
   </div>
 }
 

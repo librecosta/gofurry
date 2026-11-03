@@ -7,7 +7,7 @@ const panel = (page: Page) => page.locator('[data-search-panel="suggestions"][da
 async function open(page: Page, width = 1280) {
   await page.setViewportSize({ width, height: 844 })
   await page.context().addCookies([{ name: 'gf-locale', value: 'en', url: 'http://127.0.0.1:17320' }])
-  await page.goto('/start')
+  await page.goto(process.env.WEB_REGION === 'INTL' ? '/start' : '/en/start')
   await page.evaluate(() => { (window as unknown as { submitted: string[] }).submitted = []; window.open = (url) => { (window as unknown as { submitted: string[] }).submitted.push(String(url)); return null } })
 }
 
@@ -59,7 +59,7 @@ test('suggestions: stale responses, blur, non-search categories, empty and 429 s
   await input(page).fill('old'); await expect.poll(() => calls.includes('old')).toBe(true)
   await input(page).fill('new'); await expect(panel(page)).toContainText('new result')
   await page.waitForTimeout(800); await expect(panel(page)).not.toContainText('old result')
-  await page.locator('[data-start-actions] > a').focus()
+  await page.locator('[data-start-settings]').focus()
   await expect(panel(page)).toHaveCount(0)
   for (const q of ['empty', 'limited']) { await input(page).fill(q); await expect.poll(() => calls.includes(q)).toBe(true); await page.waitForTimeout(200); await expect(panel(page)).toHaveCount(0) }
   await page.getByRole('group', { name: 'Search categories' }).getByRole('button', { name: 'Games' }).click()

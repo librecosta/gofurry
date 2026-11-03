@@ -47,3 +47,24 @@ export const darkTheme = stylex.createTheme(tokens, {
   overlayFocus: 'rgba(213, 223, 236, 0.88)',
   filingText: 'rgba(34, 39, 46, 0.76)',
 })
+
+// CSS resolves system colors before hydration, without guessing the client OS.
+export const systemTheme = stylex.createTheme(tokens, {
+  pageBackground: { default: '#f2e3d0', '@media (prefers-color-scheme: dark)': '#1d1f22' },
+  dotColor: { default: 'rgba(128, 108, 88, 0.24)', '@media (prefers-color-scheme: dark)': 'rgba(193, 197, 203, 0.22)' },
+  surface: { default: 'rgba(255, 250, 242, 0.72)', '@media (prefers-color-scheme: dark)': 'rgba(229, 231, 235, 0.08)' },
+  surfaceHover: { default: 'rgba(255, 239, 213, 0.72)', '@media (prefers-color-scheme: dark)': 'rgba(229, 231, 235, 0.16)' },
+  border: { default: 'rgba(126, 92, 58, 0.16)', '@media (prefers-color-scheme: dark)': 'rgba(226, 232, 240, 0.18)' },
+  text: { default: 'rgba(28, 25, 23, 0.94)', '@media (prefers-color-scheme: dark)': 'rgba(248, 250, 252, 0.94)' },
+  textMuted: { default: 'rgba(87, 83, 78, 0.72)', '@media (prefers-color-scheme: dark)': 'rgba(203, 213, 225, 0.76)' },
+  accent: { default: 'rgba(124, 45, 18, 0.86)', '@media (prefers-color-scheme: dark)': 'rgba(203, 213, 225, 0.82)' },
+  focusRing: { default: 'rgba(249, 115, 22, 0.32)', '@media (prefers-color-scheme: dark)': 'rgba(56, 189, 248, 0.34)' },
+  overlaySurface: { default: 'rgba(245, 247, 250, 0.33)', '@media (prefers-color-scheme: dark)': 'rgba(27, 31, 38, 0.32)' },
+  overlaySurfaceHover: { default: 'rgba(248, 250, 252, 0.48)', '@media (prefers-color-scheme: dark)': 'rgba(34, 40, 49, 0.48)' },
+  overlayText: { default: 'rgba(34, 39, 46, 0.90)', '@media (prefers-color-scheme: dark)': 'rgba(224, 230, 238, 0.92)' },
+  overlayHoverText: { default: 'rgba(24, 29, 36, 0.98)', '@media (prefers-color-scheme: dark)': 'rgba(242, 245, 249, 0.98)' },
+  overlaySelectedSurface: { default: 'rgba(231, 235, 241, 0.50)', '@media (prefers-color-scheme: dark)': 'rgba(58, 67, 80, 0.50)' },
+  overlaySelectedText: { default: 'rgba(24, 29, 36, 0.98)', '@media (prefers-color-scheme: dark)': 'rgba(242, 245, 249, 0.98)' },
+  overlayFocus: { default: 'rgba(39, 47, 58, 0.86)', '@media (prefers-color-scheme: dark)': 'rgba(213, 223, 236, 0.88)' },
+  filingText: { default: 'rgba(232, 236, 242, 0.78)', '@media (prefers-color-scheme: dark)': 'rgba(34, 39, 46, 0.76)' },
+})

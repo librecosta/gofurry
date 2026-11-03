@@ -21,13 +21,36 @@ export const darkSearch = stylex.createTheme(search, {
   focusRing: 'rgba(213, 223, 236, 0.78)',
 })
 
+// CSS resolves system colors before hydration, without guessing the client OS.
+export const systemSearch = stylex.createTheme(search, {
+  chipBackground: { default: 'rgba(246, 248, 251, 0.29)', '@media (prefers-color-scheme: dark)': 'rgba(25, 29, 36, 0.30)' },
+  chipHoverBackground: { default: 'rgba(248, 250, 252, 0.45)', '@media (prefers-color-scheme: dark)': 'rgba(32, 38, 47, 0.46)' },
+  chipText: { default: 'rgba(38, 45, 55, 0.92)', '@media (prefers-color-scheme: dark)': 'rgba(224, 230, 239, 0.92)' },
+  chipHoverText: { default: 'rgba(25, 31, 39, 0.98)', '@media (prefers-color-scheme: dark)': 'rgba(242, 245, 249, 0.98)' },
+  selectedBackground: { default: 'rgba(250, 251, 253, 0.50)', '@media (prefers-color-scheme: dark)': 'rgba(172, 186, 206, 0.21)' },
+  selectedText: { default: 'rgba(25, 31, 39, 0.98)', '@media (prefers-color-scheme: dark)': 'rgba(242, 245, 249, 0.98)' },
+  selectedHoverBackground: { default: 'rgba(252, 253, 254, 0.63)', '@media (prefers-color-scheme: dark)': 'rgba(188, 201, 220, 0.34)' },
+  selectedHoverText: { default: 'rgba(25, 31, 39, 0.98)', '@media (prefers-color-scheme: dark)': 'rgba(242, 245, 249, 0.98)' },
+  inputBackground: { default: 'rgba(250, 251, 253, 0.40)', '@media (prefers-color-scheme: dark)': 'rgba(25, 30, 38, 0.36)' },
+  inputFocusBackground: { default: 'rgba(250, 251, 253, 0.52)', '@media (prefers-color-scheme: dark)': 'rgba(30, 36, 46, 0.49)' },
+  inputText: { default: 'rgba(30, 37, 46, 0.94)', '@media (prefers-color-scheme: dark)': 'rgba(233, 238, 245, 0.96)' },
+  inputPlaceholder: { default: 'rgba(52, 61, 73, 0.72)', '@media (prefers-color-scheme: dark)': 'rgba(209, 218, 231, 0.76)' },
+  focusRing: { default: 'rgba(39, 47, 58, 0.72)', '@media (prefers-color-scheme: dark)': 'rgba(213, 223, 236, 0.78)' },
+})
+
 export const searchStyles = stylex.create({
   shell: { position: 'relative', isolation: 'isolate', display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', maxWidth: 620, marginInline: 'auto' },
+  categoryViewport: { position: 'relative', width: '100%', maxWidth: 500, marginBottom: { default: 12, '@media (max-width: 639px)': 8 } },
   categoryTrack: {
     width: '100%', maxWidth: 500, overflowX: 'auto', paddingBlock: 10,
-    marginBottom: { default: 12, '@media (max-width: 639px)': 8 }, scrollbarWidth: 'none', '::-webkit-scrollbar': { display: 'none' },
+    scrollbarWidth: 'none', '::-webkit-scrollbar': { display: 'none' }, overscrollBehaviorX: 'contain',
   },
-  categories: { display: 'flex', width: 'max-content', gap: { default: 12, '@media (max-width: 767px)': 8 }, marginInline: 'auto' },
+  fadeLeft: { maskImage: 'linear-gradient(to right, transparent, #000 20px)' },
+  fadeRight: { maskImage: 'linear-gradient(to left, transparent, #000 20px)' },
+  fadeBoth: { maskImage: 'linear-gradient(to right, transparent, #000 20px, #000 calc(100% - 20px), transparent)' },
+  edge: { position: 'absolute', top: '50%', transform: 'translateY(-50%)', display: 'grid', placeItems: 'center', width: 16, height: 24, borderRadius: 6, pointerEvents: 'none', backgroundColor: search.chipBackground, color: search.chipText },
+  edgeLeft: { left: 0 }, edgeRight: { right: 0 },
+  categories: { display: 'flex', width: 'max-content', gap: { default: 12, '@media (max-width: 767px)': 8, '@media (max-width: 400px)': 6 }, marginInline: 'auto' },
   chip: {
     borderWidth: 0, borderRadius: 12, fontFamily: 'inherit', fontWeight: 500, whiteSpace: 'nowrap',
     backgroundColor: { default: search.chipBackground, ':enabled:hover:not(:active)': search.chipHoverBackground, ':enabled:active': search.selectedBackground },
@@ -42,7 +65,7 @@ export const searchStyles = stylex.create({
     color: { default: search.selectedText, ':enabled:hover:not(:active)': search.selectedHoverText, ':enabled:active': search.chipHoverText },
     outlineColor: { default: search.selectedText, ':active': search.chipText },
   },
-  category: { flexShrink: 0, paddingBlock: 6, paddingInline: 12, fontSize: 14, lineHeight: 1.42857 },
+  category: { flexShrink: 0, paddingBlock: 6, paddingInline: { default: 12, '@media (max-width: 400px)': 8 }, fontSize: { default: 14, '@media (max-width: 400px)': 12 }, lineHeight: 1.42857 },
   // The popup is a sibling of the form, outside its backdrop-filter root.
   anchor: { position: 'relative', zIndex: 1, width: '100%', maxWidth: 500 },
   search: {
@@ -60,7 +83,10 @@ export const searchStyles = stylex.create({
     borderWidth: 0, borderRadius: 12, outlineStyle: 'none', backgroundColor: 'transparent', color: search.inputText,
     cursor: { default: 'text', ':disabled': 'not-allowed' },
     fontFamily: 'inherit', fontWeight: 400, fontSize: 16, lineHeight: '24px', '::placeholder': { color: search.inputPlaceholder, opacity: 1 },
+    '::-webkit-search-cancel-button': { appearance: 'none', display: 'none' },
   },
+  inputWithClear: { paddingInlineEnd: 72 },
+  clear: { right: 42 },
   submit: {
     position: 'absolute', top: '50%', right: 12, transform: 'translateY(-50%)',
     display: 'grid', placeItems: 'center', width: 20, height: 20, padding: 0, borderWidth: 0, borderRadius: 2,

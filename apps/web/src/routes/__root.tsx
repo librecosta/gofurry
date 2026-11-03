@@ -1,12 +1,12 @@
 import { createRootRoute, HeadContent, Outlet, Scripts } from '@tanstack/react-router'
 import * as stylex from '@stylexjs/stylex'
 import { DevStyleX } from '../styles/dev-stylex'
-import { darkTheme, tokens } from '../styles/tokens.stylex'
+import { darkTheme, systemTheme, tokens } from '../styles/tokens.stylex'
 import { PreferencesProvider, readPreferences, usePreferences } from '../preferences'
 import cssUrl from '../styles/app.css?url'
 
 export const Route = createRootRoute({
-  beforeLoad: async () => ({ preferences: await readPreferences() }),
+  beforeLoad: async ({ location }) => ({ preferences: await readPreferences({ data: location.pathname }) }),
   headers: () => ({ 'Cache-Control': 'private, no-store', Vary: 'Cookie' }),
   head: () => ({
     meta: [
@@ -25,9 +25,9 @@ function Root() {
 }
 
 function Document() {
-  const { theme, locale, region } = usePreferences()
+  const { theme, themePreference, locale, region } = usePreferences()
   return (
-    <html lang={locale} data-theme={theme} data-region={region} data-content-mode="SFW" {...stylex.props(styles.document, theme === 'dark' && darkTheme)}>
+    <html lang={locale} data-theme={theme} data-theme-preference={themePreference} data-region={region} data-content-mode="SFW" {...stylex.props(styles.document, themePreference === 'system' ? systemTheme : theme === 'dark' && darkTheme)}>
       <head><HeadContent /><DevStyleX /></head>
       <body {...stylex.props(styles.body)}>
         <div aria-hidden="true" data-page-dots {...stylex.props(styles.dots)} />

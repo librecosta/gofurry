@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { flushSync } from 'react-dom'
-import { usePreferences } from '../preferences'
+import { usePreferences, type ThemePreference } from '../preferences'
 
 // The legacy controller owns the optional snapshot; preferences still own state
 // and the cookie. flushSync is React's equivalent of the legacy nextTick commit.
@@ -8,10 +8,11 @@ export function useThemeReveal() {
   const { theme, setTheme } = usePreferences()
   const controller = useRef<ReturnType<typeof createThemeReveal> | null>(null)
   useEffect(() => () => { controller.current?.dispose(); controller.current = null }, [])
-  return (button: HTMLElement) => {
+  return (button: HTMLElement, preference: ThemePreference = theme === 'light' ? 'dark' : 'light') => {
     controller.current ??= createThemeReveal()
-    const target = theme === 'light' ? 'dark' : 'light'
-    controller.current.toggle(button, async () => { flushSync(() => setTheme(target)) })
+    const resolved = preference === 'system' ? matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light' : preference
+    if (resolved === theme) { flushSync(() => setTheme(preference)); return }
+    controller.current.toggle(button, async () => { flushSync(() => setTheme(preference)) })
   }
 }
 

@@ -1,7 +1,7 @@
-import { SunIcon } from '@phosphor-icons/react/dist/ssr/Sun'
-import { MoonIcon } from '@phosphor-icons/react/dist/ssr/Moon'
-import { GithubLogoIcon } from '@phosphor-icons/react/dist/ssr/GithubLogo'
-import { GearSixIcon } from '@phosphor-icons/react/dist/ssr/GearSix'
+import { Link } from '@tanstack/react-router'
+import { HouseIcon } from '@phosphor-icons/react/dist/ssr/House'
+import { CompassIcon } from '@phosphor-icons/react/dist/ssr/Compass'
+import { GameControllerIcon } from '@phosphor-icons/react/dist/ssr/GameController'
 import { UserCircleIcon } from '@phosphor-icons/react/dist/ssr/UserCircle'
 import { SignInIcon } from '@phosphor-icons/react/dist/ssr/SignIn'
 import { Menu } from '@base-ui/react/menu'
@@ -13,35 +13,34 @@ import logo from '../assets/logo-mini.svg'
 import { controls } from './controls.stylex'
 import { cnFiling } from './filing.config'
 import { useStartMessages } from './messages'
-import { useThemeReveal } from './theme-reveal'
+import { localizedPath } from '../locale-path'
+import { StartSettings } from './settings'
 
 export function StartHeader() {
-  const { locale, theme, setLocale } = usePreferences()
-  const revealTheme = useThemeReveal()
+  const { locale, region } = usePreferences()
   const m = useStartMessages()
-  const themeLabel = theme === 'light' ? m.themeDark : m.themeLight
+  const home = localizedPath('/', locale, region)
   return <header {...stylex.props(styles.header)}>
     <Popover.Root>
       <Popover.Trigger aria-label={m.brand} {...stylex.props(styles.brandTrigger)}>
         <span role="img" aria-label="GoFurry" data-start-logo {...stylex.props(styles.logo(logo))} />
       </Popover.Trigger>
       <Popover.Portal>
-        <Popover.Positioner align="start" sideOffset={8} {...stylex.props(styles.menuPositioner)}>
-          <Popover.Popup initialFocus={false} data-start-brand {...stylex.props(styles.menu, styles.brandPopup)}>
-            <Popover.Title {...stylex.props(styles.brandTitle)}>GoFurry</Popover.Title>
+        <Popover.Positioner positionMethod="fixed" align="start" sideOffset={8} collisionPadding={16} {...stylex.props(styles.menuPositioner)}>
+          <Popover.Popup data-start-brand {...stylex.props(styles.menu, styles.brandPopup)}>
+            <Popover.Title {...stylex.props(styles.srOnly)}>{m.navigation}</Popover.Title>
+            <nav aria-label={m.navigation}>
+              {home === '/' ? <Popover.Close nativeButton={false} render={<Link to="/" />} {...stylex.props(styles.navItem)}><HouseIcon size={17} aria-hidden="true" />{m.home}</Popover.Close>
+                : <button type="button" aria-disabled="true" title={m.unavailable} data-target={home} {...stylex.props(styles.navItem, styles.pending)}><HouseIcon size={17} aria-hidden="true" />{m.home}</button>}
+              <button type="button" aria-disabled="true" title={m.unavailable} data-target={localizedPath('/sites', locale, region)} {...stylex.props(styles.navItem, styles.pending)}><CompassIcon size={17} aria-hidden="true" />{m.sites}</button>
+              <button type="button" aria-disabled="true" title={m.unavailable} data-target={localizedPath('/games', locale, region)} {...stylex.props(styles.navItem, styles.pending)}><GameControllerIcon size={17} aria-hidden="true" />{m.games}</button>
+            </nav>
           </Popover.Popup>
         </Popover.Positioner>
       </Popover.Portal>
     </Popover.Root>
     <div data-start-actions {...stylex.props(styles.actions)}>
-      <button type="button" aria-label={m.language} title={m.language}
-        onClick={() => setLocale(locale === 'zh' ? 'en' : 'zh')} {...stylex.props(controls.glass, styles.action)}>{locale === 'zh' ? '中' : 'EN'}</button>
-      <button type="button" aria-label={themeLabel} title={themeLabel}
-        onClick={(event) => revealTheme(event.currentTarget)} {...stylex.props(controls.glass, styles.action)}>
-        {theme === 'light' ? <SunIcon size={21} aria-hidden="true" data-theme-icon="sun" /> : <MoonIcon size={21} aria-hidden="true" data-theme-icon="moon" />}
-      </button>
-      <a href="https://github.com/gofurry" target="_blank" rel="noopener noreferrer" aria-label={m.github} title={m.github}
-        {...stylex.props(controls.glass, styles.action, styles.link)}><GithubLogoIcon size={21} aria-hidden="true" /></a>
+      <StartSettings />
       <Menu.Root modal={false} highlightItemOnHover={false}>
         <Menu.Trigger aria-label={m.user} title={m.user} {...stylex.props(controls.glass, styles.action)}><UserCircleIcon size={21} aria-hidden="true" /></Menu.Trigger>
         <Menu.Portal>
@@ -49,9 +48,6 @@ export function StartHeader() {
             <Menu.Popup aria-label={m.user} data-start-user-menu {...stylex.props(styles.menu)}>
               <Menu.Item disabled closeOnClick={false} aria-label={`${m.login} (${m.unavailable})`} title={m.unavailable} {...stylex.props(styles.menuItem)}>
                 <SignInIcon size={18} aria-hidden="true" />{m.login}
-              </Menu.Item>
-              <Menu.Item disabled closeOnClick={false} aria-label={`${m.settings} (${m.unavailable})`} title={m.unavailable} {...stylex.props(styles.menuItem)}>
-                <GearSixIcon size={18} aria-hidden="true" />{m.settings}
               </Menu.Item>
             </Menu.Popup>
           </Menu.Positioner>
@@ -107,8 +103,17 @@ const styles = stylex.create({
   },
   link: { textDecoration: 'none' },
   menuPositioner: { zIndex: 3 },
-  brandPopup: { minWidth: 0, paddingBlock: 10, paddingInline: 12 },
-  brandTitle: { margin: 0, fontSize: 14, fontWeight: 500, lineHeight: 1.4 },
+  brandPopup: { width: 160, minWidth: 160 },
+  srOnly: { position: 'absolute', width: 1, height: 1, padding: 0, margin: 0, overflow: 'hidden', clipPath: 'inset(50%)', whiteSpace: 'nowrap' },
+  navItem: {
+    display: 'flex', alignItems: 'center', gap: 8, width: '100%', minHeight: 36, paddingBlock: 8, paddingInline: 10,
+    borderWidth: 0, borderRadius: 5, fontFamily: 'inherit', fontSize: 13, fontWeight: 500, lineHeight: 1.4, textAlign: 'start', textDecoration: 'none',
+    backgroundColor: { default: 'transparent', ':hover:not(:focus-visible)': tokens.overlaySurfaceHover, ':active:not(:focus-visible)': tokens.overlaySelectedSurface, ':focus-visible': tokens.overlaySelectedSurface },
+    color: tokens.overlayText, cursor: 'pointer',
+    outlineStyle: { default: 'none', ':focus-visible': 'solid' }, outlineWidth: 2, outlineOffset: -2, outlineColor: tokens.overlayFocus,
+    transitionProperty: 'background-color, color', transitionDuration: tokens.overlayMotion, transitionTimingFunction: tokens.overlayEasing,
+  },
+  pending: { opacity: 0.55, cursor: 'not-allowed' },
   menu: {
     minWidth: 136, padding: 4, borderWidth: 0, borderRadius: tokens.radiusSmall,
     backgroundColor: tokens.overlaySurface, color: tokens.overlayText, backdropFilter: 'blur(14px) saturate(1.05)', boxShadow: 'none',

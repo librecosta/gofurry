@@ -30,9 +30,12 @@ test('live: continuous resize retains the decoded wallpaper, full viewport cover
   })
   const growing = Array.from({ length: 21 }, (_, i) => ({ width: 960 + i * 48, height: 600 + i * 24 }))
   const sizes = [...growing, ...[...growing].reverse(), { width: 390, height: 844 }, { width: 375, height: 667 }, { width: 844, height: 390 }]
-  const theme = page.locator('[data-start-actions] > button').nth(1)
+  const appearance = async (value: 'light' | 'dark') => {
+    await page.locator('[data-start-settings]').click()
+    await page.getByRole('radio', { name: value === 'dark' ? /^(Dark|深色)$/ : /^(Light|浅色)$/ }).click()
+  }
   for (const [index, size] of sizes.entries()) {
-    if (index === 12) await theme.click() // Resize during the native reveal too.
+    if (index === 12) await appearance('dark') // Resize during the native reveal too.
     await page.setViewportSize(size)
     expect(await image.evaluate((element, first) => element === first, original)).toBe(true)
     await expect(image).toHaveCSS('opacity', '1')
@@ -55,9 +58,13 @@ test('live: continuous resize retains the decoded wallpaper, full viewport cover
     }
   }
   await expect(page.locator('html')).not.toHaveAttribute('data-gf-theme-reveal')
-  await theme.click()
+  await page.keyboard.press('Escape')
+  await expect(page.locator('[data-start-preferences]')).toHaveCount(0)
+  await appearance('light')
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light')
   await expect(page.locator('html')).not.toHaveAttribute('data-gf-theme-reveal')
+  await page.keyboard.press('Escape')
+  await expect(page.locator('[data-start-preferences]')).toHaveCount(0)
   const samples = await page.evaluate(() => {
     const probe = (window as unknown as { viewportProbe: { running: boolean; samples: { viewport: number[]; client: number[]; scroll: number[]; image: number[]; opacity: string }[] } }).viewportProbe
     probe.running = false
@@ -119,7 +126,7 @@ test('live: real Go/R2 metadata and CDN WebP decode precede the AVIF handoff', a
   await expect(page.locator('[data-start-preview]')).toHaveCSS('opacity', '1')
   expect(await page.locator('[data-start-hd]').evaluate((img) => (img as HTMLImageElement).naturalWidth)).toBe(item.image.width)
   await expect(page.locator('[data-start-hd]')).toHaveCSS('object-fit', 'cover')
-  await expect(page.locator('[data-start-actions] > *')).toHaveCount(4)
+  await expect(page.locator('[data-start-actions] > *')).toHaveCount(2)
   for (const theme of ['light', 'dark']) {
     await page.context().addCookies([{ name: 'gf-theme', value: theme, url: 'http://127.0.0.1:17322' }])
     await page.reload()

@@ -1,9 +1,12 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react'
 import { MagnifyingGlassIcon } from '@phosphor-icons/react/dist/ssr/MagnifyingGlass'
 import { CaretDownIcon } from '@phosphor-icons/react/dist/ssr/CaretDown'
+import { CaretLeftIcon } from '@phosphor-icons/react/dist/ssr/CaretLeft'
+import { CaretRightIcon } from '@phosphor-icons/react/dist/ssr/CaretRight'
+import { XIcon } from '@phosphor-icons/react/dist/ssr/X'
 import * as stylex from '@stylexjs/stylex'
 import { usePreferences } from '../preferences'
-import { darkSearch, searchStyles as styles } from './search.stylex'
+import { darkSearch, systemSearch, searchStyles as styles } from './search.stylex'
 import { useStartMessages } from './messages'
 import { categories, defaultPlatform, platforms, searchURL, type Category } from './search-platforms'
 
@@ -11,7 +14,7 @@ type Panel = 'platforms' | 'suggestions' | null
 type Suggestions = { query: string; items: string[] }
 
 export function SearchBox() {
-  const { region, locale, theme } = usePreferences()
+  const { region, locale, theme, themePreference } = usePreferences()
   const m = useStartMessages()
   const [category, setCategory] = useState<Category>('search')
   const [selected, setSelected] = useState(defaultPlatform('search', region).id)
@@ -33,9 +36,27 @@ export function SearchBox() {
   const panelRef = useRef<Panel>(null)
   const scheduled = useRef('')
   const focusPicker = useRef(false)
+  const categoryTrack = useRef<HTMLDivElement>(null)
+  const skipFocusRequest = useRef(false)
+  const [categoryEdges, setCategoryEdges] = useState({ left: false, right: false })
   const panelId = useId()
   const available = platforms[category]
   const target = available.find((item) => item.id === selected)!
+
+  useEffect(() => {
+    const track = categoryTrack.current!
+    let active = true
+    const measure = () => {
+      if (!active) return
+      const focused = track.contains(document.activeElement) ? document.activeElement : track.querySelector('[aria-pressed="true"]')
+      if (focused instanceof HTMLButtonElement) revealCategory(focused)
+      updateCategoryEdges()
+    }
+    const observer = new ResizeObserver(measure)
+    observer.observe(track); observer.observe(track.firstElementChild!)
+    void document.fonts.ready.then(measure)
+    return () => { active = false; observer.disconnect() }
+  }, [])
 
   // One physical panel prevents overlapping menus, including during exit.
   // Keep its last content mounted for the complete fade-out (no empty shell).
@@ -81,6 +102,19 @@ export function SearchBox() {
   }, [active, panel])
 
   function showPanel(next: Panel) { panelRef.current = next; setPanel(next) }
+  function updateCategoryEdges() {
+    const track = categoryTrack.current
+    if (!track) return
+    const next = { left: track.scrollLeft > 1, right: track.scrollLeft + track.clientWidth < track.scrollWidth - 1 }
+    setCategoryEdges((old) => old.left === next.left && old.right === next.right ? old : next)
+  }
+  function revealCategory(button: HTMLButtonElement) {
+    const track = categoryTrack.current!
+    const gutter = track.scrollWidth > track.clientWidth ? 20 : 0
+    const item = button.getBoundingClientRect(), bounds = track.getBoundingClientRect()
+    if (item.left < bounds.left + gutter) track.scrollLeft -= bounds.left + gutter - item.left
+    else if (item.right > bounds.right - gutter) track.scrollLeft += item.right - bounds.right + gutter
+  }
   function closePanel() { showPanel(null); setActive(-1) }
   function cancelRequest() {
     sequence.current++
@@ -119,10 +153,7 @@ export function SearchBox() {
   function chooseCategory(next: Category, button: HTMLButtonElement) {
     cancelRequest(); closePanel()
     setCategory(next); setSelected(defaultPlatform(next, region).id)
-    const track = button.closest<HTMLElement>('[data-category-track]')!
-    const item = button.getBoundingClientRect(), bounds = track.getBoundingClientRect()
-    if (item.left < bounds.left) track.scrollLeft -= bounds.left - item.left
-    else if (item.right > bounds.right) track.scrollLeft += item.right - bounds.right
+    revealCategory(button)
   }
   function choosePlatform(id: string, fromMobile = false) {
     setSelected(id)
@@ -164,15 +195,20 @@ export function SearchBox() {
     return <span>{phrase.slice(0, index)}<mark {...stylex.props(styles.highlight)}>{phrase.slice(index, end)}</mark>{phrase.slice(end)}</span>
   }
   const defaultAction = region === 'CN' ? 'https://www.bing.com/search' : 'https://www.google.com/search'
-  return <div ref={shell} data-start-search {...stylex.props(styles.shell, theme === 'dark' && darkSearch)}
+  return <div ref={shell} data-start-search {...stylex.props(styles.shell, themePreference === 'system' ? systemSearch : theme === 'dark' && darkSearch)}
     onBlur={(event) => {
       if (!event.currentTarget.contains(event.relatedTarget)) { cancelRequest(); closePanel() }
     }}>
-    <div data-category-track {...stylex.props(styles.categoryTrack)}>
-      <div role="group" aria-label={m.categories} data-categories onKeyDown={groupKeys} {...stylex.props(styles.categories)}>
+    <div {...stylex.props(styles.categoryViewport)}>
+    <div ref={categoryTrack} data-category-track onScroll={updateCategoryEdges} {...stylex.props(styles.categoryTrack, categoryEdges.left && styles.fadeLeft, categoryEdges.right && styles.fadeRight, categoryEdges.left && categoryEdges.right && styles.fadeBoth)}>
+      <div role="group" aria-label={m.categories} aria-description={categoryEdges.left || categoryEdges.right ? m.moreCategories : undefined} data-categories onKeyDown={groupKeys}
+        onFocusCapture={(event) => { if (event.target instanceof HTMLButtonElement) revealCategory(event.target) }} {...stylex.props(styles.categories)}>
         {categories.map((id) => <button key={id} type="button" aria-pressed={category === id}
           onClick={(event) => chooseCategory(id, event.currentTarget)} {...stylex.props(styles.chip, styles.category, category === id && styles.selected)}>{m.category[id]}</button>)}
       </div>
+    </div>
+    {categoryEdges.left && <span aria-hidden="true" title={m.moreCategories} data-category-edge="left" {...stylex.props(styles.edge, styles.edgeLeft)}><CaretLeftIcon size={12} /></span>}
+    {categoryEdges.right && <span aria-hidden="true" title={m.moreCategories} data-category-edge="right" {...stylex.props(styles.edge, styles.edgeRight)}><CaretRightIcon size={12} /></span>}
     </div>
     <div {...stylex.props(styles.anchor)}>
     <form role="search" aria-label={m.search} method="get" action={defaultAction} target="_blank" rel="noopener noreferrer" acceptCharset="UTF-8"
@@ -197,12 +233,17 @@ export function SearchBox() {
         onChange={(event) => { setKeyword(event.target.value); schedule(event.target.value) }} onKeyDown={inputKeys}
         onCompositionStart={() => { composing.current = true; cancelRequest(); closePanel() }}
         onCompositionEnd={(event) => { composing.current = false; setKeyword(event.currentTarget.value); schedule(event.currentTarget.value) }}
-        onFocus={() => { if (panelRef.current === 'platforms') closePanel(); schedule(keyword) }}
+        onFocus={() => { if (panelRef.current === 'platforms') closePanel(); if (!skipFocusRequest.current) schedule(keyword) }}
         onPointerDown={() => setPointerFocus(true)} onBlur={(event) => {
           setPointerFocus(false); cancelRequest()
           if (panelRef.current === 'suggestions' && !popup.current?.contains(event.relatedTarget)) closePanel()
         }}
-        {...stylex.props(styles.input)} />
+        {...stylex.props(styles.input, !!keyword && styles.inputWithClear)} />
+      {!!keyword && <button type="button" aria-label={m.clear} title={m.clear} data-search-clear
+        onPointerDown={(event) => event.preventDefault()} onClick={() => {
+          cancelRequest(); closePanel(); composing.current = false; setKeyword('')
+          skipFocusRequest.current = true; input.current?.focus({ preventScroll: true }); skipFocusRequest.current = false
+        }} {...stylex.props(styles.submit, styles.clear)}><XIcon size={18} aria-hidden="true" /></button>}
       <button type="submit" aria-label={m.submit} title={m.submit} {...stylex.props(styles.submit)}><MagnifyingGlassIcon size={20} weight="bold" aria-hidden="true" /></button>
       <input type="hidden" name={region === 'CN' ? 'adlt' : 'safe'} value={region === 'CN' ? 'strict' : 'active'} />
     </form>

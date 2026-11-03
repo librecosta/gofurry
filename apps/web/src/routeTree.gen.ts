@@ -10,15 +10,21 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as StartRouteImport } from './routes/_start'
 import { Route as LivezRouteImport } from './routes/livez'
 import { Route as ReadyzRouteImport } from './routes/readyz'
-import { Route as StartRouteImport } from './routes/start'
 import { Route as StatusRouteImport } from './routes/status'
+import { Route as StartStartRouteImport } from './routes/_start.start'
+import { Route as StartLanguageStartRouteImport } from './routes/_start.$language.start'
 import { Route as ApiV1StartSearchSuggestionsRouteImport } from './routes/api.v1.start.search.suggestions'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const StartRoute = StartRouteImport.update({
+  id: '/_start',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LivezRoute = LivezRouteImport.update({
@@ -31,15 +37,20 @@ const ReadyzRoute = ReadyzRouteImport.update({
   path: '/readyz',
   getParentRoute: () => rootRouteImport,
 } as any)
-const StartRoute = StartRouteImport.update({
-  id: '/start',
-  path: '/start',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const StatusRoute = StatusRouteImport.update({
   id: '/status',
   path: '/status',
   getParentRoute: () => rootRouteImport,
+} as any)
+const StartStartRoute = StartStartRouteImport.update({
+  id: '/start',
+  path: '/start',
+  getParentRoute: () => StartRoute,
+} as any)
+const StartLanguageStartRoute = StartLanguageStartRouteImport.update({
+  id: '/$language/start',
+  path: '/$language/start',
+  getParentRoute: () => StartRoute,
 } as any)
 const ApiV1StartSearchSuggestionsRoute =
   ApiV1StartSearchSuggestionsRouteImport.update({
@@ -52,25 +63,29 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/livez': typeof LivezRoute
   '/readyz': typeof ReadyzRoute
-  '/start': typeof StartRoute
   '/status': typeof StatusRoute
+  '/start': typeof StartStartRoute
+  '/$language/start': typeof StartLanguageStartRoute
   '/api/v1/start/search/suggestions': typeof ApiV1StartSearchSuggestionsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/livez': typeof LivezRoute
   '/readyz': typeof ReadyzRoute
-  '/start': typeof StartRoute
   '/status': typeof StatusRoute
+  '/start': typeof StartStartRoute
+  '/$language/start': typeof StartLanguageStartRoute
   '/api/v1/start/search/suggestions': typeof ApiV1StartSearchSuggestionsRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/_start': typeof StartRouteWithChildren
   '/livez': typeof LivezRoute
   '/readyz': typeof ReadyzRoute
-  '/start': typeof StartRoute
   '/status': typeof StatusRoute
+  '/_start/start': typeof StartStartRoute
+  '/_start/$language/start': typeof StartLanguageStartRoute
   '/api/v1/start/search/suggestions': typeof ApiV1StartSearchSuggestionsRoute
 }
 export interface FileRouteTypes {
@@ -79,32 +94,36 @@ export interface FileRouteTypes {
     | '/'
     | '/livez'
     | '/readyz'
-    | '/start'
     | '/status'
+    | '/start'
+    | '/$language/start'
     | '/api/v1/start/search/suggestions'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/livez'
     | '/readyz'
-    | '/start'
     | '/status'
+    | '/start'
+    | '/$language/start'
     | '/api/v1/start/search/suggestions'
   id:
     | '__root__'
     | '/'
+    | '/_start'
     | '/livez'
     | '/readyz'
-    | '/start'
     | '/status'
+    | '/_start/start'
+    | '/_start/$language/start'
     | '/api/v1/start/search/suggestions'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  StartRoute: typeof StartRouteWithChildren
   LivezRoute: typeof LivezRoute
   ReadyzRoute: typeof ReadyzRoute
-  StartRoute: typeof StartRoute
   StatusRoute: typeof StatusRoute
   ApiV1StartSearchSuggestionsRoute: typeof ApiV1StartSearchSuggestionsRoute
 }
@@ -116,6 +135,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_start': {
+      id: '/_start'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof StartRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/livez': {
@@ -132,19 +158,26 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ReadyzRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/start': {
-      id: '/start'
-      path: '/start'
-      fullPath: '/start'
-      preLoaderRoute: typeof StartRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/status': {
       id: '/status'
       path: '/status'
       fullPath: '/status'
       preLoaderRoute: typeof StatusRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/_start/start': {
+      id: '/_start/start'
+      path: '/start'
+      fullPath: '/start'
+      preLoaderRoute: typeof StartStartRouteImport
+      parentRoute: typeof StartRoute
+    }
+    '/_start/$language/start': {
+      id: '/_start/$language/start'
+      path: '/$language/start'
+      fullPath: '/$language/start'
+      preLoaderRoute: typeof StartLanguageStartRouteImport
+      parentRoute: typeof StartRoute
     }
     '/api/v1/start/search/suggestions': {
       id: '/api/v1/start/search/suggestions'
@@ -156,11 +189,23 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface StartRouteChildren {
+  StartStartRoute: typeof StartStartRoute
+  StartLanguageStartRoute: typeof StartLanguageStartRoute
+}
+
+const StartRouteChildren: StartRouteChildren = {
+  StartStartRoute: StartStartRoute,
+  StartLanguageStartRoute: StartLanguageStartRoute,
+}
+
+const StartRouteWithChildren = StartRoute._addFileChildren(StartRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  StartRoute: StartRouteWithChildren,
   LivezRoute: LivezRoute,
   ReadyzRoute: ReadyzRoute,
-  StartRoute: StartRoute,
   StatusRoute: StatusRoute,
   ApiV1StartSearchSuggestionsRoute: ApiV1StartSearchSuggestionsRoute,
 }

@@ -1,26 +1,36 @@
-import { createContext, useContext, useState, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
+import { useNavigate, useRouterState } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
 import { getCookie, setResponseHeader } from '@tanstack/react-start/server'
+import { isStartPath, localeForPath, localizedPath } from './locale-path'
 
 export type Region = 'CN' | 'INTL'
 export type Locale = 'zh' | 'en'
 export type Theme = 'light' | 'dark'
-export type Preferences = { region: Region; locale: Locale; theme: Theme }
+export type ThemePreference = Theme | 'system'
+export type ContentPreference = 'SFW' | 'NSFW'
+export type Preferences = { region: Region; locale: Locale; theme: Theme; themePreference: ThemePreference; contentPreference: ContentPreference }
 
 // Region belongs to the deployment; no request parameter or preference changes it.
-export const readPreferences = createServerFn({ method: 'GET' }).handler((): Preferences => {
+export const readPreferences = createServerFn({ method: 'GET' }).validator((pathname: string) => {
+  if (typeof pathname !== 'string' || pathname.length > 2048) throw new Error('Invalid pathname')
+  return pathname
+}).handler(({ data: pathname }): Preferences => {
   setResponseHeader('Cache-Control', 'private, no-store')
   const region = process.env.WEB_REGION ?? 'CN'
   if (region !== 'CN' && region !== 'INTL') throw new Error('WEB_REGION must be CN or INTL')
   const locale = getCookie('gf-locale')
+  const savedTheme = getCookie('gf-theme')
+  const themePreference = savedTheme === 'dark' || savedTheme === 'light' ? savedTheme : 'system'
   return {
     region,
-    locale: locale === 'zh' || locale === 'en' ? locale : region === 'CN' ? 'zh' : 'en',
-    theme: getCookie('gf-theme') === 'dark' ? 'dark' : 'light',
+    locale: isStartPath(pathname) ? localeForPath(pathname, region) : locale === 'zh' || locale === 'en' ? locale : region === 'CN' ? 'zh' : 'en',
+    theme: themePreference === 'dark' ? 'dark' : 'light', themePreference,
+    contentPreference: region === 'INTL' && getCookie('gf-content-preference') === 'NSFW' ? 'NSFW' : 'SFW',
   }
 })
 
-type Context = Preferences & { setLocale: (locale: Locale) => void; setTheme: (theme: Theme) => void }
+type Context = Preferences & { setLocale: (locale: Locale) => void; setTheme: (theme: ThemePreference) => void; setContentPreference: (value: ContentPreference) => void }
 const PreferencesContext = createContext<Context | null>(null)
 
 function remember(name: string, value: string) {
@@ -28,12 +38,36 @@ function remember(name: string, value: string) {
 }
 
 export function PreferencesProvider({ initial, children }: { initial: Preferences; children: ReactNode }) {
-  const [locale, changeLocale] = useState(initial.locale)
+  const navigate = useNavigate()
+  const pathname = useRouterState({ select: (state) => state.location.pathname })
+  const [legacyLocale, changeLocale] = useState<Locale | null>(null)
   const [theme, changeTheme] = useState(initial.theme)
+  const [themePreference, changeThemePreference] = useState(initial.themePreference)
+  const [contentPreference, changeContentPreference] = useState(initial.contentPreference)
+  useEffect(() => { changeLocale(null) }, [pathname])
+  useEffect(() => {
+    const media = matchMedia('(prefers-color-scheme: dark)')
+    const update = () => changeTheme(themePreference === 'system' ? media.matches ? 'dark' : 'light' : themePreference)
+    update()
+    if (themePreference !== 'system') return
+    media.addEventListener('change', update)
+    return () => media.removeEventListener('change', update)
+  }, [themePreference])
   return <PreferencesContext value={{
-    region: initial.region, locale, theme,
-    setLocale: (value) => { remember('gf-locale', value); changeLocale(value) },
-    setTheme: (value) => { remember('gf-theme', value); changeTheme(value) },
+    region: initial.region, locale: isStartPath(pathname) ? localeForPath(pathname, initial.region) : legacyLocale ?? initial.locale, theme, themePreference, contentPreference,
+    setLocale: (value) => {
+      remember('gf-locale', value)
+      if (isStartPath(pathname)) void navigate({ to: localizedPath(pathname, value, initial.region), resetScroll: false })
+      else changeLocale(value) // Existing engineering diagnostics are not business URL routes.
+    },
+    setTheme: (value) => {
+      remember('gf-theme', value); changeThemePreference(value)
+      changeTheme(value === 'system' ? matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light' : value)
+    },
+    setContentPreference: (value) => {
+      const next = initial.region === 'INTL' ? value : 'SFW'
+      remember('gf-content-preference', next); changeContentPreference(next)
+    },
   }}>{children}</PreferencesContext>
 }
 
