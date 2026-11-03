@@ -1,0 +1,27 @@
+@use '@fontsource-variable/manrope/index.css' as manrope;
+@use '@fontsource-variable/noto-sans-sc/index.css' as noto;
+@use './themes';
+
+* { box-sizing: border-box; }
+html { color-scheme: light; isolation: isolate; }
+html[data-theme-preference='dark'] { color-scheme: dark; }
+html[data-theme-preference='system'] { color-scheme: light dark; }
+button, select { font: inherit; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition-duration: 0s !important; animation-duration: 0s !important; }
+}
+
+// Start alone owns one visible viewport. Other routes keep normal scrolling.
+html:has([data-start-page]) body { min-height: 0; height: 100dvh; }
+html:has([data-start-page]) [data-page-dots] { max-height: 100dvh; }
+
+// Keep the validated native circular theme snapshot, separate from Motion.
+html[data-gf-theme-reveal]::view-transition { pointer-events: none; }
+html[data-gf-theme-reveal]::view-transition-group(root),
+html[data-gf-theme-reveal]::view-transition-old(root),
+html[data-gf-theme-reveal]::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+html[data-gf-theme-reveal]::view-transition-old(root) { z-index: 1; }
+html[data-gf-theme-reveal]::view-transition-new(root) { z-index: 2; }

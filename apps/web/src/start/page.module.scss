@@ -1,0 +1,19 @@
+.viewport {
+  position: fixed;
+  inset: 0;
+  height: 100dvh;
+  isolation: isolate;
+  overflow: clip;
+}
+
+.page {
+  position: relative;
+  z-index: 1;
+  height: 100%;
+  min-width: 0;
+  padding-inline: 24px;
+  padding-top: max(84px, calc(27dvh - 76px));
+  padding-bottom: clamp(36px, 12dvh, 130px);
+  @media (max-width: 767px) { padding-inline: 16px; }
+  @media (max-height: 420px) { padding-top: 68px; }
+}

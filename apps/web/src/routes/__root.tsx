@@ -1,9 +1,7 @@
 import { createRootRoute, HeadContent, Outlet, Scripts } from '@tanstack/react-router'
-import * as stylex from '@stylexjs/stylex'
-import { DevStyleX } from '../styles/dev-stylex'
-import { darkTheme, systemTheme, tokens } from '../styles/tokens.stylex'
+import styles from '../styles/document.module.scss'
 import { PreferencesProvider, readPreferences, usePreferences } from '../preferences'
-import cssUrl from '../styles/app.css?url'
+import cssUrl from '../styles/global.scss?url'
 
 export const Route = createRootRoute({
   beforeLoad: async ({ location }) => ({ preferences: await readPreferences({ data: location.pathname }) }),
@@ -27,24 +25,12 @@ function Root() {
 function Document() {
   const { theme, themePreference, locale, region } = usePreferences()
   return (
-    <html lang={locale} data-theme={theme} data-theme-preference={themePreference} data-region={region} data-content-mode="SFW" {...stylex.props(styles.document, themePreference === 'system' ? systemTheme : theme === 'dark' && darkTheme)}>
-      <head><HeadContent /><DevStyleX /></head>
-      <body {...stylex.props(styles.body)}>
-        <div aria-hidden="true" data-page-dots {...stylex.props(styles.dots)} />
+    <html lang={locale} data-theme={theme} data-theme-preference={themePreference} data-region={region} data-content-mode="SFW" className={styles.document}>
+      <head><HeadContent /></head>
+      <body className={styles.body}>
+        <div aria-hidden="true" data-page-dots className={styles.dots} />
         <Outlet /><Scripts />
       </body>
     </html>
   )
 }
-
-const styles = stylex.create({
-  document: { fontFamily: tokens.fontSans, backgroundColor: tokens.pageBackground, color: tokens.text },
-  body: { margin: 0, minHeight: '100vh' },
-  dots: {
-    position: 'absolute', top: 0, insetInline: 0, height: tokens.dotHeight,
-    pointerEvents: 'none', zIndex: -1,
-    backgroundImage: `radial-gradient(circle, ${tokens.dotColor} ${tokens.dotRadius}, transparent ${tokens.dotRadius})`,
-    backgroundSize: `${tokens.dotSpacing} ${tokens.dotSpacing}`,
-    maskImage: 'linear-gradient(to bottom, #000, transparent)',
-  },
-})

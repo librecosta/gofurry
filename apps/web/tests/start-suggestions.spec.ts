@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test'
+import { sampleMotion } from './motion'
 
 const endpoint = '**/api/v1/start/search/suggestions?*'
 const headers = { 'X-GoFurry-Region': process.env.WEB_REGION ?? 'CN', 'X-GoFurry-Content-Mode': 'SFW' }
@@ -86,14 +87,9 @@ test('suggestions: mobile menus share one panel, fully exit, restore focus and f
     await expect(trigger).toHaveText('DuckDuckGo')
     await expect(trigger).toBeFocused()
     await expect(picker).toHaveAttribute('data-open', 'false')
-    const exit = await picker.evaluate((el) => {
-      const transitions = el.getAnimations()
-      for (const animation of transitions) { animation.pause(); animation.currentTime = 210 }
-      return { count: transitions.length, opacity: Number(getComputedStyle(el).opacity), inert: (el as HTMLElement).inert }
-    })
-    expect(exit.count).toBe(2); expect(exit.inert).toBe(true)
-    expect(exit.opacity).toBeGreaterThan(0); expect(exit.opacity).toBeLessThan(1)
-    await picker.evaluate((el) => el.getAnimations().forEach((animation) => animation.play()))
+    await expect(picker).toHaveAttribute('inert')
+    const exit = await sampleMotion(picker)
+    expect(exit.some(frame => frame.opacity > 0 && frame.opacity < 1)).toBe(true); expect(exit.at(-1)!.t).toBeGreaterThan(250)
     await expect(picker).toHaveCount(0)
     await input(page).focus(); await expect(panel(page)).toHaveCSS('opacity', '1')
     await panel(page).getByRole('option').last().click()

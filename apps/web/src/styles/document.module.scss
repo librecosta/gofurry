@@ -1,0 +1,22 @@
+.document {
+  font-family: var(--font-sans);
+  background-color: var(--page-background);
+  color: var(--text);
+}
+
+.body {
+  margin: 0;
+  min-height: 100vh;
+}
+
+.dots {
+  position: absolute;
+  top: 0;
+  inset-inline: 0;
+  height: var(--dot-height);
+  pointer-events: none;
+  z-index: -1;
+  background-image: radial-gradient(circle, var(--dot-color) var(--dot-radius), transparent var(--dot-radius));
+  background-size: var(--dot-spacing) var(--dot-spacing);
+  mask-image: linear-gradient(to bottom, #000, transparent);
+}

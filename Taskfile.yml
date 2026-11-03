@@ -38,7 +38,7 @@ tasks:
     cmds:
       - pnpm --filter @gofurry/web build
   check:hmr:
-    desc: Verify StyleX HMR and React Fast Refresh in the dev server
+    desc: Verify SCSS Modules HMR and React Fast Refresh in the dev server
     cmds:
       - pnpm --filter @gofurry/web test:hmr
   check:docker:

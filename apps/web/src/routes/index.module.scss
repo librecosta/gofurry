@@ -1,0 +1,42 @@
+.code {
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+}
+
+.page {
+  min-height: 100vh;
+  padding: 32px;
+  color: var(--text);
+}
+
+.button {
+  padding-block: 8px;
+  padding-inline: 12px;
+  border-radius: var(--radius-small);
+  border-width: 1px;
+  border-style: solid;
+  border-color: var(--border);
+  background-color: var(--surface);
+  color: var(--text);
+  opacity: 1;
+  outline-offset: 3px;
+  outline-color: transparent;
+  transition-duration: var(--motion-fast);
+  transition-property: background-color;
+  &:disabled { opacity: 0.5; }
+  &:focus-visible { outline-color: var(--focus-ring); }
+  &:hover {
+    background-color: var(--surface-hover);
+  }
+}
+
+.popup {
+  padding: 20px;
+  max-width: 320px;
+  border-radius: var(--radius-large);
+  border-width: 1px;
+  border-style: solid;
+  border-color: var(--border);
+  background-color: var(--surface);
+  color: var(--text);
+}

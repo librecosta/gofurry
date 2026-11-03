@@ -1,0 +1,12 @@
+@use './tokens';
+
+:root { @include tokens.emit(tokens.$light); }
+html[data-theme-preference='dark'] { @include tokens.emit(tokens.$dark); color-scheme: dark; }
+@media (prefers-color-scheme: dark) {
+  html[data-theme-preference='system'] { @include tokens.emit(tokens.$dark); }
+}
+@media (max-width: 767px) { :root {
+  --dot-spacing: 28px;
+  --dot-radius: 0.8px;
+  --dot-height: 185px;
+} }

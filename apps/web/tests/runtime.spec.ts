@@ -18,7 +18,6 @@ test('SSR sends metadata, content and extracted CSS before hydration', async ({ 
   expect(css).toMatch(/min-height:\s*100vh/)
   expect(css).toContain('#f2e3d0')
   expect(css).toContain('#1d1f22')
-  expect(html).not.toContain('virtual:stylex')
   const context = await browser.newContext({ javaScriptEnabled: false, colorScheme: 'light' })
   const page = await context.newPage()
   await page.goto('/')

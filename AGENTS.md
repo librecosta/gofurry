@@ -1,8 +1,8 @@
 # GoFurry
 
-GoFurry VNext is a pnpm workspace with a TanStack Start SSR Web and a Go/Fiber modular monolith API.
+GoFurry VNext is a pnpm workspace with a TanStack Start + React SSR Web, SCSS/CSS Modules, Motion and a Go/Fiber modular monolith API.
 
-Read `.agents/architecture.md` for boundaries and `README.md` for setup. `docs/v0.1-b0.md` records current governance verification; `docs/v0.1-a.md` is historical. Issue #1 tracks deferred integrations; Issue #2 defers shared UI/Go libraries.
+Read `.agents/architecture.md` for boundaries and `README.md` for setup. `docs/v0.1-c0.md` records the styling/motion comparison and migration; `docs/v0.1-b0.md` records Go/configuration governance and `docs/v0.1-a.md` is historical. Issue #1 tracks deferred integrations; Issue #2 defers shared UI/Go libraries.
 
 - Work on `develop`; preserve existing changes. Do not change `master`, `pre-master`, other repositories or production resources.
 - `third-party/go-furry` is read-only legacy reference, excluded from builds. Never advance its gitlink as part of routine work.
@@ -15,12 +15,16 @@ Read `.agents/architecture.md` for boundaries and `README.md` for setup. `docs/v
 - Region belongs to deployment, independently of locale/theme. CN is permanently SFW; no cross-region user-data access or NSFW implementation here.
 - Use focused checks from `README.md` for governance changes; `task check` remains the general entry point. Run `task check:hmr` after styling/build-plugin changes and container checks after container changes. Report checks that could not run.
 
-## StyleX / Base UI interaction states
+## Styling, motion and interaction states
+
+- SCSS + CSS Modules is the only styling system; do not add StyleX, Tailwind or runtime CSS injection. `styles/tokens.scss` is the single semantic palette, exposed through CSS custom properties by `themes.scss`; `global.scss` is linked before first paint. Keep component rules in `*.module.scss`.
+- Motion (`motion/react`) owns popup, selection and image opacity/transform timelines. Use `AnimatePresence` for exits and honor reduced-motion. Never animate the same property with CSS transitions and Motion. Simple color states stay in SCSS; the native circular theme View Transition stays in `start/theme-reveal.ts`.
+- Base UI owns positioning, focus, keyboard behavior and semantics. Compose `render` with Motion and `Portal keepMounted` with `AnimatePresence`; do not add CSS starting/ending opacity or transform rules. Keep static positioning separate from animated transforms.
 
 - Define applicable Default, Hover, Active, Focus Visible and Disabled states for interactive components.
 - Do not substitute `:focus` or `:focus-within` for `:focus-visible`. Check pointer behavior too: text inputs can match `:focus-visible` after a click.
 - With Base UI, inspect default behavior, state attributes and existing styles before adding focus styles; avoid duplicate rings, outlines and borders.
-- With StyleX, verify the emitted pseudo-class selectors, actual matching and precedence in the browser, including overlapping states.
+- Verify CSS Module pseudo-class selectors, matching and specificity in the browser, including overlapping states.
 - Use existing semantic tokens for focus feedback; suppress native black outlines only within components that provide their own accessible focus indicator.
 - Never clear outlines globally. Each component owns its keyboard accessibility.
 - For new inputs, buttons, menus and dialogs, check pointer hover/click and keyboard Tab focus in both Light and Dark themes.

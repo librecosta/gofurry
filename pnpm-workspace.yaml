@@ -1,2 +1,5 @@
 packages:
   - apps/web
+
+allowBuilds:
+  '@parcel/watcher': false

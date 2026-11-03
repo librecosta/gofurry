@@ -1,12 +1,14 @@
-import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react'
+import { cx } from '../styles/classes'
+import { useEffect, useId, useRef, useState, type KeyboardEvent, type KeyboardEventHandler, type ReactNode, type Ref } from 'react'
+import { AnimatePresence, motion, useIsPresent } from 'motion/react'
+import { useMotionTiming } from '../motion'
 import { MagnifyingGlassIcon } from '@phosphor-icons/react/dist/ssr/MagnifyingGlass'
 import { CaretDownIcon } from '@phosphor-icons/react/dist/ssr/CaretDown'
 import { CaretLeftIcon } from '@phosphor-icons/react/dist/ssr/CaretLeft'
 import { CaretRightIcon } from '@phosphor-icons/react/dist/ssr/CaretRight'
 import { XIcon } from '@phosphor-icons/react/dist/ssr/X'
-import * as stylex from '@stylexjs/stylex'
 import { usePreferences } from '../preferences'
-import { darkSearch, systemSearch, searchStyles as styles } from './search.stylex'
+import styles from './search.module.scss'
 import { useStartMessages } from './messages'
 import { categories, defaultPlatform, platforms, searchURL, type Category } from './search-platforms'
 
@@ -14,14 +16,13 @@ type Panel = 'platforms' | 'suggestions' | null
 type Suggestions = { query: string; items: string[] }
 
 export function SearchBox() {
-  const { region, locale, theme, themePreference } = usePreferences()
+  const hoverTransition = useMotionTiming(0.3)
+  const { region, locale } = usePreferences()
   const m = useStartMessages()
   const [category, setCategory] = useState<Category>('search')
   const [selected, setSelected] = useState(defaultPlatform('search', region).id)
   const [keyword, setKeyword] = useState('')
   const [panel, setPanel] = useState<Panel>(null)
-  const [mountedPanel, setMountedPanel] = useState<Panel>(null)
-  const [visible, setVisible] = useState(false)
   const [suggestions, setSuggestions] = useState<Suggestions>({ query: '', items: [] })
   const [active, setActive] = useState(-1)
   const [pointerFocus, setPointerFocus] = useState(false)
@@ -58,20 +59,6 @@ export function SearchBox() {
     return () => { active = false; observer.disconnect() }
   }, [])
 
-  // One physical panel prevents overlapping menus, including during exit.
-  // Keep its last content mounted for the complete fade-out (no empty shell).
-  useEffect(() => {
-    let frame = 0, nextFrame = 0
-    let exit: ReturnType<typeof setTimeout> | undefined
-    if (panel) {
-      setMountedPanel(panel)
-      frame = requestAnimationFrame(() => { nextFrame = requestAnimationFrame(() => setVisible(true)) })
-    } else {
-      setVisible(false)
-      exit = setTimeout(() => setMountedPanel(null), matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 420)
-    }
-    return () => { cancelAnimationFrame(frame); cancelAnimationFrame(nextFrame); clearTimeout(exit) }
-  }, [panel])
   useEffect(() => {
     const query = matchMedia('(max-width: 767px)')
     const breakpoint = () => {
@@ -88,10 +75,10 @@ export function SearchBox() {
     return () => { query.removeEventListener('change', breakpoint); document.removeEventListener('pointerdown', outside); cancelRequest() }
   }, [])
   useEffect(() => {
-    if (panel === 'platforms' && mountedPanel === 'platforms' && focusPicker.current) {
+    if (panel === 'platforms' && focusPicker.current) {
       popup.current?.querySelector<HTMLButtonElement>('[aria-selected="true"]')?.focus({ preventScroll: true })
     }
-  }, [panel, mountedPanel])
+  }, [panel])
   useEffect(() => {
     if (panel !== 'suggestions') return
     const list = popup.current, row = list?.querySelector<HTMLElement>(`[data-index="${active}"]`)
@@ -192,28 +179,28 @@ export function SearchBox() {
     const index = phrase.toLocaleLowerCase().indexOf(suggestions.query.toLocaleLowerCase())
     if (index < 0) return phrase
     const end = index + suggestions.query.length
-    return <span>{phrase.slice(0, index)}<mark {...stylex.props(styles.highlight)}>{phrase.slice(index, end)}</mark>{phrase.slice(end)}</span>
+    return <span>{phrase.slice(0, index)}<mark className={styles.highlight}>{phrase.slice(index, end)}</mark>{phrase.slice(end)}</span>
   }
   const defaultAction = region === 'CN' ? 'https://www.bing.com/search' : 'https://www.google.com/search'
-  return <div ref={shell} data-start-search {...stylex.props(styles.shell, themePreference === 'system' ? systemSearch : theme === 'dark' && darkSearch)}
+  return <div ref={shell} data-start-search className={styles.shell}
     onBlur={(event) => {
       if (!event.currentTarget.contains(event.relatedTarget)) { cancelRequest(); closePanel() }
     }}>
-    <div {...stylex.props(styles.categoryViewport)}>
-    <div ref={categoryTrack} data-category-track onScroll={updateCategoryEdges} {...stylex.props(styles.categoryTrack, categoryEdges.left && styles.fadeLeft, categoryEdges.right && styles.fadeRight, categoryEdges.left && categoryEdges.right && styles.fadeBoth)}>
+    <div className={styles.categoryViewport}>
+    <div ref={categoryTrack} data-category-track onScroll={updateCategoryEdges} className={cx(styles.categoryTrack, categoryEdges.left && styles.fadeLeft, categoryEdges.right && styles.fadeRight, categoryEdges.left && categoryEdges.right && styles.fadeBoth)}>
       <div role="group" aria-label={m.categories} aria-description={categoryEdges.left || categoryEdges.right ? m.moreCategories : undefined} data-categories onKeyDown={groupKeys}
-        onFocusCapture={(event) => { if (event.target instanceof HTMLButtonElement) revealCategory(event.target) }} {...stylex.props(styles.categories)}>
+        onFocusCapture={(event) => { if (event.target instanceof HTMLButtonElement) revealCategory(event.target) }} className={styles.categories}>
         {categories.map((id) => <button key={id} type="button" aria-pressed={category === id}
-          onClick={(event) => chooseCategory(id, event.currentTarget)} {...stylex.props(styles.chip, styles.category, category === id && styles.selected)}>{m.category[id]}</button>)}
+          onClick={(event) => chooseCategory(id, event.currentTarget)} className={cx(styles.chip, styles.category, category === id && styles.selected)}>{m.category[id]}</button>)}
       </div>
     </div>
-    {categoryEdges.left && <span aria-hidden="true" title={m.moreCategories} data-category-edge="left" {...stylex.props(styles.edge, styles.edgeLeft)}><CaretLeftIcon size={12} /></span>}
-    {categoryEdges.right && <span aria-hidden="true" title={m.moreCategories} data-category-edge="right" {...stylex.props(styles.edge, styles.edgeRight)}><CaretRightIcon size={12} /></span>}
+    {categoryEdges.left && <span aria-hidden="true" title={m.moreCategories} data-category-edge="left" className={cx(styles.edge, styles.edgeLeft)}><CaretLeftIcon size={12} /></span>}
+    {categoryEdges.right && <span aria-hidden="true" title={m.moreCategories} data-category-edge="right" className={cx(styles.edge, styles.edgeRight)}><CaretRightIcon size={12} /></span>}
     </div>
-    <div {...stylex.props(styles.anchor)}>
+    <div className={styles.anchor}>
     <form role="search" aria-label={m.search} method="get" action={defaultAction} target="_blank" rel="noopener noreferrer" acceptCharset="UTF-8"
       onSubmit={(event) => { event.preventDefault(); submit(panel === 'suggestions' && active >= 0 ? suggestions.items[active] : keyword) }}
-      {...stylex.props(styles.search, !pointerFocus && styles.keyboardFocus)}>
+      className={cx(styles.search, !pointerFocus && styles.keyboardFocus)}>
       <button ref={trigger} type="button" data-mobile-platform-trigger aria-label={`${m.platforms}: ${target.name[locale]}`}
         aria-haspopup="listbox" aria-expanded={panel === 'platforms'} aria-controls={panel === 'platforms' ? panelId : undefined} disabled={available.length === 1}
         onClick={(event) => { cancelRequest(); focusPicker.current = event.detail === 0; showPanel(panel === 'platforms' ? null : 'platforms') }}
@@ -225,7 +212,7 @@ export function SearchBox() {
             else showPanel('platforms')
           }
         }}
-        {...stylex.props(styles.mobileTrigger)}><span {...stylex.props(styles.truncate)}>{target.name[locale]}</span><CaretDownIcon size={12} aria-hidden="true" {...stylex.props(styles.caret)} /></button>
+        className={styles.mobileTrigger}><span className={styles.truncate}>{target.name[locale]}</span><CaretDownIcon size={12} aria-hidden="true" className={styles.caret} /></button>
       <input ref={input} type="search" name="q" role={category === 'search' ? 'combobox' : undefined} aria-label={m.search} placeholder={m.search} required pattern={String.raw`.*\S.*`}
         aria-autocomplete={category === 'search' ? 'list' : undefined} aria-expanded={category === 'search' ? panel === 'suggestions' : undefined}
         aria-controls={panel === 'suggestions' ? panelId : undefined} aria-activedescendant={panel === 'suggestions' && active >= 0 ? `${panelId}-${active}` : undefined}
@@ -238,31 +225,39 @@ export function SearchBox() {
           setPointerFocus(false); cancelRequest()
           if (panelRef.current === 'suggestions' && !popup.current?.contains(event.relatedTarget)) closePanel()
         }}
-        {...stylex.props(styles.input, !!keyword && styles.inputWithClear)} />
-      {!!keyword && <button type="button" aria-label={m.clear} title={m.clear} data-search-clear
+        className={cx(styles.input, !!keyword && styles.inputWithClear)} />
+      {!!keyword && <motion.button type="button" aria-label={m.clear} title={m.clear} data-search-clear initial={false} animate={{ opacity: 0.72 }} whileHover={{ opacity: 0.96 }} whileTap={{ opacity: 1 }} transition={hoverTransition}
         onPointerDown={(event) => event.preventDefault()} onClick={() => {
           cancelRequest(); closePanel(); composing.current = false; setKeyword('')
           skipFocusRequest.current = true; input.current?.focus({ preventScroll: true }); skipFocusRequest.current = false
-        }} {...stylex.props(styles.submit, styles.clear)}><XIcon size={18} aria-hidden="true" /></button>}
-      <button type="submit" aria-label={m.submit} title={m.submit} {...stylex.props(styles.submit)}><MagnifyingGlassIcon size={20} weight="bold" aria-hidden="true" /></button>
+        }} className={cx(styles.submit, styles.clear)}><XIcon size={18} aria-hidden="true" /></motion.button>}
+      <motion.button type="submit" aria-label={m.submit} title={m.submit} className={styles.submit} initial={false} animate={{ opacity: 0.72 }} whileHover={{ opacity: 0.96 }} whileTap={{ opacity: 1 }} transition={hoverTransition}><MagnifyingGlassIcon size={20} weight="bold" aria-hidden="true" /></motion.button>
       <input type="hidden" name={region === 'CN' ? 'adlt' : 'safe'} value={region === 'CN' ? 'strict' : 'active'} />
     </form>
-      {mountedPanel && <div ref={popup} id={panelId} role="listbox" aria-label={mountedPanel === 'platforms' ? m.platforms : m.suggestions}
-        data-search-panel={mountedPanel} data-open={visible && panel === mountedPanel} aria-hidden={!panel} inert={!panel}
+      <AnimatePresence>{panel && <SearchPanel key="search-panel" ref={popup} id={panelId} label={panel === 'platforms' ? m.platforms : m.suggestions} kind={panel}
         onKeyDown={(event) => {
-          if (event.key === 'Escape') { event.preventDefault(); cancelRequest(); closePanel(); (mountedPanel === 'platforms' ? trigger : input).current?.focus({ preventScroll: true }) }
-          else if (mountedPanel === 'platforms') groupKeys(event)
-        }} {...stylex.props(styles.panel)}>
-        {mountedPanel === 'platforms' ? available.map((item) => <button key={item.id} type="button" role="option" aria-selected={selected === item.id}
-          onClick={() => choosePlatform(item.id, true)} {...stylex.props(styles.option, styles.optionBase, selected === item.id && styles.selected)}>{item.name[locale]}</button>)
+          if (event.key === 'Escape') { event.preventDefault(); cancelRequest(); closePanel(); (panel === 'platforms' ? trigger : input).current?.focus({ preventScroll: true }) }
+          else if (panel === 'platforms') groupKeys(event)
+        }}>
+        {panel === 'platforms' ? available.map((item) => <button key={item.id} type="button" role="option" aria-selected={selected === item.id}
+          onClick={() => choosePlatform(item.id, true)} className={cx(styles.option, styles.optionBase, selected === item.id && styles.selected)}>{item.name[locale]}</button>)
           : suggestions.items.map((phrase, index) => <button key={phrase} id={`${panelId}-${index}`} data-index={index} type="button" role="option" tabIndex={-1}
             aria-selected={active === index} onPointerMove={() => setActive(index)} onPointerDown={(event) => event.preventDefault()}
-            onClick={() => submit(phrase)} {...stylex.props(styles.option, styles.optionBase, active === index && styles.selected)}>{highlighted(phrase)}</button>)}
-      </div>}
+            onClick={() => submit(phrase)} className={cx(styles.option, styles.optionBase, active === index && styles.selected)}>{highlighted(phrase)}</button>)}
+      </SearchPanel>}</AnimatePresence>
     </div>
-    <div role="group" aria-label={m.platforms} data-desktop-platforms onKeyDown={groupKeys} {...stylex.props(styles.desktopPlatforms)}>
+    <div role="group" aria-label={m.platforms} data-desktop-platforms onKeyDown={groupKeys} className={styles.desktopPlatforms}>
       {available.map((item) => <button key={item.id} type="button" aria-pressed={selected === item.id}
-        onClick={() => choosePlatform(item.id)} {...stylex.props(styles.chip, styles.platform, selected === item.id && styles.selected)}>{item.name[locale]}</button>)}
+        onClick={() => choosePlatform(item.id)} className={cx(styles.chip, styles.platform, selected === item.id && styles.selected)}>{item.name[locale]}</button>)}
     </div>
   </div>
+}
+
+// One physical panel is reused for both lists. Presence retains its last
+// content during exit, while inert prevents a closing list receiving clicks.
+function SearchPanel({ ref, id, label, kind, onKeyDown, children }: { ref: Ref<HTMLDivElement>; id: string; label: string; kind: Exclude<Panel, null>; onKeyDown: KeyboardEventHandler<HTMLDivElement>; children: ReactNode }) {
+  const present = useIsPresent()
+  const transition = useMotionTiming()
+  return <motion.div ref={ref} id={id} role="listbox" aria-label={label} data-search-panel={kind} data-open={present} aria-hidden={!present} inert={!present}
+    onKeyDown={onKeyDown} className={styles.panel} initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={transition}>{children}</motion.div>
 }

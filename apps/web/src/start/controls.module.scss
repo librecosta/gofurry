@@ -1,0 +1,29 @@
+.glass {
+  border-width: 0;
+  border-radius: var(--radius-small);
+  font-family: inherit;
+  background-color: var(--overlay-surface);
+  color: var(--overlay-text);
+  backdrop-filter: blur(14px) saturate(1.05);
+  box-shadow: none;
+  cursor: pointer;
+  opacity: 1;
+  outline-style: none;
+  outline-width: 2px;
+  outline-offset: -2px;
+  outline-color: var(--overlay-focus);
+  transition-property: background-color, color;
+  transition-duration: var(--overlay-motion);
+  transition-timing-function: var(--overlay-easing);
+  &:is([data-popup-open]) { background-color: var(--overlay-selected-surface); }
+  &:hover:not(:disabled):not(:focus-visible) { background-color: var(--overlay-surface-hover); }
+  &:active:not(:disabled):not(:focus-visible) { background-color: var(--overlay-selected-surface); }
+  &:focus-visible { background-color: var(--overlay-selected-surface); }
+  &:hover:not(:disabled):not(:focus-visible) { color: var(--overlay-hover-text); }
+  &:active:not(:disabled):not(:focus-visible) { color: var(--overlay-selected-text); }
+  &:focus-visible { color: var(--overlay-selected-text); }
+  &:disabled { cursor: not-allowed; }
+  &:disabled { opacity: 0.55; }
+  &:focus-visible { outline-style: solid; }
+  &:active { transition-duration: 120ms; }
+}

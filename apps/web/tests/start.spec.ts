@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test'
+import { sampleMotion } from './motion'
 
 const region = process.env.WEB_REGION ?? 'CN'
 const origin = 'http://127.0.0.1:17320'
@@ -61,7 +62,7 @@ test('start: settings trap focus, retain their shell across language URLs and fu
   await settings(page)
   const dialog = page.locator('[data-start-preferences]')
   await expect(dialog).toHaveCSS('border-top-width', '0px'); await expect(dialog).toHaveCSS('box-shadow', 'none')
-  await expect(dialog).toHaveCSS('transition-duration', '0.42s')
+  await expect(dialog).toHaveCSS('transition-duration', '0s') // Motion owns opacity/transform.
   for (let i = 0; i < 12; i++) { await page.keyboard.press('Tab'); expect(await dialog.evaluate(el => el.contains(document.activeElement))).toBe(true) }
   await expect(dialog.getByRole('link', { name: /GitHub/ })).toHaveAttribute('href', 'https://github.com/gofurry')
   await expect(dialog.getByRole('radio', { name: 'NSFW', exact: true })).toHaveCount(region === 'CN' ? 0 : 1)
@@ -78,9 +79,9 @@ test('start: settings trap focus, retain their shell across language URLs and fu
   expect(await page.locator('[data-start-page]').evaluate((el, first) => el === first, shell)).toBe(true)
   await dialog.getByRole('radio', { name: 'English', exact: true }).click(); await expect(page).toHaveURL(englishPath)
   await page.keyboard.press('Escape'); await expect(dialog).toHaveAttribute('data-ending-style')
-  const exit = await dialog.evaluate(el => { const transitions = el.getAnimations(); transitions.forEach(a => { a.pause(); a.currentTime = 210 }); return { count: transitions.length, opacity: Number(getComputedStyle(el).opacity) } })
-  expect(exit.count).toBe(2); expect(exit.opacity).toBeGreaterThan(0); expect(exit.opacity).toBeLessThan(1)
-  await dialog.evaluate(el => el.getAnimations().forEach(a => a.play())); await expect(dialog).toHaveCount(0)
+  const exit = await sampleMotion(dialog)
+  expect(exit.some(frame => frame.opacity > 0 && frame.opacity < 1)).toBe(true)
+  expect(exit.at(-1)!.t).toBeGreaterThan(250); await expect(dialog).toHaveCount(0)
   await expect(page.locator('[data-start-settings]')).toBeFocused()
   await settings(page); await page.mouse.click(4, 4); await expect(dialog).toHaveCount(0)
   await page.reload(); await settings(page)
@@ -112,23 +113,20 @@ test('start: settings text tabs move their underline without recentering; langua
   await english(page); await settings(page)
   const dialog = page.locator('[data-start-preferences]'), initial = (await dialog.boundingBox())!
   const basic = dialog.getByRole('tab', { name: 'Basic', exact: true }), advanced = dialog.getByRole('tab', { name: 'Advanced', exact: true })
+  const underlineStart = (await dialog.locator('[data-settings-tab-indicator]').boundingBox())!.x
   await basic.focus(); await basic.press('ArrowRight'); await expect(advanced).toBeFocused(); await expect(advanced).toHaveAttribute('aria-selected', 'true')
   await expect(advanced).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)'); await expect(advanced).toHaveCSS('outline-style', 'solid')
   const underline = dialog.locator('[data-settings-tab-indicator]')
-  const progress = await underline.evaluate(el => {
-    const animation = el.getAnimations().find(a => (a as CSSTransition).transitionProperty === 'transform')!
-    animation.pause(); animation.currentTime = 200
-    const x = new DOMMatrix(getComputedStyle(el).transform).m41
-    const end = parseFloat(getComputedStyle(el).getPropertyValue('--active-tab-left'))
-    animation.play(); return { x, end }
-  })
-  expect(progress.x).toBeGreaterThan(0); expect(progress.x).toBeLessThan(progress.end)
+  const progress = await sampleMotion(underline)
+  expect(progress.some(frame => frame.x > underlineStart + 0.1 && frame.x < progress.at(-1)!.x - 0.1)).toBe(true)
   await expect(dialog.getByRole('tabpanel')).toBeEmpty(); expect(await dialog.boundingBox()).toEqual(initial)
   await basic.click(); await expect(basic).toHaveAttribute('aria-selected', 'true')
   const language = dialog.getByRole('radiogroup', { name: 'Language', exact: true }), englishRadio = language.getByRole('radio', { name: 'English', exact: true })
   await expect(englishRadio).toBeChecked(); await englishRadio.hover()
+  await expect(englishRadio.locator('[aria-hidden="true"] > span')).toHaveCSS('opacity', '1')
   await expect(englishRadio).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)'); await expect(englishRadio).toHaveCSS('border-top-width', '0px')
   await language.getByRole('radio', { name: '简体中文', exact: true }).click(); await expect(page).toHaveURL(chinesePath)
+  await expect(dialog.getByRole('radio', { name: '简体中文', exact: true }).locator('[aria-hidden="true"] > span')).toHaveCSS('opacity', '1')
   const footer = dialog.locator('footer')
   await expect(footer).toHaveText('用心打造，开源于 GitHub。'); await expect(footer).toHaveCSS('border-top-style', 'dashed'); await expect(footer).toHaveCSS('border-top-width', '2px')
   for (const width of [320, 375, 390]) {
@@ -147,14 +145,10 @@ test('start: settings segments slide, retain flat theme-aware surfaces and prese
   await expect(track.getByRole('radio', { name: 'System', exact: true })).toBeChecked()
   const lightSurface = await track.evaluate(el => getComputedStyle(el).backgroundColor)
   await expect(track).toHaveCSS('border-radius', '10px'); await expect(selection).toHaveCSS('border-radius', '8px'); await expect(selection).toHaveCSS('box-shadow', 'none')
+  const selectionStart = (await selection.boundingBox())!.x
   await track.getByRole('radio', { name: 'Dark', exact: true }).click()
-  const progress = await selection.evaluate(el => {
-    const animation = el.getAnimations().find(a => (a as CSSTransition).transitionProperty === 'transform')!
-    animation.pause(); animation.currentTime = 200
-    const x = new DOMMatrix(getComputedStyle(el).transform).m41, end = el.getBoundingClientRect().width * 2
-    animation.play(); return { x, end }
-  })
-  expect(progress.x).toBeGreaterThan(0); expect(progress.x).toBeLessThan(progress.end)
+  const progress = await sampleMotion(selection)
+  expect(progress.some(frame => frame.x > selectionStart + 0.1 && frame.x < progress.at(-1)!.x - 0.1)).toBe(true)
   await expect(page.locator('html')).not.toHaveAttribute('data-gf-theme-reveal'); expect(await track.evaluate(el => getComputedStyle(el).backgroundColor)).not.toBe(lightSurface)
   if (region === 'INTL') {
     const content = dialog.getByRole('radiogroup', { name: 'Content preference', exact: true })
@@ -240,4 +234,48 @@ test('start: the user menu contains only an inert sign-in placeholder with full 
   await trigger.click(); await expect(menu).toHaveCSS('opacity', '1')
   await expect(menu.getByRole('menuitem')).toHaveCount(1); await expect(menu.getByRole('menuitem')).toBeDisabled(); await expect(menu).toContainText('Sign in')
   await page.keyboard.press('Escape'); await expect(menu).toHaveAttribute('data-ending-style'); await expect(menu).toHaveCount(0); await expect(trigger).toBeFocused()
+})
+
+test('start: first and repeated popup frames have CSS, stable geometry and complete Motion exits', async ({ page }) => {
+  test.setTimeout(45000)
+  await page.emulateMedia({ colorScheme: 'light' }); await english(page)
+  for (const viewport of [{ width: 960, height: 600 }, { width: 375, height: 667 }]) {
+    await page.setViewportSize(viewport)
+    for (const [trigger, selector, travel] of [
+      ['[data-start-logo]', '[data-start-brand]', 4], ['[data-start-actions] > button:last-child', '[data-start-user-menu]', 4], ['[data-start-settings]', '[data-start-preferences]', 6],
+    ] as const) {
+      for (let repeat = 0; repeat < 2; repeat++) {
+        await page.evaluate(selector => {
+          type Frame = { opacity: number; x: number; y: number; w: number; h: number; background: string }
+          const frames: Frame[] = []; (window as unknown as { popupFrames: Frame[] }).popupFrames = frames
+          let count = 0
+          const sample = () => {
+            const el = document.querySelector(selector)
+            if (el) {
+              const r = el.getBoundingClientRect(), s = getComputedStyle(el), parent = getComputedStyle(el.parentElement!)
+              frames.push({ opacity: Number(s.opacity) * Number(parent.opacity), x: r.x, y: r.y, w: r.width, h: r.height, background: s.backgroundColor })
+            }
+            if (count++ < 80) requestAnimationFrame(sample)
+          }
+          requestAnimationFrame(sample)
+        }, selector)
+        await page.locator(trigger).click()
+        const popup = page.locator(selector); await expect(popup).toHaveCSS('opacity', '1')
+        const final = (await popup.boundingBox())!
+        const frames = await page.evaluate(() => (window as unknown as { popupFrames: { opacity: number; x: number; y: number; w: number; h: number; background: string }[] }).popupFrames)
+        const visible = frames.filter(frame => frame.opacity > 0.01)
+        expect(visible.length).toBeGreaterThan(3)
+        for (const frame of visible) {
+          expect(frame.x).toBeCloseTo(final.x, 0); expect(frame.w).toBeCloseTo(final.width, 0); expect(frame.h).toBeCloseTo(final.height, 0)
+          expect(Math.abs(frame.y - final.y)).toBeLessThanOrEqual(travel + 0.1)
+          expect(frame.background).toBe('rgba(245, 247, 250, 0.33)')
+        }
+        await page.keyboard.press('Escape')
+        const exit = await sampleMotion(popup)
+        expect(exit.some(frame => frame.opacity > 0 && frame.opacity < 1)).toBe(true); expect(exit.at(-1)!.t).toBeGreaterThan(250)
+        await expect(popup).toHaveCount(0)
+        expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(viewport.width)
+      }
+    }
+  }
 })

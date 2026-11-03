@@ -1,7 +1,8 @@
 import { useEffect, useState, type SyntheticEvent } from 'react'
+import { AnimatePresence, motion } from 'motion/react'
+import { useMotionTiming } from './motion'
 import { createServerFn } from '@tanstack/react-start'
-import * as stylex from '@stylexjs/stylex'
-import { tokens } from './styles/tokens.stylex'
+import styles from './start-background.module.scss'
 
 type Asset = { url: string; width: number; height: number }
 type Background = { id: string; sfw: boolean; preview: Asset; image: Asset }
@@ -21,6 +22,7 @@ const readBackgrounds = createServerFn({ method: 'GET' }).handler(async (): Prom
 })
 
 export function StartBackground() {
+  const transition = useMotionTiming(0.48)
   const [background, setBackground] = useState<Background | null>(null)
   const [previewReady, setPreviewReady] = useState(false)
   const [previewFailed, setPreviewFailed] = useState(false)
@@ -34,23 +36,15 @@ export function StartBackground() {
     const image = event.currentTarget
     void image.decode().then(ready, failed)
   }
-  return <div aria-hidden="true" data-start-background data-stage={imageReady ? 'image' : previewReady ? 'preview' : 'theme'} {...stylex.props(styles.container)}>
-    {background && <>
-      <img src={background.preview.url} width={background.preview.width} height={background.preview.height}
+  return <div aria-hidden="true" data-start-background data-stage={imageReady ? 'image' : previewReady ? 'preview' : 'theme'} className={styles.container}>
+    <AnimatePresence>{background && <motion.img key={background.preview.url} src={background.preview.url} width={background.preview.width} height={background.preview.height}
         alt="" draggable={false} decoding="async" fetchPriority="low" data-start-preview
         onLoad={(event) => decoded(event, () => setPreviewReady(true), () => setPreviewFailed(true))}
-        onError={() => setPreviewFailed(true)} {...stylex.props(styles.image, previewReady && styles.visible)} />
-      {(previewReady || previewFailed) && <img src={background.image.url} width={background.image.width} height={background.image.height}
+        onError={() => setPreviewFailed(true)} className={styles.image} initial={{ opacity: 0 }} animate={{ opacity: previewReady ? 1 : 0 }} exit={{ opacity: 0 }} transition={transition} />}
+      {background && (previewReady || previewFailed) && <motion.img key={background.image.url} src={background.image.url} width={background.image.width} height={background.image.height}
         alt="" draggable={false} decoding="async" fetchPriority="low" data-start-hd
         onLoad={(event) => decoded(event, () => setImageReady(true), () => {})}
-        {...stylex.props(styles.image, styles.fade, imageReady && styles.visible)} />}
-    </>}
+        className={styles.image} initial={{ opacity: 0 }} animate={{ opacity: imageReady ? 1 : 0 }} exit={{ opacity: 0 }} transition={transition} />}
+    </AnimatePresence>
   </div>
 }
-
-const styles = stylex.create({
-  container: { position: 'absolute', inset: 0, zIndex: 0, pointerEvents: 'none', overflow: 'clip' },
-  image: { position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', opacity: 0 },
-  visible: { opacity: 1 },
-  fade: { transitionProperty: 'opacity', transitionDuration: tokens.motionBase, transitionTimingFunction: 'ease-out' },
-})

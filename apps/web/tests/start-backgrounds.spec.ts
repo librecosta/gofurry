@@ -105,11 +105,18 @@ test('live: real Go/R2 metadata and CDN WebP decode precede the AVIF handoff', a
   const highResolution = new Promise<void>((resolve) => { release = resolve })
   await page.route(item.image.url, async (route) => { await highResolution; await route.continue() })
   await page.addInitScript(() => {
-    const state = window as unknown as { startFades: string[] }
+    const state = window as unknown as { startFades: number[] }
     state.startFades = []
-    document.addEventListener('transitionstart', (event) => {
-      if ((event.target as HTMLElement).matches('[data-start-hd]')) state.startFades.push(event.propertyName)
-    })
+    const sample = () => {
+      const image = document.querySelector('[data-start-hd]')
+      if (image) {
+        const opacity = Number(getComputedStyle(image).opacity)
+        state.startFades.push(opacity)
+        if (opacity === 1) return
+      }
+      requestAnimationFrame(sample)
+    }
+    requestAnimationFrame(sample)
   })
   await page.setViewportSize({ width: 1440, height: 900 })
   await page.goto('/start')
@@ -122,7 +129,7 @@ test('live: real Go/R2 metadata and CDN WebP decode precede the AVIF handoff', a
   release()
   await expect(page.locator('[data-start-background]')).toHaveAttribute('data-stage', 'image', { timeout: 20000 })
   await expect(page.locator('[data-start-hd]')).toHaveCSS('opacity', '1')
-  expect(await page.evaluate(() => (window as unknown as { startFades: string[] }).startFades)).toContain('opacity')
+  expect(await page.evaluate(() => (window as unknown as { startFades: number[] }).startFades.some(opacity => opacity > 0 && opacity < 1))).toBe(true)
   await expect(page.locator('[data-start-preview]')).toHaveCSS('opacity', '1')
   expect(await page.locator('[data-start-hd]').evaluate((img) => (img as HTMLImageElement).naturalWidth)).toBe(item.image.width)
   await expect(page.locator('[data-start-hd]')).toHaveCSS('object-fit', 'cover')
