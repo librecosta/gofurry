@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as LivezRouteImport } from './routes/livez'
 import { Route as ReadyzRouteImport } from './routes/readyz'
+import { Route as StartRouteImport } from './routes/start'
 import { Route as StatusRouteImport } from './routes/status'
 
 const IndexRoute = IndexRouteImport.update({
@@ -29,6 +30,11 @@ const ReadyzRoute = ReadyzRouteImport.update({
   path: '/readyz',
   getParentRoute: () => rootRouteImport,
 } as any)
+const StartRoute = StartRouteImport.update({
+  id: '/start',
+  path: '/start',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const StatusRoute = StatusRouteImport.update({
   id: '/status',
   path: '/status',
@@ -39,12 +45,14 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/livez': typeof LivezRoute
   '/readyz': typeof ReadyzRoute
+  '/start': typeof StartRoute
   '/status': typeof StatusRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/livez': typeof LivezRoute
   '/readyz': typeof ReadyzRoute
+  '/start': typeof StartRoute
   '/status': typeof StatusRoute
 }
 export interface FileRoutesById {
@@ -52,20 +60,22 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/livez': typeof LivezRoute
   '/readyz': typeof ReadyzRoute
+  '/start': typeof StartRoute
   '/status': typeof StatusRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/livez' | '/readyz' | '/status'
+  fullPaths: '/' | '/livez' | '/readyz' | '/start' | '/status'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/livez' | '/readyz' | '/status'
-  id: '__root__' | '/' | '/livez' | '/readyz' | '/status'
+  to: '/' | '/livez' | '/readyz' | '/start' | '/status'
+  id: '__root__' | '/' | '/livez' | '/readyz' | '/start' | '/status'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   LivezRoute: typeof LivezRoute
   ReadyzRoute: typeof ReadyzRoute
+  StartRoute: typeof StartRoute
   StatusRoute: typeof StatusRoute
 }
 
@@ -92,6 +102,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ReadyzRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/start': {
+      id: '/start'
+      path: '/start'
+      fullPath: '/start'
+      preLoaderRoute: typeof StartRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/status': {
       id: '/status'
       path: '/status'
@@ -106,6 +123,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   LivezRoute: LivezRoute,
   ReadyzRoute: ReadyzRoute,
+  StartRoute: StartRoute,
   StatusRoute: StatusRoute,
 }
 export const routeTree = rootRouteImport

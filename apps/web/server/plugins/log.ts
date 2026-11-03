@@ -22,7 +22,7 @@ export default definePlugin((app) => {
     log('request', {
       request_id: request?.id,
       method: event.req.method,
-      route: ['/', '/status', '/livez', '/readyz'].includes(path) ? path : '(other)',
+      route: ['/', '/start', '/status', '/livez', '/readyz'].includes(path) ? path : '(other)',
       status: res.status,
       duration_ms: duration,
     })

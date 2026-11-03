@@ -44,7 +44,7 @@ export function usePreferences() {
 }
 
 const messages = {
-  zh: { interact: '验证交互', title: '基础交互检查', description: '支持键盘、焦点与主题偏好。', close: '关闭', disabled: '禁用状态', status: '运行状态', back: '返回', theme: '主题', language: '语言' },
-  en: { interact: 'Check interaction', title: 'Interaction check', description: 'Keyboard, focus and theme preferences.', close: 'Close', disabled: 'Disabled', status: 'Runtime status', back: 'Back', theme: 'Theme', language: 'Language' },
+  zh: { interact: '验证交互', title: '基础交互检查', description: '支持键盘、焦点与主题偏好。', close: '关闭', disabled: '禁用状态', status: '运行状态', back: '返回', theme: '主题', language: '语言', search: '搜索网络' },
+  en: { interact: 'Check interaction', title: 'Interaction check', description: 'Keyboard, focus and theme preferences.', close: 'Close', disabled: 'Disabled', status: 'Runtime status', back: 'Back', theme: 'Theme', language: 'Language', search: 'Search the web' },
 }
 export function useMessages() { return messages[usePreferences().locale] }

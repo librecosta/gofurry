@@ -1,6 +1,6 @@
 # GoFurry
 
-V0.1-B0 engineering governance on the existing TanStack Start / React / StyleX Web and Go/Fiber API. No /start page, extension, accounts or business database yet.
+V0.1-B1 adds a minimal `/start` search page to the existing TanStack Start / React / StyleX Web and Go/Fiber API. No extension, accounts or business database yet.
 
 ## Setup and development
 
@@ -33,6 +33,14 @@ CN defaults to `zh`, INTL to `en`; both offer both languages. Locale never selec
 The diagnostic page has minimal Light/Dark and language selectors. Host-only `gf-theme` / `gf-locale` cookies remember preferences for one year; SSR and hydration use the same sanitized snapshot. Initial theme is Light without a preference, independently of OS theme. Invalid cookies fall back safely. Personalized HTML and preference responses are private/no-store. There is no localStorage second source or client-only theme flash.
 
 Consumed StyleX semantic tokens come from the fixed legacy `apps/cn/web/app/assets/styles/tokens.less`: warm beige/charcoal canvas, surfaces/text, Manrope + Noto Sans SC, mono role, dot grid, radii and motion. Fonts are bundled locally without LESS, Nuxt or Tailwind. Reduced-motion is respected. This establishes global foundations, not a new homepage or shared UI package.
+
+## Start page
+
+Open <http://127.0.0.1:17320/start> after `task dev:web`. The homepage `/` is unchanged. `/start` shows the original legacy Logo/GoFurry wordmark and one centered search field. Enter submits directly to Bing for CN or Google for INTL, independently of locale; the native GET form also works without JavaScript. No backend is involved.
+
+The page inherits theme/locale cookies without adding switches. Its Logo is copied unchanged from `third-party/go-furry` at `b186325`, `apps/cn/web/app/assets/svgs/logo-mini.svg`; icons use pinned `@phosphor-icons/react` SSR exports. Background, fonts, surfaces and focus colors reuse existing StyleX tokens; no remote images are loaded.
+
+Focused checks: `task build:web`, `pnpm --filter @gofurry/web typecheck`, then `pnpm --filter @gofurry/web exec playwright test start.spec.ts`. Repeat the browser check with `WEB_REGION=INTL`; it covers defaults, both themes/locales, hydration, no-JavaScript submission, mobile/desktop layout, focus and Enter navigation (search-provider requests are intercepted locally).
 
 ## Local containers and logs
 

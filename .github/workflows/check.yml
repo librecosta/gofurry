@@ -32,7 +32,7 @@ jobs:
       - run: task install
       - run: pnpm --filter @gofurry/web exec playwright install --with-deps chromium
       - run: task check
-      - run: pnpm --filter @gofurry/web exec playwright test governance.spec.ts
+      - run: pnpm --filter @gofurry/web exec playwright test governance.spec.ts start.spec.ts
         env:
           WEB_REGION: INTL
       - run: task check:hmr
