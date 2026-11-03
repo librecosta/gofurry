@@ -17,6 +17,7 @@ export const tokens = stylex.defineVars({
   textMuted: 'rgba(87, 83, 78, 0.72)',
   accent: 'rgba(124, 45, 18, 0.86)',
   focusRing: 'rgba(249, 115, 22, 0.32)',
+  logoBrand: '#c45f2c',
   // Hero-backed glass roles from legacy nav.less, independent of the page theme.
   overlaySurface: 'rgba(15, 23, 42, 0.50)',
   overlaySurfaceHover: 'rgba(15, 23, 42, 0.68)',
@@ -34,4 +35,5 @@ export const darkTheme = stylex.createTheme(tokens, {
   border: 'rgba(226, 232, 240, 0.18)', text: 'rgba(248, 250, 252, 0.94)',
   textMuted: 'rgba(203, 213, 225, 0.76)', accent: 'rgba(203, 213, 225, 0.82)',
   focusRing: 'rgba(56, 189, 248, 0.34)',
+  logoBrand: '#ffbd7a',
 })

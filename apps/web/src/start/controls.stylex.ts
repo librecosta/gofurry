@@ -16,8 +16,4 @@ export const controls = stylex.create({
     outlineWidth: 2, outlineOffset: -2, outlineColor: tokens.accent,
     transitionProperty: 'background-color, color', transitionDuration: tokens.motionFast,
   },
-  selected: {
-    backgroundColor: { default: tokens.overlaySelectedSurface, ':hover:not(:disabled):not(:focus-visible)': tokens.overlaySelectedSurface, ':active:not(:disabled):not(:focus-visible)': tokens.overlaySurfaceHover },
-    color: { default: tokens.overlaySelectedText, ':active:not(:disabled):not(:focus-visible)': tokens.overlayText },
-  },
 })

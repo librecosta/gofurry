@@ -10,3 +10,15 @@
     *, *::before, *::after { transition-duration: 0s !important; animation-duration: 0s !important; }
   }
 }
+
+/* The legacy same-document reveal: a complete new theme expands above the old.
+   Ordinary page motion and background decoding are unaffected. */
+html[data-gf-theme-reveal]::view-transition { pointer-events: none; }
+html[data-gf-theme-reveal]::view-transition-group(root),
+html[data-gf-theme-reveal]::view-transition-old(root),
+html[data-gf-theme-reveal]::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+html[data-gf-theme-reveal]::view-transition-old(root) { z-index: 1; }
+html[data-gf-theme-reveal]::view-transition-new(root) { z-index: 2; }
