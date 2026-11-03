@@ -108,6 +108,68 @@ test('start: appearance retains the native circular reveal centered on the selec
   expect(await page.evaluate(() => (window as unknown as { reveal: unknown[] }).reveal.length)).toBe(1)
 })
 
+test('start: settings text tabs move their underline without recentering; language radios stay unfilled', async ({ page }) => {
+  await english(page); await settings(page)
+  const dialog = page.locator('[data-start-preferences]'), initial = (await dialog.boundingBox())!
+  const basic = dialog.getByRole('tab', { name: 'Basic', exact: true }), advanced = dialog.getByRole('tab', { name: 'Advanced', exact: true })
+  await basic.focus(); await basic.press('ArrowRight'); await expect(advanced).toBeFocused(); await expect(advanced).toHaveAttribute('aria-selected', 'true')
+  await expect(advanced).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)'); await expect(advanced).toHaveCSS('outline-style', 'solid')
+  const underline = dialog.locator('[data-settings-tab-indicator]')
+  const progress = await underline.evaluate(el => {
+    const animation = el.getAnimations().find(a => (a as CSSTransition).transitionProperty === 'transform')!
+    animation.pause(); animation.currentTime = 200
+    const x = new DOMMatrix(getComputedStyle(el).transform).m41
+    const end = parseFloat(getComputedStyle(el).getPropertyValue('--active-tab-left'))
+    animation.play(); return { x, end }
+  })
+  expect(progress.x).toBeGreaterThan(0); expect(progress.x).toBeLessThan(progress.end)
+  await expect(dialog.getByRole('tabpanel')).toBeEmpty(); expect(await dialog.boundingBox()).toEqual(initial)
+  await basic.click(); await expect(basic).toHaveAttribute('aria-selected', 'true')
+  const language = dialog.getByRole('radiogroup', { name: 'Language', exact: true }), englishRadio = language.getByRole('radio', { name: 'English', exact: true })
+  await expect(englishRadio).toBeChecked(); await englishRadio.hover()
+  await expect(englishRadio).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)'); await expect(englishRadio).toHaveCSS('border-top-width', '0px')
+  await language.getByRole('radio', { name: '简体中文', exact: true }).click(); await expect(page).toHaveURL(chinesePath)
+  const footer = dialog.locator('footer')
+  await expect(footer).toHaveText('用心打造，开源于 GitHub。'); await expect(footer).toHaveCSS('border-top-style', 'dashed'); await expect(footer).toHaveCSS('border-top-width', '2px')
+  for (const width of [320, 375, 390]) {
+    await page.setViewportSize({ width, height: 667 })
+    for (const radio of await dialog.getByRole('radio').all()) { const r = (await radio.boundingBox())!; expect(r.x).toBeGreaterThanOrEqual(16); expect(r.x + r.width).toBeLessThanOrEqual(width - 16) }
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width)
+  }
+  await dialog.getByRole('radio', { name: 'English', exact: true }).click(); await expect(footer).toHaveText('Made with care. Open source on GitHub.')
+  await expect(footer.getByRole('link')).toHaveAttribute('href', 'https://github.com/gofurry'); await expect(footer.getByRole('link')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
+  await page.emulateMedia({ reducedMotion: 'reduce' }); await expect(underline).toHaveCSS('transition-duration', '0s')
+})
+
+test('start: settings segments slide, retain flat theme-aware surfaces and preserve preferences', async ({ page }) => {
+  await page.emulateMedia({ colorScheme: 'light' }); await english(page); await settings(page)
+  const dialog = page.locator('[data-start-preferences]'), track = dialog.getByRole('radiogroup', { name: 'Appearance', exact: true }), selection = dialog.locator('[data-settings-selection="appearance"]')
+  await expect(track.getByRole('radio', { name: 'System', exact: true })).toBeChecked()
+  const lightSurface = await track.evaluate(el => getComputedStyle(el).backgroundColor)
+  await expect(track).toHaveCSS('border-radius', '10px'); await expect(selection).toHaveCSS('border-radius', '8px'); await expect(selection).toHaveCSS('box-shadow', 'none')
+  await track.getByRole('radio', { name: 'Dark', exact: true }).click()
+  const progress = await selection.evaluate(el => {
+    const animation = el.getAnimations().find(a => (a as CSSTransition).transitionProperty === 'transform')!
+    animation.pause(); animation.currentTime = 200
+    const x = new DOMMatrix(getComputedStyle(el).transform).m41, end = el.getBoundingClientRect().width * 2
+    animation.play(); return { x, end }
+  })
+  expect(progress.x).toBeGreaterThan(0); expect(progress.x).toBeLessThan(progress.end)
+  await expect(page.locator('html')).not.toHaveAttribute('data-gf-theme-reveal'); expect(await track.evaluate(el => getComputedStyle(el).backgroundColor)).not.toBe(lightSurface)
+  if (region === 'INTL') {
+    const content = dialog.getByRole('radiogroup', { name: 'Content preference', exact: true })
+    await expect(content.getByRole('radio', { name: 'SFW', exact: true })).toBeChecked()
+    await content.getByRole('radio', { name: 'NSFW', exact: true }).click()
+    await expect(page.locator('html')).toHaveAttribute('data-content-mode', 'SFW')
+  } else await expect(dialog.getByRole('radio', { name: 'NSFW', exact: true })).toHaveCount(0)
+  await page.reload(); await settings(page); await expect(track.getByRole('radio', { name: 'Dark', exact: true })).toBeChecked()
+  if (region === 'INTL') await expect(dialog.getByRole('radio', { name: 'NSFW', exact: true })).toBeChecked()
+  await page.emulateMedia({ reducedMotion: 'reduce' }); await expect(selection).toHaveCSS('transition-duration', '0s')
+  await track.getByRole('radio', { name: 'Light', exact: true }).hover(); await expect(track.getByRole('radio', { name: 'Light', exact: true })).not.toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
+  await track.getByRole('radio', { name: 'Dark', exact: true }).focus(); await page.keyboard.press('ArrowLeft')
+  await expect(track.getByRole('radio', { name: 'Light', exact: true })).toBeFocused(); await expect(track.getByRole('radio', { name: 'Light', exact: true })).toHaveCSS('outline-style', 'solid')
+})
+
 test('start: logo navigation has stable first-frame placement and unavailable destinations never navigate', async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 667 }); await english(page)
   await page.evaluate(() => {
