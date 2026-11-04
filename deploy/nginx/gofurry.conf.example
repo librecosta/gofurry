@@ -1,17 +1,28 @@
 # Optional future reverse proxy. Not loaded by the local Compose project.
-# Assumes Nginx runs on the same host; TLS and trusted proxies require a later decision.
+# Assumes Nginx is the direct edge on the same host (no upstream CDN/proxy).
+# To enable client IPs, explicitly trust its exact peer in the API YAML, e.g.
+# server.trusted_proxies: [127.0.0.1]. Keep the API listener inaccessible publicly.
 server {
     listen 127.0.0.1:8090;
     server_name localhost;
 
+    # Overwrite, never append the browser's untrusted forwarding headers.
+    proxy_set_header Host $host;
+    proxy_set_header X-Request-ID $request_id;
+    proxy_set_header X-Forwarded-For $remote_addr;
+    proxy_set_header X-Forwarded-Host $host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header Forwarded "";
+    proxy_set_header X-Real-IP "";
+    proxy_set_header CF-Connecting-IP "";
+    proxy_set_header X-Forwarded-Protocol "";
+    proxy_set_header X-Forwarded-Ssl "";
+    proxy_set_header X-Url-Scheme "";
+
     location /api/ {
         proxy_pass http://127.0.0.1:17321;
-        proxy_set_header Host $host;
-        proxy_set_header X-Request-ID $request_id;
     }
     location / {
         proxy_pass http://127.0.0.1:17320;
-        proxy_set_header Host $host;
-        proxy_set_header X-Request-ID $request_id;
     }
 }

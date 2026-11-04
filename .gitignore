@@ -11,3 +11,6 @@ test-results/
 !.env.example
 *.log
 config.yaml
+/data/geoip/
+*.mmdb
+*.mmdb.gz

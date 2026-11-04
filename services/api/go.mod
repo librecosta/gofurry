@@ -9,6 +9,7 @@ require (
 	github.com/aws/smithy-go v1.28.7
 	github.com/gofiber/contrib/v3/zerolog v1.1.8
 	github.com/gofiber/fiber/v3 v3.6.1
+	github.com/oschwald/maxminddb-golang/v2 v2.9.0
 	github.com/rs/zerolog v1.35.1
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/viper v1.21.0

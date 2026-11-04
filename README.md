@@ -20,9 +20,11 @@ task dev:web
 
 ## API configuration and JSON
 
-`config.example.yaml` defines one schema: required `server.address`, `server.environment` (`development` / `production`), `deployment.region` (`CN` / `INTL`) and positive `logging.slow_request` (e.g. `1s`), plus optional `storage` and `search_suggestions`. Unknown YAML fields fail. Cobra requires `--config` for serving, probing and importing. Viper reads exactly that file: no automatic search, merging, environment bindings, .env, or individual business-field flag overrides. Private `config.yaml` is ignored everywhere and excluded from build contexts.
+`config.example.yaml` defines one schema: required `server.address`, `server.environment` (`development` / `production`), `deployment.region` (`CN` / `INTL`) and positive `logging.slow_request` (e.g. `1s`), plus optional `storage`, `search_suggestions` and `geoip`. `server.trusted_proxies` defaults to empty; only explicit IPs/CIDRs may supply forwarded client IPs. Unknown YAML fields fail. Cobra requires `--config` for serving, probing and importing. Viper reads exactly that file: no automatic search, merging, environment bindings, .env, or individual business-field flag overrides. Private `config.yaml` is ignored everywhere and excluded from build contexts.
 
 Fiber uses standard-library `encoding/json/v2` and `encoding/json/jsontext` through non-variadic adapters. Existing status/error fields and null collections are preserved. Invalid UTF-8, duplicate JSON names and trailing JSON values are rejected; no Sonic dependency or JSON experiment flags remain.
+
+`GET /api/v1/start/location` resolves an approximate city from an optional local DB-IP Lite City MMDB, without a network lookup. Set `geoip.database_path` in the private YAML; relative paths belong to that file's directory. Unconfigured/missing/corrupt data or non-public/loopback IPs return `unavailable` without affecting other APIs. The database/archive are ignored. See [C1-A configuration, attribution, proxy boundary and verification](docs/v0.1-c1-weather.md) before using the result. There is no weather API or weather UI yet.
 
 ## Region, language and theme
 

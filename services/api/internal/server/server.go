@@ -9,6 +9,7 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/gofiber/fiber/v3/middleware/requestid"
+	"github.com/librecosta/gofurry/services/api/internal/geoip"
 	"github.com/librecosta/gofurry/services/api/internal/handlers"
 	"github.com/librecosta/gofurry/services/api/internal/middleware"
 	"github.com/librecosta/gofurry/services/api/internal/platform"
@@ -27,14 +28,18 @@ func New(logger zerolog.Logger, cfg platform.Config) *Server {
 	logger = logger.With().Str("region", cfg.Deployment.Region).Logger()
 	s := &Server{}
 	s.App = fiber.New(fiber.Config{
-		AppName:      "gofurry-api",
-		JSONEncoder:  platform.MarshalJSON,
-		JSONDecoder:  platform.UnmarshalJSON,
-		ErrorHandler: errorHandler,
-		ReadTimeout:  5 * time.Second,
-		WriteTimeout: 10 * time.Second,
-		IdleTimeout:  30 * time.Second,
-		BodyLimit:    1024 * 1024,
+		AppName:            "gofurry-api",
+		JSONEncoder:        platform.MarshalJSON,
+		JSONDecoder:        platform.UnmarshalJSON,
+		ErrorHandler:       errorHandler,
+		ReadTimeout:        5 * time.Second,
+		WriteTimeout:       10 * time.Second,
+		IdleTimeout:        30 * time.Second,
+		BodyLimit:          1024 * 1024,
+		TrustProxy:         len(cfg.Server.TrustedProxies) > 0,
+		TrustProxyConfig:   fiber.TrustProxyConfig{Proxies: cfg.Server.TrustedProxies},
+		ProxyHeader:        fiber.HeaderXForwardedFor,
+		EnableIPValidation: true,
 	})
 	middleware.Register(s.App, logger, cfg.Server.Environment == "production", cfg.Logging.SlowRequest)
 	s.App.Use(func(c fiber.Ctx) error {
@@ -47,7 +52,17 @@ func New(logger zerolog.Logger, cfg platform.Config) *Server {
 		objects = storage.New(*cfg.Storage)
 	}
 	suggestions := search.New(cfg.SearchSuggestions, cfg.Deployment.Region)
-	routers.Register(s.App, s.ready.Load, handlers.Backgrounds(objects), handlers.Suggestions(suggestions))
+	var cities *geoip.Resolver
+	if cfg.GeoIP != nil && cfg.GeoIP.DatabasePath != "" {
+		var err error
+		cities, err = geoip.Open(cfg.GeoIP.DatabasePath)
+		if err != nil {
+			logger.Warn().Msg("city database unavailable")
+		} else {
+			logger.Info().Msg("city database loaded")
+		}
+	}
+	routers.Register(s.App, s.ready.Load, handlers.Backgrounds(objects), handlers.Suggestions(suggestions), handlers.Location(cities))
 	s.App.Hooks().OnListen(func(data fiber.ListenData) error {
 		s.ready.Store(true)
 		logger.Info().Str("host", data.Host).Str("port", data.Port).Msg("listening")
@@ -60,6 +75,9 @@ func New(logger zerolog.Logger, cfg platform.Config) *Server {
 	})
 	s.App.Hooks().OnPostShutdown(func(err error) error {
 		suggestions.Close()
+		if closeErr := cities.Close(); closeErr != nil {
+			logger.Warn().Msg("city database close failed")
+		}
 		if err != nil {
 			logger.Error().Err(err).Msg("shutdown failed")
 		} else {

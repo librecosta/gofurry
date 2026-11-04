@@ -98,3 +98,48 @@ func TestStorageConfigExplicitYAML(t *testing.T) {
 		}
 	}
 }
+
+func TestGeoIPAndTrustedProxyConfig(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	for _, tc := range []struct {
+		value string
+		valid bool
+	}{
+		{"", true},
+		{"geoip: null\n", true},
+		{"geoip:\n  database_path: ''\n", true},
+		{"geoip:\n  database_path: data/geoip/city.mmdb\n", true},
+		{"geoip:\n  unknown: true\n", false},
+	} {
+		if err := os.WriteFile(path, []byte(validYAML+tc.value), 0600); err != nil {
+			t.Fatal(err)
+		}
+		cfg, err := LoadConfig(path)
+		if (err == nil) != tc.valid {
+			t.Fatalf("geoip valid=%v err=%v", tc.valid, err)
+		}
+		if err == nil && cfg.GeoIP != nil && cfg.GeoIP.DatabasePath != "" && cfg.GeoIP.DatabasePath != filepath.Join(filepath.Dir(path), "data", "geoip", "city.mmdb") {
+			t.Fatal("path did not resolve against YAML")
+		}
+	}
+	for _, tc := range []struct {
+		proxies string
+		valid   bool
+	}{
+		{"[]", true}, {"[127.0.0.1, '::1', 10.1.2.0/24, '2001:db8::/64']", true},
+		{"[proxy.example]", false}, {"[0.0.0.0/0]", false}, {"['::/0']", false},
+		{"[0.0.0.0]", false}, {"[10.0.0.0/99]", false}, {"['fe80::1%eth0']", false},
+	} {
+		data := strings.Replace(validYAML, "  environment: development", "  environment: development\n  trusted_proxies: "+tc.proxies, 1)
+		if err := os.WriteFile(path, []byte(data), 0600); err != nil {
+			t.Fatal(err)
+		}
+		cfg, err := LoadConfig(path)
+		if (err == nil) != tc.valid {
+			t.Fatalf("proxies=%s valid=%v err=%v", tc.proxies, tc.valid, err)
+		}
+		if err == nil && tc.proxies == "[]" && len(cfg.Server.TrustedProxies) != 0 {
+			t.Fatal("implicit proxy trust")
+		}
+	}
+}

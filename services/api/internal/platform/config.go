@@ -3,7 +3,9 @@ package platform
 import (
 	"fmt"
 	"net"
+	"net/netip"
 	"net/url"
+	"path/filepath"
 	"strconv"
 	"time"
 
@@ -12,8 +14,9 @@ import (
 
 type Config struct {
 	Server struct {
-		Address     string `mapstructure:"address"`
-		Environment string `mapstructure:"environment"`
+		Address        string   `mapstructure:"address"`
+		Environment    string   `mapstructure:"environment"`
+		TrustedProxies []string `mapstructure:"trusted_proxies"`
 	} `mapstructure:"server"`
 	Deployment struct {
 		Region string `mapstructure:"region"`
@@ -23,6 +26,11 @@ type Config struct {
 	} `mapstructure:"logging"`
 	Storage           *StorageConfig           `mapstructure:"storage"`
 	SearchSuggestions *SearchSuggestionsConfig `mapstructure:"search_suggestions"`
+	GeoIP             *GeoIPConfig             `mapstructure:"geoip"`
+}
+
+type GeoIPConfig struct {
+	DatabasePath string `mapstructure:"database_path" json:"-"`
 }
 
 // Online autocomplete is opt-in. CN only returns exact, locally reviewed phrases;
@@ -76,6 +84,27 @@ func LoadConfig(path string) (Config, error) {
 	}
 	if cfg.Logging.SlowRequest <= 0 {
 		return cfg, fmt.Errorf("logging.slow_request must be a positive duration")
+	}
+	for i, value := range cfg.Server.TrustedProxies {
+		if ip, err := netip.ParseAddr(value); err == nil && ip.Zone() == "" && !ip.IsUnspecified() && !ip.IsMulticast() {
+			cfg.Server.TrustedProxies[i] = ip.Unmap().String()
+			continue
+		}
+		prefix, err := netip.ParsePrefix(value)
+		if err != nil || prefix.Bits() == 0 || prefix.Addr().Is4In6() || prefix.Addr().IsMulticast() {
+			return cfg, fmt.Errorf("server.trusted_proxies must contain explicit IPs or non-/0 CIDRs")
+		}
+		cfg.Server.TrustedProxies[i] = prefix.Masked().String()
+	}
+	if cfg.GeoIP != nil && cfg.GeoIP.DatabasePath != "" {
+		// Relative paths belong to the one YAML file, not the shell's working directory.
+		if !filepath.IsAbs(cfg.GeoIP.DatabasePath) {
+			cfg.GeoIP.DatabasePath = filepath.Join(filepath.Dir(path), cfg.GeoIP.DatabasePath)
+		}
+		cfg.GeoIP.DatabasePath, err = filepath.Abs(cfg.GeoIP.DatabasePath)
+		if err != nil {
+			return cfg, fmt.Errorf("resolve geoip.database_path")
+		}
 	}
 	if s := cfg.Storage; s != nil {
 		for _, address := range []string{s.Endpoint, s.PublicBaseURL} {

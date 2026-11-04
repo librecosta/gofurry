@@ -1,10 +1,17 @@
 server:
   address: 127.0.0.1:17321
   environment: development
+  # Empty by default. List only your actual proxy peer IPs/CIDRs, never 0.0.0.0/0.
+  trusted_proxies: []
 deployment:
   region: CN
 logging:
   slow_request: 1s
+
+# Optional local DB-IP Lite City. Relative to this YAML file; blank disables.
+geoip:
+  database_path: ""
+# database_path: data/geoip/dbip-city-lite-2026-11.mmdb
 
 # Explicit opt-in. Blank proxy_url means direct access (no HTTP_PROXY lookup).
 # CN requires exact reviewed phrases; disable if no reliable review is available.

@@ -8,7 +8,7 @@ import (
 	"github.com/librecosta/gofurry/services/api/internal/handlers"
 )
 
-func registerURLs(v1 fiber.Router, backgrounds, suggestions fiber.Handler) {
+func registerURLs(v1 fiber.Router, backgrounds, suggestions, location fiber.Handler) {
 	v1.Get("/status", handlers.Status)
 	v1.Get("/start/backgrounds", backgrounds)
 	// Per-client and deployment-wide bounds also cover cache misses/unique queries.
@@ -22,4 +22,5 @@ func registerURLs(v1 fiber.Router, backgrounds, suggestions fiber.Handler) {
 		})
 	}
 	v1.Get("/start/search/suggestions", limited(240, func(fiber.Ctx) string { return "suggestions" }), limited(60, func(c fiber.Ctx) string { return c.IP() }), suggestions)
+	v1.Get("/start/location", limited(600, func(fiber.Ctx) string { return "location" }), limited(30, func(c fiber.Ctx) string { return c.IP() }), location)
 }
