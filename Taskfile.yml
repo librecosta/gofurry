@@ -19,6 +19,10 @@ tasks:
     dir: services/api
     cmds:
       - go run ./cmd/api --config ../../config.yaml
+  cities:init:
+    desc: Download a manual GeoNames snapshot and build the ignored weather city catalog (Python 3.10+)
+    cmds:
+      - python scripts/init-geonames.py
   check:
     desc: Verify toolchains, Go formatting/vet/tests/build, Web build/types and browser smoke tests
     cmds:

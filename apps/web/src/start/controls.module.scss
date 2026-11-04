@@ -1,3 +1,21 @@
+.header {
+  border: 0;
+  border-radius: var(--radius-small);
+  background: transparent;
+  color: var(--logo-brand);
+  font-family: inherit;
+  box-shadow: none;
+  cursor: pointer;
+  outline: 2px solid transparent;
+  outline-offset: -2px;
+  transition: background-color 300ms var(--overlay-easing);
+  &:hover { background-color: rgba(224, 230, 238, 0.14); }
+  &:active { background-color: rgba(224, 230, 238, 0.22); }
+  &:focus-visible { outline-color: var(--logo-brand); }
+  &:disabled { cursor: not-allowed; opacity: 0.55; }
+  @media (prefers-reduced-motion: reduce) { transition-duration: 0s; }
+}
+
 .glass {
   border-width: 0;
   border-radius: var(--radius-small);

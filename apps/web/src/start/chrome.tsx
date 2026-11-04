@@ -50,7 +50,7 @@ export function StartHeader() {
       <StartWeather />
       <StartSettings />
       <Menu.Root open={userOpen} onOpenChange={setUserOpen} modal={false} highlightItemOnHover={false}>
-        <Menu.Trigger aria-label={m.user} title={m.user} className={cx(controls.glass, styles.action)}><UserCircleIcon size={21} aria-hidden="true" /></Menu.Trigger>
+        <Menu.Trigger aria-label={m.user} title={m.user} className={cx(controls.header, styles.action)}><UserCircleIcon size={21} aria-hidden="true" /></Menu.Trigger>
         <AnimatePresence>{userOpen && <Menu.Portal keepMounted>
           <Menu.Positioner positionMethod="fixed" align="end" sideOffset={8} className={styles.menuPositioner}>
             <Menu.Popup aria-label={m.user} data-start-user-menu className={styles.menu} render={<motion.div {...animation} />}>

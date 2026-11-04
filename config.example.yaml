@@ -13,6 +13,11 @@ geoip:
   database_path: ""
 # database_path: data/geoip/dbip-city-lite-2026-11.mmdb
 
+# Optional manual weather cities. Initialize with task cities:init; relative to YAML.
+cities:
+  index_path: ""
+# index_path: data/cities/cities.json
+
 # Optional current weather. Host is the dedicated hostname, without https://.
 # All file paths are relative to this YAML. No environment proxy/credential lookup.
 qweather:

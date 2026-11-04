@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Popover } from '@base-ui/react/popover'
-import { AnimatePresence, motion } from 'motion/react'
+import { AnimatePresence, motion, useIsPresent } from 'motion/react'
 import { SunIcon } from '@phosphor-icons/react/dist/ssr/Sun'
 import { CloudSunIcon } from '@phosphor-icons/react/dist/ssr/CloudSun'
 import { CloudIcon } from '@phosphor-icons/react/dist/ssr/Cloud'
@@ -12,11 +12,16 @@ import { CloudSlashIcon } from '@phosphor-icons/react/dist/ssr/CloudSlash'
 import { ThermometerIcon } from '@phosphor-icons/react/dist/ssr/Thermometer'
 import { WindIcon } from '@phosphor-icons/react/dist/ssr/Wind'
 import { QuestionIcon } from '@phosphor-icons/react/dist/ssr/Question'
+import { MapPinIcon } from '@phosphor-icons/react/dist/ssr/MapPin'
+import { ArrowLeftIcon } from '@phosphor-icons/react/dist/ssr/ArrowLeft'
 import { usePreferences } from '../preferences'
 import { useMotionTiming } from '../motion'
 import { useStartMessages } from './messages'
 import { failedWeatherRefresh, parseWeather, safeAttributionURL, unavailableWeather, weatherRefreshAge, weatherTemperature, type WeatherData } from './weather-data'
 import styles from './weather.module.scss'
+import controls from './controls.module.scss'
+import { cx } from '../styles/classes'
+import { WeatherCityPicker } from './weather-city-picker'
 
 // Documented common conditions only; future/unknown codes stay neutral.
 // https://dev.qweather.com/docs/api/weather/weather-conditions/
@@ -37,8 +42,17 @@ function conditionIcon(code?: string) {
 function useWeather() {
   const { locale, region } = usePreferences()
   const [data, setData] = useState<WeatherData>(unavailableWeather)
+  const [cityId, setCityId] = useState<string | null | undefined>(undefined)
   const generation = useRef(0)
+  const key = `gf-weather-city:${region}`
   useEffect(() => {
+    let saved: string | null = null
+    try { const value = localStorage.getItem(key); if (value && /^[1-9]\d{0,11}$/.test(value)) saved = value } catch { /* Storage can be disabled. */ }
+    setCityId(saved)
+    if (saved) setData({ ...unavailableWeather, locationSource: 'manual', cityId: saved })
+  }, [key])
+  useEffect(() => {
+    if (cityId === undefined) return
     let controller: AbortController | undefined
     let lastSuccess = 0
     let pending = false
@@ -48,11 +62,12 @@ function useWeather() {
       controller = new AbortController()
       const request = ++generation.current
       try {
-        const response = await fetch(`/api/v1/start/weather?lang=${locale}`, {
+        const response = await fetch(`/api/v1/start/weather?lang=${locale}${cityId ? `&city_id=${cityId}` : ''}`, {
           credentials: 'omit', redirect: 'error', signal: AbortSignal.any([controller.signal, AbortSignal.timeout(6000)]),
         })
         if (!response.ok || response.headers.get('x-gofurry-region') !== region || response.headers.get('x-gofurry-content-mode') !== 'SFW') throw new Error('Weather unavailable')
         const next = parseWeather(await response.json())
+        if (next.locationSource !== (cityId ? 'manual' : 'ip') || next.cityId !== cityId) throw new Error('Location mismatch')
         if (generation.current === request) { lastSuccess = Date.now(); setData(next) }
       } catch {
         if (generation.current === request) setData(current => failedWeatherRefresh(current, Date.now()))
@@ -68,32 +83,48 @@ function useWeather() {
       controller?.abort()
       document.removeEventListener('visibilitychange', onVisible)
     }
-  }, [locale, region])
-  return data
+  }, [locale, region, cityId])
+  const selectCity = (id: string | null) => {
+    if (id === cityId) return
+    ++generation.current
+    try { if (id) localStorage.setItem(key, id); else localStorage.removeItem(key) } catch { /* In-memory selection still works. */ }
+    setData({ ...unavailableWeather, locationSource: id ? 'manual' : 'ip', cityId: id })
+    setCityId(id)
+  }
+  return { data, cityId: cityId ?? null, selectCity }
 }
 
 export function StartWeather() {
   const { locale } = usePreferences()
   const m = useStartMessages().weather
-  const data = useWeather()
+  const { data, cityId, selectCity } = useWeather()
   const [open, setOpen] = useState(false)
+  const [selecting, setSelecting] = useState(false)
+  const cityButton = useRef<HTMLButtonElement>(null)
+  const restoreCityFocus = useRef(false)
   const transition = useMotionTiming()
   const city = data.city?.[locale]
   const temperature = data.weather ? weatherTemperature(data.weather.temperature_c, locale) : null
   const Icon = conditionIcon(data.weather?.condition_code)
   const label = temperature ? `${city}, ${data.weather!.condition_text}, ${temperature}` : m.unavailable
-  return <Popover.Root open={open} onOpenChange={setOpen}>
-    <Popover.Trigger data-start-weather data-weather-state={data.state} aria-label={`${m.details}: ${label}`} className={styles.trigger}>
-      <span className={styles.city}>{city ?? m.title}</span>
+  const back = () => { restoreCityFocus.current = true; setSelecting(false) }
+  return <Popover.Root open={open} onOpenChange={value => { setOpen(value); if (value) { setSelecting(false); restoreCityFocus.current = false } }}>
+    <Popover.Trigger data-start-weather data-weather-state={data.state} aria-label={`${m.details}: ${label}`} className={cx(controls.header, styles.trigger)}>
+      <span className={temperature ? styles.city : undefined}>{temperature ? city : m.title}</span>
       <Icon size={20} aria-hidden="true" data-weather-icon={data.weather?.condition_code ?? 'unavailable'} />
-      <span className={styles.temperature}>{temperature ?? '—'}</span>
+      {temperature && <span className={styles.temperature}>{temperature}</span>}
     </Popover.Trigger>
     <AnimatePresence>{open && <Popover.Portal keepMounted>
       <Popover.Positioner positionMethod="fixed" align="end" sideOffset={8} collisionPadding={16} className={styles.positioner}>
         <Popover.Popup data-start-weather-details className={styles.popup} render={<motion.div
           initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={transition}
         />}>
-          <Popover.Title className={styles.title}>{city ?? m.title}</Popover.Title>
+          <Popover.Title className={styles.title}>{selecting ? m.selectCity : city ?? m.title}</Popover.Title>
+          <div className={styles.views}><AnimatePresence initial={false}>
+          {selecting ? <WeatherView key="cities">
+            <button className={styles.cityAction} type="button" aria-label={m.back} onClick={back}><ArrowLeftIcon size={16} aria-hidden="true" />{m.back}</button>
+            <WeatherCityPicker selected={cityId} onBack={back} onSelect={id => { selectCity(id); back() }} />
+          </WeatherView> : <WeatherView key="details" onEnter={() => { if (open && restoreCityFocus.current) { cityButton.current?.focus(); restoreCityFocus.current = false } }}>
           {data.weather ? <>
             <div className={styles.current}><Icon size={28} aria-hidden="true" /><span>{temperature}</span></div>
             <Popover.Description className={styles.description}>{data.weather.condition_text}</Popover.Description>
@@ -104,14 +135,29 @@ export function StartWeather() {
           </> : <Popover.Description className={styles.description}>{m.unavailable}</Popover.Description>}
           <div className={styles.sources}>
             <p>{m.weatherSource} <a href="https://www.qweather.com" target="_blank" rel="noopener noreferrer">{m.provider}</a></p>
-            <p>{m.locationSource} <a href="https://db-ip.com" target="_blank" rel="noopener noreferrer">DB-IP</a></p>
+            <p>{data.locationSource === 'manual' ? m.citySource : m.locationSource} <a href={data.locationSource === 'manual' ? 'https://www.geonames.org' : 'https://db-ip.com'} target="_blank" rel="noopener noreferrer">{data.locationSource === 'manual' ? 'GeoNames' : 'DB-IP'}</a></p>
             {data.attributions.length > 0 && <ul>{data.attributions.map((text, index) => {
               const url = safeAttributionURL(text)
               return <li key={`${index}:${text}`}>{url ? <a href={url} target="_blank" rel="noopener noreferrer">{text}</a> : text}</li>
             })}</ul>}
           </div>
+          <button ref={cityButton} type="button" className={styles.cityAction} onClick={() => setSelecting(true)}><MapPinIcon size={16} aria-hidden="true" />{m.selectCity}</button>
+          </WeatherView>}
+          </AnimatePresence></div>
         </Popover.Popup>
       </Popover.Positioner>
     </Popover.Portal>}</AnimatePresence>
   </Popover.Root>
+}
+
+// Both views share one grid cell during the 420ms crossfade. Exiting content
+// keeps its measured footprint until removal, but cannot receive focus/clicks.
+function WeatherView({ children, onEnter }: { children: ReactNode; onEnter?: () => void }) {
+  const present = useIsPresent()
+  const transition = useMotionTiming()
+  useEffect(() => { if (present) onEnter?.() }, [present, onEnter])
+  return <motion.div className={styles.view} inert={!present} aria-hidden={!present || undefined}
+    initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 4 }} transition={transition}>
+    {children}
+  </motion.div>
 }

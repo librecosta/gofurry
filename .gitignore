@@ -12,6 +12,7 @@ test-results/
 *.log
 config.yaml
 /data/geoip/
+/data/cities/
 /data/private/
 *.mmdb
 *.mmdb.gz

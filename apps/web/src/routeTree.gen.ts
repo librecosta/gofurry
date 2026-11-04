@@ -16,6 +16,7 @@ import { Route as ReadyzRouteImport } from './routes/readyz'
 import { Route as StatusRouteImport } from './routes/status'
 import { Route as StartStartRouteImport } from './routes/_start.start'
 import { Route as StartLanguageStartRouteImport } from './routes/_start.$language.start'
+import { Route as ApiV1StartCitiesRouteImport } from './routes/api.v1.start.cities'
 import { Route as ApiV1StartWeatherRouteImport } from './routes/api.v1.start.weather'
 import { Route as ApiV1StartSearchSuggestionsRouteImport } from './routes/api.v1.start.search.suggestions'
 
@@ -53,6 +54,11 @@ const StartLanguageStartRoute = StartLanguageStartRouteImport.update({
   path: '/$language/start',
   getParentRoute: () => StartRoute,
 } as any)
+const ApiV1StartCitiesRoute = ApiV1StartCitiesRouteImport.update({
+  id: '/api/v1/start/cities',
+  path: '/api/v1/start/cities',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiV1StartWeatherRoute = ApiV1StartWeatherRouteImport.update({
   id: '/api/v1/start/weather',
   path: '/api/v1/start/weather',
@@ -72,6 +78,7 @@ export interface FileRoutesByFullPath {
   '/status': typeof StatusRoute
   '/start': typeof StartStartRoute
   '/$language/start': typeof StartLanguageStartRoute
+  '/api/v1/start/cities': typeof ApiV1StartCitiesRoute
   '/api/v1/start/weather': typeof ApiV1StartWeatherRoute
   '/api/v1/start/search/suggestions': typeof ApiV1StartSearchSuggestionsRoute
 }
@@ -82,6 +89,7 @@ export interface FileRoutesByTo {
   '/status': typeof StatusRoute
   '/start': typeof StartStartRoute
   '/$language/start': typeof StartLanguageStartRoute
+  '/api/v1/start/cities': typeof ApiV1StartCitiesRoute
   '/api/v1/start/weather': typeof ApiV1StartWeatherRoute
   '/api/v1/start/search/suggestions': typeof ApiV1StartSearchSuggestionsRoute
 }
@@ -94,6 +102,7 @@ export interface FileRoutesById {
   '/status': typeof StatusRoute
   '/_start/start': typeof StartStartRoute
   '/_start/$language/start': typeof StartLanguageStartRoute
+  '/api/v1/start/cities': typeof ApiV1StartCitiesRoute
   '/api/v1/start/weather': typeof ApiV1StartWeatherRoute
   '/api/v1/start/search/suggestions': typeof ApiV1StartSearchSuggestionsRoute
 }
@@ -106,6 +115,7 @@ export interface FileRouteTypes {
     | '/status'
     | '/start'
     | '/$language/start'
+    | '/api/v1/start/cities'
     | '/api/v1/start/weather'
     | '/api/v1/start/search/suggestions'
   fileRoutesByTo: FileRoutesByTo
@@ -116,6 +126,7 @@ export interface FileRouteTypes {
     | '/status'
     | '/start'
     | '/$language/start'
+    | '/api/v1/start/cities'
     | '/api/v1/start/weather'
     | '/api/v1/start/search/suggestions'
   id:
@@ -127,6 +138,7 @@ export interface FileRouteTypes {
     | '/status'
     | '/_start/start'
     | '/_start/$language/start'
+    | '/api/v1/start/cities'
     | '/api/v1/start/weather'
     | '/api/v1/start/search/suggestions'
   fileRoutesById: FileRoutesById
@@ -137,6 +149,7 @@ export interface RootRouteChildren {
   LivezRoute: typeof LivezRoute
   ReadyzRoute: typeof ReadyzRoute
   StatusRoute: typeof StatusRoute
+  ApiV1StartCitiesRoute: typeof ApiV1StartCitiesRoute
   ApiV1StartWeatherRoute: typeof ApiV1StartWeatherRoute
   ApiV1StartSearchSuggestionsRoute: typeof ApiV1StartSearchSuggestionsRoute
 }
@@ -192,6 +205,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof StartLanguageStartRouteImport
       parentRoute: typeof StartRoute
     }
+    '/api/v1/start/cities': {
+      id: '/api/v1/start/cities'
+      path: '/api/v1/start/cities'
+      fullPath: '/api/v1/start/cities'
+      preLoaderRoute: typeof ApiV1StartCitiesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/v1/start/weather': {
       id: '/api/v1/start/weather'
       path: '/api/v1/start/weather'
@@ -227,6 +247,7 @@ const rootRouteChildren: RootRouteChildren = {
   LivezRoute: LivezRoute,
   ReadyzRoute: ReadyzRoute,
   StatusRoute: StatusRoute,
+  ApiV1StartCitiesRoute: ApiV1StartCitiesRoute,
   ApiV1StartWeatherRoute: ApiV1StartWeatherRoute,
   ApiV1StartSearchSuggestionsRoute: ApiV1StartSearchSuggestionsRoute,
 }

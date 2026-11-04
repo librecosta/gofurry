@@ -37,7 +37,7 @@ func TestWeatherHandlerUnknownIPDoesNotFetch(t *testing.T) {
 	ctx := app.AcquireCtx(&fasthttp.RequestCtx{})
 	defer app.ReleaseCtx(ctx)
 	service := &fakeWeatherReader{state: "ready"}
-	if err := Weather(nil, service)(ctx); err != nil {
+	if err := Weather(nil, service, nil)(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if service.calls != 0 || !strings.Contains(string(ctx.Response().Body()), `"weather":null`) {
@@ -65,7 +65,7 @@ func TestLocalWeatherHandlerUsesOnlyResolvedCity(t *testing.T) {
 			fast.Request.Header.Set("X-Forwarded-For", "8.8.8.8")
 			ctx := app.AcquireCtx(fast)
 			service := &fakeWeatherReader{state: state}
-			if err := Weather(cities, service)(ctx); err != nil {
+			if err := Weather(cities, service, nil)(ctx); err != nil {
 				t.Fatal(err)
 			}
 			var response struct {

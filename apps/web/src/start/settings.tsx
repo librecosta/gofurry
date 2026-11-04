@@ -30,7 +30,7 @@ export function StartSettings() {
   const selectionTransition = useMotionTiming(0.4)
   const radioTransition = useMotionTiming(0.3)
   return <Dialog.Root open={open} onOpenChange={(value) => { if (value) setTab('basic'); setOpen(value) }}>
-    <Dialog.Trigger aria-label={m.settings} title={m.settings} data-start-settings className={cx(controls.glass, styles.trigger)}><GearSixIcon size={21} aria-hidden="true" /></Dialog.Trigger>
+    <Dialog.Trigger aria-label={m.settings} title={m.settings} data-start-settings className={cx(controls.header, styles.trigger)}><GearSixIcon size={21} aria-hidden="true" /></Dialog.Trigger>
     <AnimatePresence>{open && <Dialog.Portal keepMounted>
       <Dialog.Backdrop className={styles.backdrop} render={<motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={transition} />} />
       <Dialog.Popup data-start-preferences className={styles.popup} render={<motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }} transition={transition} />}>

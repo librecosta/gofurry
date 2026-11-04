@@ -12,7 +12,7 @@ const trigger = (page: Page) => page.locator('[data-start-weather]')
 const popup = (page: Page) => page.locator('[data-start-weather-details]')
 function weather(state = 'ready', lang = 'en', code = '101') {
   return {
-    state, location: state === 'unavailable' ? null : { city: { zh: '成都', en: 'Chengdu' }, country_code: 'CN', latitude: 30.67, longitude: 104.07 },
+    state, location_source: 'ip', location: state === 'unavailable' ? null : { city: { zh: '成都', en: 'Chengdu' }, country_code: 'CN', latitude: 30.67, longitude: 104.07 },
     weather: state === 'unavailable' ? null : { temperature_c: 22.5, condition_code: code, condition_text: lang === 'zh' ? '多云' : 'Cloudy', fetched_at: new Date().toISOString() },
     attribution: { weather: 'QWeather', weather_url: 'https://www.qweather.com', geolocation: 'DB-IP', geolocation_url: 'https://db-ip.com', weather_attributions: state === 'unavailable' ? [] : ['QWeather', 'https://www.qweather.com'] },
   }

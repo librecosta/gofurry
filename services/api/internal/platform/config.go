@@ -28,6 +28,11 @@ type Config struct {
 	SearchSuggestions *SearchSuggestionsConfig `mapstructure:"search_suggestions"`
 	GeoIP             *GeoIPConfig             `mapstructure:"geoip"`
 	QWeather          *QWeatherConfig          `mapstructure:"qweather"`
+	Cities            *CitiesConfig            `mapstructure:"cities"`
+}
+
+type CitiesConfig struct {
+	IndexPath string `mapstructure:"index_path" json:"-"`
 }
 
 type GeoIPConfig struct {
@@ -119,6 +124,15 @@ func LoadConfig(path string) (Config, error) {
 			if err != nil {
 				return cfg, fmt.Errorf("resolve qweather.private_key_path")
 			}
+		}
+	}
+	if c := cfg.Cities; c != nil && c.IndexPath != "" {
+		if !filepath.IsAbs(c.IndexPath) {
+			c.IndexPath = filepath.Join(filepath.Dir(path), c.IndexPath)
+		}
+		c.IndexPath, err = filepath.Abs(c.IndexPath)
+		if err != nil {
+			return cfg, fmt.Errorf("resolve cities.index_path")
 		}
 	}
 	if s := cfg.Storage; s != nil {
