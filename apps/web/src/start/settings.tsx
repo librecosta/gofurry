@@ -4,6 +4,8 @@ import { AnimatePresence, LayoutGroup, motion } from 'motion/react'
 import { useMotionTiming } from '../motion'
 import { Dialog } from '@base-ui/react/dialog'
 import { Tabs } from '@base-ui/react/tabs'
+import { Switch } from '@base-ui/react/switch'
+import { useQuickMessages } from './quick-access-messages'
 import { Radio } from '@base-ui/react/radio'
 import { RadioGroup } from '@base-ui/react/radio-group'
 import { GearSixIcon } from '@phosphor-icons/react/dist/ssr/GearSix'
@@ -19,8 +21,9 @@ import { useStartMessages } from './messages'
 import { useThemeReveal } from './theme-reveal'
 
 export function StartSettings() {
-  const { region, locale, themePreference, contentPreference, setLocale, setContentPreference } = usePreferences()
+  const { region, locale, themePreference, contentPreference, setLocale, setContentPreference, quickAccess, setQuickAccess } = usePreferences()
   const m = useStartMessages()
+  const q = useQuickMessages()
   const themes = useRef<HTMLDivElement>(null)
   const reveal = useThemeReveal()
   const [open, setOpen] = useState(false)
@@ -62,6 +65,9 @@ export function StartSettings() {
                   <Radio.Root value="dark" data-theme-choice="dark" className={cx(styles.radio, styles.segment)}><MoonIcon size={16} aria-hidden="true" />{m.dark}</Radio.Root>
                 </RadioGroup>
               </fieldset>
+              <label className={styles.quickSetting}>{q.toggle}<Switch.Root checked={quickAccess} onCheckedChange={setQuickAccess} className={styles.switch}>
+                <Switch.Thumb className={styles.switchThumb} render={<motion.span initial={false} animate={{ x: quickAccess ? 16 : 0 }} transition={selectionTransition} />} />
+              </Switch.Root></label>
               {region === 'INTL' && <fieldset className={styles.field}><legend className={styles.label}>{m.contentPreference}</legend>
                 <RadioGroup aria-label={m.contentPreference} value={contentPreference} onValueChange={(value: ContentPreference) => setContentPreference(value)} className={cx(styles.track, styles.twoColumns)}>
                   <motion.span aria-hidden="true" data-settings-selection="content" className={styles.selection} initial={false} animate={{ x: contentPreference === 'SFW' ? '0%' : '100%' }} transition={selectionTransition} />

@@ -289,3 +289,13 @@
   &:hover { text-decoration: underline; }
   &:focus-visible { outline-style: solid; }
 }
+
+.quickSetting { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 18px; font-size: 13px; cursor: pointer; }
+.switch { display: inline-flex; align-items: center; flex-shrink: 0; width: 36px; height: 20px; padding: 3px; border: 0; border-radius: 10px; background: var(--overlay-surface); outline: 2px solid transparent; outline-offset: 3px; transition: background-color 300ms var(--overlay-easing);
+  &[data-checked] { background: var(--overlay-selected-surface); }
+  &:hover { background: var(--overlay-surface-hover); }
+  &:active { background: var(--overlay-selected-surface); }
+  &:focus-visible { outline-color: var(--overlay-focus); }
+  &[data-disabled] { opacity: 0.5; cursor: default; }
+}
+.switchThumb { display: block; width: 14px; height: 14px; border-radius: 50%; background: var(--overlay-text); }

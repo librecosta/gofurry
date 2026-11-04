@@ -1,5 +1,5 @@
 import { cx } from '../styles/classes'
-import { useEffect, useId, useRef, useState, type KeyboardEvent, type KeyboardEventHandler, type ReactNode, type Ref } from 'react'
+import { useEffect, useLayoutEffect, useId, useRef, useState, type KeyboardEvent, type KeyboardEventHandler, type ReactNode, type Ref } from 'react'
 import { AnimatePresence, motion, useIsPresent } from 'motion/react'
 import { useMotionTiming } from '../motion'
 import { MagnifyingGlassIcon } from '@phosphor-icons/react/dist/ssr/MagnifyingGlass'
@@ -7,6 +7,7 @@ import { CaretDownIcon } from '@phosphor-icons/react/dist/ssr/CaretDown'
 import { CaretLeftIcon } from '@phosphor-icons/react/dist/ssr/CaretLeft'
 import { CaretRightIcon } from '@phosphor-icons/react/dist/ssr/CaretRight'
 import { XIcon } from '@phosphor-icons/react/dist/ssr/X'
+import { QuickAccess } from './quick-access'
 import { usePreferences } from '../preferences'
 import styles from './search.module.scss'
 import { useStartMessages } from './messages'
@@ -17,8 +18,14 @@ type Suggestions = { query: string; items: string[] }
 
 export function SearchBox() {
   const hoverTransition = useMotionTiming(0.3)
-  const { region, locale } = usePreferences()
+  const { region, locale, quickAccess } = usePreferences()
   const m = useStartMessages()
+  const [mobile, setMobile] = useState<boolean | null>(null)
+  const [platformWidth, setPlatformWidth] = useState<number>()
+  const platformName = useRef<HTMLSpanElement>(null)
+  const platformMeasured = useRef(false)
+  const [tailHeight, setTailHeight] = useState<number>()
+  const tailTransition = useMotionTiming()
   const [category, setCategory] = useState<Category>('search')
   const [selected, setSelected] = useState(defaultPlatform('search').id)
   const [keyword, setKeyword] = useState('')
@@ -44,6 +51,26 @@ export function SearchBox() {
   const available = platforms[category]
   const target = available.find((item) => item.id === selected)!
 
+  useLayoutEffect(() => {
+    let active = true
+    const measure = () => {
+      if (!active || !platformName.current) return
+      const name = platformName.current, inner = name.parentElement!
+      const range = document.createRange(); range.selectNodeContents(name)
+      const css = getComputedStyle(inner)
+      const width = range.getBoundingClientRect().width + parseFloat(css.paddingLeft) + parseFloat(css.paddingRight) + parseFloat(css.columnGap) + inner.querySelector('svg')!.getBoundingClientRect().width
+      // Establish Motion's numeric starting size before the first hydrated paint.
+      // SSR still uses CSS for the remembered preference and mobile breakpoint.
+      if (!platformMeasured.current) {
+        trigger.current?.style.setProperty('--platform-size', `${quickAccess || matchMedia('(max-width: 767px)').matches ? width : 0}px`)
+        platformMeasured.current = true
+      }
+      setPlatformWidth(width)
+    }
+    measure(); void document.fonts.ready.then(measure)
+    return () => { active = false }
+  }, [target.name[locale]])
+
   useEffect(() => {
     const track = categoryTrack.current!
     let active = true
@@ -62,7 +89,8 @@ export function SearchBox() {
   useEffect(() => {
     const query = matchMedia('(max-width: 767px)')
     const breakpoint = () => {
-      if (!query.matches && panelRef.current === 'platforms') {
+      setMobile(query.matches)
+      if (!query.matches && !quickAccess && panelRef.current === 'platforms') {
         closePanel()
         input.current?.focus({ preventScroll: true })
       }
@@ -70,10 +98,11 @@ export function SearchBox() {
     const outside = (event: PointerEvent) => {
       if (!shell.current?.contains(event.target as Node)) { cancelRequest(); closePanel() }
     }
+    breakpoint()
     query.addEventListener('change', breakpoint)
     document.addEventListener('pointerdown', outside)
     return () => { query.removeEventListener('change', breakpoint); document.removeEventListener('pointerdown', outside); cancelRequest() }
-  }, [])
+  }, [quickAccess])
   useEffect(() => {
     if (panel === 'platforms' && focusPicker.current) {
       popup.current?.querySelector<HTMLButtonElement>('[aria-selected="true"]')?.focus({ preventScroll: true })
@@ -182,7 +211,7 @@ export function SearchBox() {
     return <span>{phrase.slice(0, index)}<mark className={styles.highlight}>{phrase.slice(index, end)}</mark>{phrase.slice(end)}</span>
   }
   const defaultAction = 'https://www.bing.com/search'
-  return <div ref={shell} data-start-search className={styles.shell}
+  return <div ref={shell} data-start-search data-quick-enabled={quickAccess} className={cx(styles.shell, quickAccess && styles.quickEnabled)}
     onBlur={(event) => {
       if (!event.currentTarget.contains(event.relatedTarget)) { cancelRequest(); closePanel() }
     }}>
@@ -201,7 +230,8 @@ export function SearchBox() {
     <form role="search" aria-label={m.search} method="get" action={defaultAction} target="_blank" rel="noopener noreferrer" acceptCharset="UTF-8"
       onSubmit={(event) => { event.preventDefault(); submit(panel === 'suggestions' && active >= 0 ? suggestions.items[active] : keyword) }}
       className={cx(styles.search, !pointerFocus && styles.keyboardFocus)}>
-      <button ref={trigger} type="button" data-mobile-platform-trigger aria-label={`${m.platforms}: ${target.name[locale]}`}
+      <motion.button ref={trigger} type="button" data-mobile-platform-trigger initial={false}
+        animate={mobile === null || platformWidth === undefined ? undefined : { '--platform-size': `${quickAccess || mobile ? platformWidth : 0}px`, opacity: quickAccess || mobile ? 1 : 0 }} transition={tailTransition} aria-label={`${m.platforms}: ${target.name[locale]}`}
         aria-haspopup="listbox" aria-expanded={panel === 'platforms'} aria-controls={panel === 'platforms' ? panelId : undefined} disabled={available.length === 1}
         onClick={(event) => { cancelRequest(); focusPicker.current = event.detail === 0; showPanel(panel === 'platforms' ? null : 'platforms') }}
         onKeyDown={(event) => {
@@ -212,7 +242,7 @@ export function SearchBox() {
             else showPanel('platforms')
           }
         }}
-        className={styles.mobileTrigger}><span className={styles.truncate}>{target.name[locale]}</span><CaretDownIcon size={12} aria-hidden="true" className={styles.caret} /></button>
+        className={styles.mobileTrigger}><span className={styles.inlinePlatform}><span ref={platformName} className={styles.truncate}>{target.name[locale]}</span><CaretDownIcon size={12} aria-hidden="true" className={styles.caret} /></span></motion.button>
       <input ref={input} type="search" name="q" role={category === 'search' ? 'combobox' : undefined} aria-label={m.search} placeholder={m.search} required pattern={String.raw`.*\S.*`}
         aria-autocomplete={category === 'search' ? 'list' : undefined} aria-expanded={category === 'search' ? panel === 'suggestions' : undefined}
         aria-controls={panel === 'suggestions' ? panelId : undefined} aria-activedescendant={panel === 'suggestions' && active >= 0 ? `${panelId}-${active}` : undefined}
@@ -246,11 +276,27 @@ export function SearchBox() {
             onClick={() => submit(phrase)} className={cx(styles.option, styles.optionBase, active === index && styles.selected)}>{highlighted(phrase)}</button>)}
       </SearchPanel>}</AnimatePresence>
     </div>
-    <div role="group" aria-label={m.platforms} data-desktop-platforms onKeyDown={groupKeys} className={styles.desktopPlatforms}>
+    <motion.div data-search-tail className={styles.tail} initial={false} animate={{ height: tailHeight ?? 'auto' }} transition={tailTransition}><AnimatePresence initial={false}>
+    {quickAccess ? <SearchTailView key="quick" onMeasure={setTailHeight}><QuickAccess /></SearchTailView> : <SearchTailView key="platforms" onMeasure={setTailHeight}><div role="group" aria-label={m.platforms} data-desktop-platforms onKeyDown={groupKeys} className={styles.desktopPlatforms}>
       {available.map((item) => <button key={item.id} type="button" aria-pressed={selected === item.id}
         onClick={() => choosePlatform(item.id)} className={cx(styles.chip, styles.platform, selected === item.id && styles.selected)}>{item.name[locale]}</button>)}
-    </div>
+    </div></SearchTailView>}
+    </AnimatePresence></motion.div>
   </div>
+}
+
+function SearchTailView({ children, onMeasure }: { children: ReactNode; onMeasure: (height: number) => void }) {
+  const present = useIsPresent(), transition = useMotionTiming()
+  const ref = useRef<HTMLDivElement>(null)
+  useLayoutEffect(() => {
+    if (!present) return
+    const element = ref.current!, measure = () => onMeasure(element.getBoundingClientRect().height)
+    measure()
+    const observer = new ResizeObserver(measure); observer.observe(element)
+    return () => observer.disconnect()
+  }, [present, onMeasure])
+  return <motion.div ref={ref} className={styles.tailView} inert={!present} aria-hidden={!present || undefined}
+    initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={transition}>{children}</motion.div>
 }
 
 // One physical panel is reused for both lists. Presence retains its last

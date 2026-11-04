@@ -9,7 +9,7 @@ export type Locale = 'zh' | 'en'
 export type Theme = 'light' | 'dark'
 export type ThemePreference = Theme | 'system'
 export type ContentPreference = 'SFW' | 'NSFW'
-export type Preferences = { region: Region; locale: Locale; theme: Theme; themePreference: ThemePreference; contentPreference: ContentPreference }
+export type Preferences = { region: Region; locale: Locale; theme: Theme; themePreference: ThemePreference; contentPreference: ContentPreference; quickAccess: boolean }
 
 // Region belongs to the deployment; no request parameter or preference changes it.
 export const readPreferences = createServerFn({ method: 'GET' }).validator((pathname: string) => {
@@ -26,11 +26,12 @@ export const readPreferences = createServerFn({ method: 'GET' }).validator((path
     region,
     locale: isStartPath(pathname) ? localeForPath(pathname, region) : locale === 'zh' || locale === 'en' ? locale : region === 'CN' ? 'zh' : 'en',
     theme: themePreference === 'dark' ? 'dark' : 'light', themePreference,
+    quickAccess: getCookie(`gf-quick-access-${region}`) === '1',
     contentPreference: region === 'INTL' && getCookie('gf-content-preference') === 'NSFW' ? 'NSFW' : 'SFW',
   }
 })
 
-type Context = Preferences & { setLocale: (locale: Locale) => void; setTheme: (theme: ThemePreference) => void; setContentPreference: (value: ContentPreference) => void }
+type Context = Preferences & { setLocale: (locale: Locale) => void; setTheme: (theme: ThemePreference) => void; setContentPreference: (value: ContentPreference) => void; setQuickAccess: (value: boolean) => void }
 const PreferencesContext = createContext<Context | null>(null)
 
 function remember(name: string, value: string) {
@@ -44,6 +45,7 @@ export function PreferencesProvider({ initial, children }: { initial: Preference
   const [theme, changeTheme] = useState(initial.theme)
   const [themePreference, changeThemePreference] = useState(initial.themePreference)
   const [contentPreference, changeContentPreference] = useState(initial.contentPreference)
+  const [quickAccess, changeQuickAccess] = useState(initial.quickAccess)
   useEffect(() => { changeLocale(null) }, [pathname])
   useEffect(() => {
     const media = matchMedia('(prefers-color-scheme: dark)')
@@ -54,7 +56,11 @@ export function PreferencesProvider({ initial, children }: { initial: Preference
     return () => media.removeEventListener('change', update)
   }, [themePreference])
   return <PreferencesContext value={{
-    region: initial.region, locale: isStartPath(pathname) ? localeForPath(pathname, initial.region) : legacyLocale ?? initial.locale, theme, themePreference, contentPreference,
+    region: initial.region, locale: isStartPath(pathname) ? localeForPath(pathname, initial.region) : legacyLocale ?? initial.locale, theme, themePreference, contentPreference, quickAccess,
+    setQuickAccess: value => {
+      try { remember(`gf-quick-access-${initial.region}`, value ? '1' : '0') } catch { /* In-memory preference remains usable. */ }
+      changeQuickAccess(value)
+    },
     setLocale: (value) => {
       remember('gf-locale', value)
       if (isStartPath(pathname)) void navigate({ to: localizedPath(pathname, value, initial.region), resetScroll: false })

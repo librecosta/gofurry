@@ -5,9 +5,12 @@
   flex-direction: column;
   align-items: center;
   width: 100%;
-  max-width: 620px;
+  max-width: 920px;
   margin-inline: auto;
 }
+
+.tail { display: grid; width: 100%; overflow: clip; }
+.tailView { grid-area: 1 / 1; align-self: start; min-width: 0; }
 
 .categoryViewport {
   position: relative;
@@ -217,6 +220,7 @@
   padding-inline: 12px;
   padding-block: 10px;
   margin-top: 4px;
+  margin-inline: auto;
   @media (max-width: 767px) { display: none; }
   @media (max-width: 639px) { margin-top: 8px; }
 }
@@ -229,7 +233,10 @@
 }
 
 .mobileTrigger {
-  display: none;
+  display: flex;
+  width: var(--platform-size, 0px);
+  overflow: hidden;
+  visibility: hidden;
   align-items: center;
   justify-content: center;
   gap: 4px;
@@ -237,8 +244,8 @@
   min-width: 0;
   max-width: 36%;
   height: 40px;
-  margin-inline-start: 4px;
-  padding-inline: 10px;
+  margin-inline-start: 0;
+  padding-inline: 0;
   border-width: 0;
   border-radius: 8px;
   font-family: inherit;
@@ -253,15 +260,20 @@
   outline-width: 2px;
   outline-offset: -2px;
   outline-color: var(--search-focus-ring);
-  transition-property: background-color, color;
-  transition-duration: 300ms;
+  transition-property: background-color, color, visibility;
+  transition-duration: 300ms, 300ms, 0s;
+  transition-delay: 0s, 0s, 420ms;
   transition-timing-function: var(--search-easing);
-  @media (max-width: 767px) { display: flex; }
+  .quickEnabled & { width: var(--platform-size, auto); visibility: visible; transition-delay: 0s; }
+  @media (max-width: 767px) { width: var(--platform-size, auto); visibility: visible; transition-delay: 0s; }
+  @media (prefers-reduced-motion: reduce) { transition-delay: 0s; }
   &:enabled:hover:not(:active) { background-color: var(--search-chip-hover-background); }
   &:enabled:active { background-color: var(--search-selected-background); }
   &:disabled { cursor: default; }
   &:focus-visible { outline-style: solid; }
 }
+
+.inlinePlatform { display: flex; align-items: center; gap: 4px; width: max-content; max-width: 100%; min-width: 0; flex-shrink: 0; padding-inline: 10px; height: 40px; }
 
 .caret {
   flex-shrink: 0;

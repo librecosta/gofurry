@@ -1,6 +1,7 @@
 import { createRootRoute, HeadContent, Outlet, Scripts } from '@tanstack/react-router'
 import styles from '../styles/document.module.scss'
 import { PreferencesProvider, readPreferences, usePreferences } from '../preferences'
+import { QuickAccessProvider } from '../start/quick-access-data'
 import cssUrl from '../styles/global.scss?url'
 
 export const Route = createRootRoute({
@@ -19,7 +20,7 @@ export const Route = createRootRoute({
 })
 
 function Root() {
-  return <PreferencesProvider initial={Route.useRouteContext().preferences}><Document /></PreferencesProvider>
+  return <PreferencesProvider initial={Route.useRouteContext().preferences}><QuickAccessProvider><Document /></QuickAccessProvider></PreferencesProvider>
 }
 
 function Document() {
