@@ -264,8 +264,8 @@
   transition-duration: 300ms, 300ms, 0s;
   transition-delay: 0s, 0s, 420ms;
   transition-timing-function: var(--search-easing);
-  .quickEnabled & { width: var(--platform-size, auto); visibility: visible; transition-delay: 0s; }
-  @media (max-width: 767px) { width: var(--platform-size, auto); visibility: visible; transition-delay: 0s; }
+  .quickEnabled & { width: var(--platform-size, auto); margin-inline-start: 4px; visibility: visible; transition-delay: 0s; }
+  @media (max-width: 767px) { width: var(--platform-size, auto); margin-inline-start: 4px; visibility: visible; transition-delay: 0s; }
   @media (prefers-reduced-motion: reduce) { transition-delay: 0s; }
   &:enabled:hover:not(:active) { background-color: var(--search-chip-hover-background); }
   &:enabled:active { background-color: var(--search-selected-background); }

@@ -19,6 +19,7 @@ async function seed(page: Page, pinned = [pin('GitHub', 0, 'github.com')], recen
   await page.addInitScript(({ key, data }) => { if (!localStorage.getItem(key)) localStorage.setItem(key, JSON.stringify(data)) }, { key, data: { version: 1, pinned, recent } })
 }
 async function load(page: Page) {
+  await page.route('https://a.favicon.im/**', route => route.fulfill({ status: 404, body: '' }))
   await page.route('https://**/favicon.ico', route => route.fulfill({ status: 404, body: '' }))
   await page.goto(path); await expect(page.locator('[data-quick-manage]')).toBeEnabled()
 }
@@ -45,6 +46,7 @@ test('quick access: default and remembered SSR layout, smooth toggle and search 
   const errors: string[] = []; page.on('pageerror', e => errors.push(e.message))
   page.on('console', e => { if (e.type() === 'error' && /hydrat|did not match/i.test(e.text())) errors.push(e.text()) })
   await page.goto(path); await page.waitForLoadState('networkidle'); await expect(page.locator('[data-desktop-platforms]')).toBeVisible()
+  await expect(page.locator('[data-mobile-platform-trigger]')).toHaveCSS('margin-inline-start', '0px')
   const platformBounds = (await page.locator('[data-desktop-platforms]').boundingBox())!
   expect(platformBounds.x + platformBounds.width / 2).toBeCloseTo((await page.evaluate(() => innerWidth)) / 2, 1)
   await page.locator('[data-start-settings]').click()
@@ -165,6 +167,11 @@ test('quick access: responsive 12/10/8/4 slots preserve data, deduplicate, theme
     expect((await stored(page)).pinned).toHaveLength(14)
     expect(await page.evaluate(() => [document.documentElement.scrollWidth, document.documentElement.scrollHeight])).toEqual([width, height])
     await expect(page.getByRole('search')).toHaveCSS('width', width < 548 ? `${width - 32}px` : '500px')
+    const picker = (await page.locator('[data-mobile-platform-trigger]').boundingBox())!, form = (await page.getByRole('search').boundingBox())!
+    expect(picker.x - form.x).toBe(4)
+    const input = (await page.locator('input[name=q]').boundingBox())!, submit = (await page.getByRole('button', { name: 'Search (new tab)', exact: true }).boundingBox())!
+    expect(input.x).toBeGreaterThanOrEqual(picker.x + picker.width)
+    expect(submit.x + submit.width).toBeLessThanOrEqual(form.x + form.width)
   }
   await page.setViewportSize({ width: 1280, height: 720 }); await page.emulateMedia({ colorScheme: 'dark' })
   await page.screenshot({ path: testInfo.outputPath('quick-desktop-dark.png') })
@@ -296,3 +303,92 @@ async function sampleSurface(field: import('@playwright/test').Locator) {
     requestAnimationFrame(sample)
   }))
 }
+
+test('quick access: favicon fallback is bounded, private hostnames stay local and URL changes reset the icon', async ({ page, context }) => {
+  await page.setViewportSize({ width: 1920, height: 1080 })
+  const privateHosts = ['localhost', '127.0.0.1', '10.1.2.3', '172.16.0.1', '192.168.1.1', '100.64.0.1', '192.0.2.1', '[::1]', '[fd00::1]', 'printer.local']
+  await seed(page, [{ ...pin('GitHub', 0, 'github.com'), url: 'https://github.com/gofurry?private=query#fragment' }, pin('Missing', 1, 'missing.public-site.net'), ...privateHosts.map((host, index) => pin(`Private${index}`, index + 2, host))])
+  // Playwright's page.route intercepts/aborts every /favicon.ico internally.
+  // CDP scopes fixture interception to icon requests without that special case.
+  const session = await context.newCDPSession(page), calls: string[] = []
+  const image = readFileSync(new URL('../src/assets/logo-mini.svg', import.meta.url)).toString('base64')
+  await session.send('Fetch.enable', { patterns: [{ urlPattern: 'https://a.favicon.im/*' }, { urlPattern: '*/favicon.ico' }] })
+  session.on('Fetch.requestPaused', async event => {
+    const url = event.request.url; calls.push(url)
+    const success = url === 'https://github.com/favicon.ico' || url.startsWith('https://a.favicon.im/changed.public-site.net?')
+    await session.send('Fetch.fulfillRequest', { requestId: event.requestId, responseCode: success ? 200 : 404,
+      responseHeaders: [{ name: 'Content-Type', value: success ? 'image/svg+xml' : 'text/plain' }], body: success ? image : '' })
+  })
+  await page.goto(path); await expect(page.locator('[data-quick-manage]')).toBeEnabled()
+  const github = tiles(page).filter({ has: page.getByRole('link', { name: 'GitHub', exact: true }) })
+  await expect(github.locator('img')).toBeVisible(); await expect(github.locator('img')).toHaveAttribute('src', 'https://github.com/favicon.ico')
+  await expect(github.locator('svg')).toHaveCount(0)
+  await expect(tiles(page).locator('img')).toHaveCount(1)
+  expect(calls.filter(url => url.startsWith('https://a.favicon.im/'))).toEqual([
+    'https://a.favicon.im/github.com?larger=true&throw-error-on-404=true',
+    'https://a.favicon.im/missing.public-site.net?larger=true&throw-error-on-404=true',
+  ])
+  expect(new Set(calls).size).toBe(calls.length)
+  const originalCalls = [...calls]
+  await manage(page); await manager(page).getByRole('button', { name: 'Edit: GitHub', exact: true }).click()
+  await manager(page).getByLabel('Name', { exact: true }).fill('Renamed'); await manager(page).getByRole('button', { name: 'Save', exact: true }).click()
+  expect(calls).toEqual(originalCalls)
+  await manager(page).getByRole('button', { name: 'Edit: Renamed', exact: true }).click()
+  await manager(page).getByLabel('URL', { exact: true }).fill('https://changed.public-site.net/path?not=sent#fragment')
+  await manager(page).getByRole('button', { name: 'Save', exact: true }).click(); await close(page)
+  const changed = tiles(page).filter({ has: page.getByRole('link', { name: 'Renamed', exact: true }) })
+  await expect(changed.locator('img')).toBeVisible(); await expect(changed.locator('svg')).toHaveCount(0)
+  await expect(changed.locator('img')).toHaveAttribute('src', 'https://a.favicon.im/changed.public-site.net?larger=true&throw-error-on-404=true')
+  await expect(changed.locator('img')).toHaveAttribute('loading', 'lazy'); await expect(changed.locator('img')).toHaveAttribute('decoding', 'async'); await expect(changed.locator('img')).toHaveAttribute('referrerpolicy', 'no-referrer')
+  expect(calls.filter(url => url.includes('changed.public-site.net'))).toHaveLength(1)
+  expect(calls.every(url => !url.includes('private=query') && !url.includes('not=sent') && !url.includes('#fragment'))).toBe(true)
+})
+
+test('quick access: 2/8/20-item drags keep scroll bounds stable, edge-scroll long lists and retain keyboard sorting', async ({ browser }) => {
+  test.setTimeout(60000)
+  for (const count of [2, 8, 20]) {
+    const context = await browser.newContext({ baseURL: origin, viewport: { width: 1280, height: 720 } }), page = await context.newPage()
+    await seed(page, Array.from({ length: count }, (_, index) => pin(`Site${index}`, index))); await load(page); await manage(page)
+    const list = manager(page).getByRole('list', { name: 'Pinned sites' }), bounds = (await list.boundingBox())!
+    const naturalHeight = await list.evaluate(el => el.scrollHeight)
+    expect(await list.evaluate(el => getComputedStyle(el, '::-webkit-scrollbar').width)).toBe('4px')
+    expect(await list.evaluate(el => getComputedStyle(el, '::-webkit-scrollbar-track').backgroundColor)).toBe('rgba(0, 0, 0, 0)')
+    expect(await list.evaluate(el => getComputedStyle(el).overflowY)).toBe('auto')
+    await list.evaluate(el => {
+      const frames: { h: number; sh: number; w: number; x: number; y: number }[] = []
+      ;(window as unknown as { dragFrames: typeof frames }).dragFrames = frames
+      ;(window as unknown as { stopDragSampling: boolean }).stopDragSampling = false
+      const sample = () => { const r = el.getBoundingClientRect(); frames.push({ h: r.height, sh: el.scrollHeight, w: r.width, x: r.x, y: r.y }); if (!(window as unknown as { stopDragSampling: boolean }).stopDragSampling) requestAnimationFrame(sample) }
+      requestAnimationFrame(sample)
+    })
+    const handle = manager(page).getByRole('button', { name: 'Drag to reorder: Site0', exact: true }), start = (await handle.boundingBox())!
+    expect(start.x + start.width).toBeLessThan(bounds.x + bounds.width - 6)
+    await page.mouse.move(start.x + start.width / 2, start.y + start.height / 2); await page.mouse.down()
+    await page.mouse.move(start.x + start.width / 2, bounds.y + bounds.height + (count === 2 ? 100 : -4), { steps: 20 })
+    if (count > 2) {
+      await expect.poll(async () => list.evaluate(el => el.scrollTop), { timeout: 5000 }).toBeGreaterThan(naturalHeight - bounds.height - 2)
+    }
+    await page.mouse.up(); await page.waitForTimeout(500)
+    await expect.poll(async () => (await stored(page)).pinned.at(-1).name).toBe('Site0')
+    if (count > 2) {
+      const bottom = await handle.boundingBox()
+      await page.mouse.move(bottom!.x + bottom!.width / 2, bottom!.y + bottom!.height / 2); await page.mouse.down()
+      await page.mouse.move(bottom!.x + bottom!.width / 2, bounds.y + 4, { steps: 20 })
+      await expect.poll(() => list.evaluate(el => el.scrollTop), { timeout: 5000 }).toBeLessThan(2)
+      await page.mouse.up(); await page.waitForTimeout(500)
+      await expect.poll(async () => (await stored(page)).pinned[0].name).toBe('Site0')
+    }
+    await page.evaluate(() => { (window as unknown as { stopDragSampling: boolean }).stopDragSampling = true })
+    const frames = await page.evaluate(() => (window as unknown as { dragFrames: { h: number; sh: number; w: number; x: number; y: number }[] }).dragFrames)
+    expect(frames.every(frame => frame.h === bounds.height && frame.w === bounds.width && frame.x === bounds.x && frame.y === bounds.y)).toBe(true)
+    expect(Math.max(...frames.map(frame => frame.sh))).toBe(naturalHeight)
+    if (count === 2) expect(naturalHeight).toBe(bounds.height)
+    const before = (await stored(page)).pinned.map((site: { id: string }) => site.id)
+    await handle.focus(); await handle.press('ArrowDown')
+    await expect(handle).toBeFocused()
+    const after = (await stored(page)).pinned.map((site: { id: string }) => site.id)
+    expect(after.indexOf('site-0')).toBe(before.indexOf('site-0') + (count > 2 ? 1 : 0))
+    expect(await page.evaluate(() => [scrollX, scrollY, document.documentElement.scrollWidth, document.documentElement.scrollHeight])).toEqual([0, 0, 1280, 720])
+    await close(page); await context.close()
+  }
+})
