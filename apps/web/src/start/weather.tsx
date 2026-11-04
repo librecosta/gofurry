@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { Popover } from '@base-ui/react/popover'
 import { AnimatePresence, motion, useIsPresent } from 'motion/react'
 import { MapPinIcon } from '@phosphor-icons/react/dist/ssr/MapPin'
@@ -73,6 +73,7 @@ export function StartWeather() {
   const { data, cityId, selectCity } = useWeather()
   const [open, setOpen] = useState(false)
   const [selecting, setSelecting] = useState(false)
+  const [viewHeight, setViewHeight] = useState<number>()
   const cityButton = useRef<HTMLButtonElement>(null)
   const restoreCityFocus = useRef(false)
   const transition = useMotionTiming()
@@ -84,7 +85,7 @@ export function StartWeather() {
   // row. Other actual targets remain inline, and required declarations stay intact.
   const attributionLinks = [...new Set(data.attributions.map(safeAttributionURL).filter((url): url is string => !!url && url !== 'https://www.qweather.com/' && url !== 'https://developer.qweather.com/attribution.html'))]
   const attributionText = data.attributions.filter(text => !safeAttributionURL(text) && !['qweather', '和风天气', '和风天气 / qweather'].includes(text.trim().toLowerCase()))
-  return <Popover.Root open={open} onOpenChange={value => { setOpen(value); if (value) { setSelecting(false); restoreCityFocus.current = false } }}>
+  return <Popover.Root open={open} onOpenChange={value => { setOpen(value); if (value) { setSelecting(false); setViewHeight(undefined); restoreCityFocus.current = false } }}>
     <Popover.Trigger data-start-weather data-weather-state={data.state} aria-label={`${m.details}: ${label}`} className={cx(controls.header, styles.trigger)}>
       <span className={temperature ? styles.city : undefined}>{temperature ? city : m.title}</span>
       <WeatherIcon code={data.weather?.condition_code} />
@@ -96,10 +97,10 @@ export function StartWeather() {
           initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={transition}
         />}>
           <Popover.Title className={styles.title}>{selecting ? m.selectCity : city ?? m.title}</Popover.Title>
-          <div className={styles.views}><AnimatePresence initial={false}>
-          {selecting ? <WeatherView key="cities">
+          <motion.div data-weather-views className={styles.views} initial={false} animate={{ height: viewHeight ?? 'auto' }} transition={transition}><AnimatePresence initial={false}>
+          {selecting ? <WeatherView key="cities" onMeasure={setViewHeight}>
             <WeatherCityPicker selected={cityId} active={open} locationSource={data.locationSource} onBack={back} onSelect={id => { selectCity(id); back() }} />
-          </WeatherView> : <WeatherView key="details" onEnter={() => { if (open && restoreCityFocus.current) { cityButton.current?.focus(); restoreCityFocus.current = false } }}>
+          </WeatherView> : <WeatherView key="details" onMeasure={setViewHeight} onEnter={() => { if (open && restoreCityFocus.current) { cityButton.current?.focus({ preventScroll: true }); restoreCityFocus.current = false } }}>
           {data.weather ? <>
             <div className={styles.current}><WeatherIcon code={data.weather.condition_code} size={28} /><span>{temperature}</span></div>
             <Popover.Description className={styles.description}>{data.weather.condition_text}</Popover.Description>
@@ -114,20 +115,30 @@ export function StartWeather() {
           </div>
           <button ref={cityButton} type="button" className={styles.cityAction} onClick={() => setSelecting(true)}><MapPinIcon size={16} aria-hidden="true" />{m.selectCity}</button>
           </WeatherView>}
-          </AnimatePresence></div>
+          </AnimatePresence></motion.div>
         </Popover.Popup>
       </Popover.Positioner>
     </Popover.Portal>}</AnimatePresence>
   </Popover.Root>
 }
 
-// Both views share one grid cell during the 420ms crossfade. Exiting content
-// keeps its measured footprint until removal, but cannot receive focus/clicks.
-function WeatherView({ children, onEnter }: { children: ReactNode; onEnter?: () => void }) {
+// Measure only the active view. The grid still overlaps both crossfade layers,
+// but removing the taller exiting layer must not snap the container's height.
+function WeatherView({ children, onMeasure, onEnter }: { children: ReactNode; onMeasure: (height: number) => void; onEnter?: () => void }) {
   const present = useIsPresent()
   const transition = useMotionTiming()
+  const ref = useRef<HTMLDivElement>(null)
+  useLayoutEffect(() => {
+    if (!present) return
+    const view = ref.current!
+    const measure = () => onMeasure(view.getBoundingClientRect().height)
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(view)
+    return () => observer.disconnect()
+  }, [present, onMeasure])
   useEffect(() => { if (present) onEnter?.() }, [present, onEnter])
-  return <motion.div className={styles.view} inert={!present} aria-hidden={!present || undefined}
+  return <motion.div ref={ref} data-weather-view className={styles.view} inert={!present} aria-hidden={!present || undefined}
     initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 4 }} transition={transition}>
     {children}
   </motion.div>

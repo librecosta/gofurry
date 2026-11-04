@@ -74,7 +74,7 @@ export function WeatherCityPicker({ selected, active: enabled, locationSource, o
       })
     } catch { finish(m.locationFailed) }
   }
-  useEffect(() => { input.current?.focus() }, [])
+  useEffect(() => { input.current?.focus({ preventScroll: true }) }, [])
   useEffect(() => {
     const version = ++sequence.current, controller = new AbortController()
     const q = query.trim()

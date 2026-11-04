@@ -66,7 +66,7 @@
   }
 }
 
-.views { display: grid; }
+.views { display: grid; overflow: clip; }
 .view { grid-area: 1 / 1; align-self: start; min-width: 0; }
 .cityToolbar {
   display: flex;

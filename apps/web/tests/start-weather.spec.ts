@@ -95,7 +95,7 @@ test('weather: first/repeated popup frames are stable with full exit and keyboar
   expect(Math.max(...frames.map(f => f.h)) - Math.min(...frames.map(f => f.h))).toBeLessThan(0.5)
   expect(frames.every(f => f.background !== 'rgba(0, 0, 0, 0)')).toBe(true)
   await expect(popup(page).getByRole('link').first()).toBeFocused()
-  await page.keyboard.press('Tab'); await expect(popup(page).getByRole('link').nth(1)).toBeFocused()
+  await page.keyboard.press('Tab'); await expect(popup(page).getByRole('button', { name: 'Choose city', exact: true })).toBeFocused()
   await page.keyboard.press('Escape')
   const exit = await sampleMotion(popup(page))
   expect(exit.some(f => f.opacity > 0 && f.opacity < 1)).toBe(true)

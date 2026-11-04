@@ -9,7 +9,7 @@ const city = { city_id: '1815286', name: 'Chengdu', names: { zh: '成都', en: '
 const trigger = (page: Page) => page.locator('[data-start-weather]')
 const popup = (page: Page) => page.locator('[data-start-weather-details]')
 const locate = (page: Page) => popup(page).getByRole('button', { name: 'Locate current position' })
-async function fixture(page: Page, codes = ['150']) {
+async function fixture(page: Page, codes = ['150'], attributions = ['QWeather', 'https://example.com/license', 'Required attribution statement.']) {
   const calls: string[] = []
   await page.route('**/api/v1/start/weather?*', route => {
     calls.push(route.request().url())
@@ -17,7 +17,7 @@ async function fixture(page: Page, codes = ['150']) {
     return route.fulfill({ headers, json: { state: 'ready', location_source: id ? 'manual' : 'ip', ...(id ? { city_id: id } : {}),
       location: { city: city.names, country_code: 'CN' },
       weather: { temperature_c: 22.5, condition_code: codes.shift() ?? '100', condition_text: params.get('lang') === 'zh' ? '晴' : 'Clear', fetched_at: new Date().toISOString() },
-      attribution: { weather_attributions: ['QWeather', 'https://example.com/license', 'Required attribution statement.'] } } })
+      attribution: { weather_attributions: attributions } } })
   })
   await page.route('**/api/v1/start/cities?*', route => route.fulfill({ headers, json: { state: 'ready', cities: [city] } }))
   return calls
@@ -192,6 +192,76 @@ async function pickerChinese(page: Page) {
   await trigger(page).click(); await expect(popup(page)).toHaveCSS('opacity', '1')
   await popup(page).getByRole('button', { name: '选择城市', exact: true }).click(); await expect(popup(page).getByRole('combobox')).toBeFocused()
 }
+
+test('weather UX: returning from city selection resizes continuously without an exit-frame snap', async ({ page }, testInfo) => {
+  test.setTimeout(60000)
+  await fixture(page, ['150'], ['QWeather'])
+  await page.route('**/api/v1/start/cities?*', route => route.fulfill({ headers, json: { state: 'ready', cities: Array.from({ length: 10 }, (_, i) => ({ ...city, city_id: String(200000 + i) })) } }))
+  for (const [url, width, height, scheme] of [[path, 1280, 720, 'light'], [chinese, 375, 667, 'dark']] as const) {
+    const zh = url === chinese
+    await page.setViewportSize({ width, height }); await page.emulateMedia({ colorScheme: scheme })
+    await page.goto(url); await expect(trigger(page)).toContainText('22.5°C')
+    await trigger(page).click(); await expect(popup(page)).toHaveCSS('opacity', '1')
+    const choose = popup(page).getByRole('button', { name: zh ? '选择城市' : 'Choose city', exact: true })
+    const detailHeight = (await popup(page).boundingBox())!.height
+    for (const withResults of [false, true]) {
+      await choose.click()
+      const input = popup(page).getByRole('combobox'); await expect(input).toBeFocused()
+      if (withResults) { await input.fill('Chengdu'); await expect(popup(page).getByRole('option')).toHaveCount(10) }
+      // Wait for the current height animation to settle before measuring the return.
+      await expect(popup(page).locator('[data-weather-view]')).toHaveCount(1)
+      await expect.poll(() => popup(page).evaluate(el => Math.abs(el.querySelector('[data-weather-views]')!.getBoundingClientRect().height - el.querySelector('[data-weather-view]')!.getBoundingClientRect().height))).toBeLessThan(0.1)
+      const back = popup(page).getByRole('button', { name: zh ? '返回天气' : 'Back to weather', exact: true })
+      const before = (await popup(page).boundingBox())!
+      const [frames] = await Promise.all([
+        popup(page).evaluate(el => new Promise<{ t: number; h: number; x: number; y: number; w: number; layers: number; opacity: number }[]>(resolve => {
+          const frames: { t: number; h: number; x: number; y: number; w: number; layers: number; opacity: number }[] = []
+          let start: number | undefined
+          el.addEventListener('click', () => { start = performance.now() }, { once: true })
+          const sample = () => {
+            const r = el.getBoundingClientRect()
+            if (start !== undefined) frames.push({ t: performance.now() - start, h: r.height, x: r.x, y: r.y, w: r.width, layers: el.querySelectorAll('[data-weather-view]').length, opacity: Number(getComputedStyle(el).opacity) })
+            if (start === undefined || performance.now() - start < 700) requestAnimationFrame(sample)
+            else resolve(frames)
+          }
+          requestAnimationFrame(sample)
+        })), back.click(),
+      ])
+      await testInfo.attach(`return-${width}-${withResults ? 'results' : 'empty'}-frames`, { body: JSON.stringify(frames), contentType: 'application/json' })
+      const distance = before.height - detailHeight
+      expect(distance).toBeGreaterThan(10)
+      const middle = frames.find(f => f.t >= 150)!
+      expect(middle.h).toBeLessThan(before.height - distance * 0.4)
+      expect(frames.filter(f => f.h < before.height - 1 && f.h > detailHeight + 1).length).toBeGreaterThan(3)
+      for (let i = 1; i < frames.length; i++) {
+        expect(frames[i].h).toBeLessThanOrEqual(frames[i - 1].h + 0.5)
+        expect(frames[i].h).toBeGreaterThanOrEqual(detailHeight - 0.5)
+        // The old grid snapped when its taller exiting child unmounted at 420ms.
+        if (frames[i].t > 350 && frames[i].t - frames[i - 1].t < 80) expect(Math.abs(frames[i].h - frames[i - 1].h)).toBeLessThan(1)
+        expect(Math.abs(frames[i].x - before.x)).toBeLessThan(0.5)
+        expect(Math.abs(frames[i].y - before.y)).toBeLessThan(0.5)
+        expect(Math.abs(frames[i].w - before.width)).toBeLessThan(0.5)
+        expect(frames[i].opacity).toBe(1)
+      }
+      expect(Math.abs(frames.at(-1)!.h - detailHeight)).toBeLessThan(0.1)
+      await expect(choose).toBeFocused()
+      await expect(popup(page).locator('[data-weather-view]')).toHaveCount(1)
+      expect(await popup(page).evaluate(el => el.scrollTop)).toBe(0)
+      expect(await page.evaluate(() => [document.documentElement.scrollWidth, document.documentElement.scrollHeight])).toEqual([width, height])
+    }
+    await page.screenshot({ path: testInfo.outputPath(`weather-return-${width}-${scheme}.png`) })
+    // Keyboard return and reduced-motion must not leave a frozen explicit height.
+    await page.emulateMedia({ reducedMotion: 'reduce' }); await page.reload()
+    await expect(trigger(page)).toContainText('22.5°C')
+    await trigger(page).click(); await expect(popup(page)).toHaveCSS('opacity', '1'); await choose.click()
+    await expect(popup(page).getByRole('combobox')).toBeFocused()
+    await popup(page).getByRole('combobox').press('Escape'); await expect(choose).toBeFocused()
+    await expect(popup(page).locator('[data-weather-city-picker]')).toHaveCount(0)
+    await expect.poll(async () => Math.abs((await popup(page).boundingBox())!.height - detailHeight), { timeout: 200, intervals: [16, 32] }).toBeLessThan(0.1)
+    await page.keyboard.press('Escape'); await expect(popup(page)).toHaveCount(0); await expect(trigger(page)).toBeFocused()
+    await page.emulateMedia({ reducedMotion: 'no-preference' })
+  }
+})
 
 test('weather UX: real same-origin nearest API is bounded and regional', async ({ request }) => {
   test.skip(process.env.START_WEATHER_LIVE !== '1', 'Optional real local API check; no weather provider quota is used.')
