@@ -50,10 +50,10 @@ export function visibleSites(data: QuickData): QuickSite[] {
 
 type Context = {
   data: QuickData; ready: boolean
+  canSave: (name: string, url: string, id?: string) => boolean
   save: (name: string, url: string, id?: string) => boolean
   pin: (site: QuickSite) => void; unpin: (id: string) => void; remove: (key: string) => void
   removeRecent: (key: string) => void; reorder: (sites: PinnedSite[]) => void
-  openSite: (url: string, name: string) => void
 }
 const QuickContext = createContext<Context | null>(null)
 
@@ -102,22 +102,26 @@ export function QuickAccessProvider({ children }: { children: ReactNode }) {
     document.addEventListener('click', clicked, true); document.addEventListener('auxclick', clicked, true)
     return () => { document.removeEventListener('click', clicked, true); document.removeEventListener('auxclick', clicked, true) }
   }, [quickAccess, ready, storageKey])
-  const save: Context['save'] = (name, value, id) => {
+  const canSave: Context['canSave'] = (name, value, id) => {
     const url = siteURL(value)
     if (!validName(name) || !url || (!id && current.current.pinned.length >= maxPinned)) return false
     const key = siteKey(url.href)
     if (id && !current.current.pinned.some(p => p.id === id)) return false
     if (current.current.pinned.some(p => p.id !== id && siteKey(p.url) === key)) return false
+    return true
+  }
+  const save: Context['save'] = (name, value, id) => {
+    if (!canSave(name, value, id)) return false
+    const url = siteURL(value)!
     commit(old => ({ ...old, pinned: id ? old.pinned.map(p => p.id === id ? { ...p, name: name.trim(), url: url.href } : p) : [...old.pinned, { id: crypto.randomUUID(), name: name.trim(), url: url.href, order: old.pinned.length }] }))
     return true
   }
-  return <QuickContext value={{ data, ready, save,
+  return <QuickContext value={{ data, ready, canSave, save,
     pin: site => { if (!current.current.pinned.some(p => siteKey(p.url) === site.key)) save(site.name, site.url) },
     unpin: id => commit(old => ({ ...old, pinned: old.pinned.filter(p => p.id !== id) })),
     remove: key => commit(old => ({ ...old, pinned: old.pinned.filter(p => siteKey(p.url) !== key), recent: old.recent.filter(r => siteKey(r.url) !== key) })),
     removeRecent: key => commit(old => ({ ...old, recent: old.recent.filter(r => siteKey(r.url) !== key) })),
     reorder: pinned => commit(old => pinned.length === old.pinned.length && new Set(pinned.map(p => p.id)).size === pinned.length && pinned.every(p => old.pinned.includes(p)) ? { ...old, pinned } : old),
-    openSite: (url, name) => { if (siteURL(url)) { record(url, name); window.open(url, '_blank', 'noopener,noreferrer') } },
   }}>{children}</QuickContext>
 }
 

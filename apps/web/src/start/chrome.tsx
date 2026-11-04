@@ -1,6 +1,6 @@
 import { cx } from '../styles/classes'
 import { Link } from '@tanstack/react-router'
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import { useMotionTiming } from '../motion'
 import { HouseIcon } from '@phosphor-icons/react/dist/ssr/House'
@@ -25,6 +25,7 @@ export function StartHeader() {
   const home = localizedPath('/', locale, region)
   const [brandOpen, setBrandOpen] = useState(false)
   const [userOpen, setUserOpen] = useState(false)
+  const unavailableId = useId()
   const transition = useMotionTiming()
   const animation = { initial: { opacity: 0, y: -4 }, animate: { opacity: 1, y: 0 }, exit: { opacity: 0, y: -4 }, transition }
   return <header className={styles.header}>
@@ -36,11 +37,12 @@ export function StartHeader() {
         <Popover.Positioner positionMethod="fixed" align="start" sideOffset={8} collisionPadding={16} className={styles.menuPositioner}>
           <Popover.Popup data-start-brand className={cx(styles.menu, styles.brandPopup)} render={<motion.div {...animation} />}>
             <Popover.Title className={styles.srOnly}>{m.navigation}</Popover.Title>
+            <p id={unavailableId} className={styles.srOnly}>{m.unavailable}</p>
             <nav aria-label={m.navigation}>
               {home === '/' ? <Popover.Close nativeButton={false} render={<Link to="/" />} className={styles.navItem}><HouseIcon size={17} aria-hidden="true" />{m.home}</Popover.Close>
-                : <button type="button" aria-disabled="true" title={m.unavailable} data-target={home} className={cx(styles.navItem, styles.pending)}><HouseIcon size={17} aria-hidden="true" />{m.home}</button>}
-              <button type="button" aria-disabled="true" title={m.unavailable} data-target={localizedPath('/sites', locale, region)} className={cx(styles.navItem, styles.pending)}><CompassIcon size={17} aria-hidden="true" />{m.sites}</button>
-              <button type="button" aria-disabled="true" title={m.unavailable} data-target={localizedPath('/games', locale, region)} className={cx(styles.navItem, styles.pending)}><GameControllerIcon size={17} aria-hidden="true" />{m.games}</button>
+                : <button type="button" aria-disabled="true" aria-describedby={unavailableId} data-target={home} className={cx(styles.navItem, styles.pending)}><HouseIcon size={17} aria-hidden="true" />{m.home}</button>}
+              <button type="button" aria-disabled="true" aria-describedby={unavailableId} data-target={localizedPath('/sites', locale, region)} className={cx(styles.navItem, styles.pending)}><CompassIcon size={17} aria-hidden="true" />{m.sites}</button>
+              <button type="button" aria-disabled="true" aria-describedby={unavailableId} data-target={localizedPath('/games', locale, region)} className={cx(styles.navItem, styles.pending)}><GameControllerIcon size={17} aria-hidden="true" />{m.games}</button>
             </nav>
           </Popover.Popup>
         </Popover.Positioner>
@@ -50,11 +52,11 @@ export function StartHeader() {
       <StartWeather />
       <StartSettings />
       <Menu.Root open={userOpen} onOpenChange={setUserOpen} modal={false} highlightItemOnHover={false}>
-        <Menu.Trigger aria-label={m.user} title={m.user} className={cx(controls.header, styles.action)}><UserCircleIcon size={21} aria-hidden="true" /></Menu.Trigger>
+        <Menu.Trigger aria-label={m.user} className={cx(controls.header, styles.action)}><UserCircleIcon size={21} aria-hidden="true" /></Menu.Trigger>
         <AnimatePresence>{userOpen && <Menu.Portal keepMounted>
           <Menu.Positioner positionMethod="fixed" align="end" sideOffset={8} className={styles.menuPositioner}>
             <Menu.Popup aria-label={m.user} data-start-user-menu className={styles.menu} render={<motion.div {...animation} />}>
-              <Menu.Item disabled closeOnClick={false} aria-label={`${m.login} (${m.unavailable})`} title={m.unavailable} className={styles.menuItem}>
+              <Menu.Item disabled closeOnClick={false} aria-label={`${m.login} (${m.unavailable})`} className={styles.menuItem}>
                 <SignInIcon size={18} aria-hidden="true" />{m.login}
               </Menu.Item>
             </Menu.Popup>

@@ -1,0 +1,13 @@
+// Shared by compact overlay forms; each input keeps its own sizing and font.
+@mixin surface {
+  border: 0;
+  outline: none;
+  box-shadow: none;
+  color: inherit;
+  background: color-mix(in srgb, var(--overlay-selected-surface) 45%, transparent);
+  transition: background-color 420ms cubic-bezier(0.22, 1, 0.36, 1);
+  &::placeholder { color: inherit; opacity: 0.65; }
+  &:focus { background: color-mix(in srgb, var(--overlay-selected-surface) 85%, transparent); }
+  &:focus-visible { background: var(--overlay-selected-surface); }
+  @media (prefers-reduced-motion: reduce) { transition-duration: 0s; }
+}

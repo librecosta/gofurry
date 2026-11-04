@@ -1,3 +1,5 @@
+@use '../styles/acrylic-input';
+
 .row {
   display: flex;
   justify-content: center;
@@ -22,8 +24,8 @@
   justify-content: flex-start;
   gap: 5px;
   width: 56px;
-  min-height: 66px;
-  padding: 5px 2px;
+  min-height: 74px;
+  padding: 4px 2px;
   border: 0;
   border-radius: 8px;
   color: var(--logo-brand);
@@ -31,41 +33,30 @@
   font: inherit;
   text-decoration: none;
   cursor: pointer;
-  outline: 2px solid transparent;
-  outline-offset: -2px;
-  transition: background-color 300ms var(--overlay-easing), color 300ms var(--overlay-easing);
-  &:hover { background: color-mix(in srgb, var(--search-chip-hover-background) 60%, transparent); }
-  &:active { background: var(--search-selected-background); }
-  &:focus-visible { outline-color: var(--logo-brand); }
+  outline: none;
+  &:hover:not(:disabled) .icon { background: color-mix(in srgb, var(--overlay-surface-hover) 75%, transparent); }
+  &:active:not(:disabled) .icon { background: var(--overlay-selected-surface); }
+  &:focus-visible .icon { outline-color: var(--logo-brand); }
   &:disabled { cursor: default; }
 }
-.icon { position: relative; display: grid; place-items: center; width: 36px; height: 36px; flex-shrink: 0; img { position: absolute; inset: 1px; object-fit: contain; } }
-.name { display: block; width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 11px; line-height: 1.4; text-align: center; }
-.more {
-  position: absolute; top: 0; right: -2px; width: 24px; height: 24px;
-  display: grid; place-items: center; padding: 0; border: 0; border-radius: 5px;
-  background: transparent; color: var(--logo-brand); cursor: pointer;
-  opacity: 0; outline: 2px solid transparent; outline-offset: -2px;
-  transition: opacity 300ms var(--overlay-easing), background-color 300ms var(--overlay-easing);
-  &:hover, &:active { background: var(--search-chip-hover-background); }
-  &:focus-visible { outline-color: var(--logo-brand); }
-  .entry:hover &, .entry:focus-within & { opacity: 1; }
-  @media (hover: none), (pointer: coarse) { opacity: 0.75; }
+.icon {
+  position: relative; display: grid; place-items: center; width: 44px; height: 44px; flex-shrink: 0;
+  border-radius: 10px; background: color-mix(in srgb, var(--overlay-surface) 60%, transparent);
+  backdrop-filter: blur(8px); outline: 2px solid transparent; outline-offset: -2px;
+  transition: background-color 300ms var(--overlay-easing);
+  img { position: absolute; inset: 5px; object-fit: contain; }
 }
-.manage { justify-content: flex-start; }
+.name { display: block; width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 11px; line-height: 1.4; text-align: center; }
 @media (max-width: 359px) { .entry, .tile { width: 54px; } }
 .manager.manager { width: min(520px, calc(100vw - 32px)); }
-.form { display: grid; grid-template-columns: 1fr 1.5fr; gap: 10px; margin-bottom: 16px;
+.form { display: grid; grid-template-columns: minmax(100px, 1fr) minmax(150px, 1.5fr) 32px 32px; align-items: end; gap: 8px; margin-bottom: 16px;
   label { min-width: 0; display: grid; gap: 6px; font-size: 12px; }
-  input { width: 100%; min-width: 0; padding: 8px; border: 0; border-radius: 6px; background: var(--overlay-surface); color: inherit; font: inherit; outline: 2px solid transparent; outline-offset: -2px;
-    transition: background-color 300ms var(--overlay-easing);
-    &:hover { background: var(--overlay-surface-hover); }
-    &:focus-visible { outline-color: var(--overlay-focus); background: var(--overlay-selected-surface); }
+  input { width: 100%; min-width: 0; height: 34px; padding: 8px; border-radius: 6px; font: inherit;
+    @include acrylic-input.surface;
   }
-  @media (max-width: 420px) { grid-template-columns: 1fr; }
+  @media (max-width: 519px) { grid-template-columns: minmax(0, 1fr) 32px 32px; label:first-child { grid-column: 1 / -1; } }
 }
-.formActions { grid-column: 1 / -1; display: flex; gap: 8px; }
-.textButton, .smallButton {
+.formAction, .smallButton {
   border: 0; border-radius: 5px; background: transparent; color: inherit; font: inherit; cursor: pointer;
   outline: 2px solid transparent; outline-offset: -2px;
   transition: background-color 300ms var(--overlay-easing), color 300ms var(--overlay-easing);
@@ -74,7 +65,7 @@
   &:focus-visible { outline-color: var(--overlay-focus); }
   &:disabled { opacity: 0.4; cursor: default; }
 }
-.textButton { padding: 6px 8px; font-size: 12px; }
+.formAction { display: grid; place-items: center; width: 32px; height: 34px; padding: 0; background: var(--overlay-surface); }
 .smallButton { display: grid; place-items: center; width: 26px; height: 30px; padding: 0; }
 .sectionTitle { font-size: 13px; font-weight: 500; margin: 12px 0 8px; }
 .hint { grid-column: 1 / -1; font-size: 12px; line-height: 1.6; margin: 6px 0; color: color-mix(in srgb, var(--overlay-text) 80%, transparent); }
@@ -91,4 +82,4 @@
 .drag { touch-action: none; cursor: grab; &:active { cursor: grabbing; } }
 .recent { margin-top: 12px; summary { width: fit-content; font-size: 13px; padding-block: 6px; cursor: pointer; border-radius: 3px; &:focus-visible { outline: 2px solid var(--overlay-focus); outline-offset: 2px; } } }
 .srOnly { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-@media (prefers-reduced-motion: reduce) { .tile, .more, .form input, .textButton, .smallButton { transition-duration: 0s; } }
+@media (prefers-reduced-motion: reduce) { .icon, .formAction, .smallButton { transition-duration: 0s; } }

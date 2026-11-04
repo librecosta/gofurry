@@ -1,5 +1,8 @@
 import { test, expect, type Page } from '@playwright/test'
 import { sampleMotion } from './motion'
+import { readdirSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 const region = process.env.WEB_REGION ?? 'CN'
 const path = region === 'CN' ? '/en/start' : '/start'
@@ -21,11 +24,11 @@ async function load(page: Page) {
 }
 async function manage(page: Page) { await page.locator('[data-quick-manage]').click(); await expect(manager(page)).toHaveCSS('opacity', '1') }
 async function close(page: Page) { await page.keyboard.press('Escape'); await expect(manager(page)).toHaveCount(0) }
-async function action(page: Page, name: string, item: string) {
-  await tiles(page).filter({ has: page.getByRole('link', { name, exact: true }) }).getByRole('button').click()
-  await expect(page.locator('[data-quick-menu]')).toHaveCSS('opacity', '1')
-  await page.getByRole('menuitem', { name: item, exact: true }).click()
-}
+test('interaction contract: React sources never add native title tooltips', () => {
+  const root = fileURLToPath(new URL('../src/', import.meta.url))
+  const offenders = readdirSync(root, { recursive: true }).filter(file => typeof file === 'string' && /\.tsx?$/.test(file) && /\btitle\s*=/.test(readFileSync(join(root, file), 'utf8')))
+  expect(offenders).toEqual([])
+})
 
 test('quick access: default and remembered SSR layout, smooth toggle and search retain one implementation', async ({ page, browser }) => {
   for (const enabled of [false, true]) {
@@ -91,10 +94,9 @@ async function closeSettings(page: Page) { await page.keyboard.press('Escape'); 
 test('quick access: add/edit, pointer and keyboard reorder, validation and complete manager exit', async ({ page }) => {
   await seed(page, [pin('GitHub', 0, 'github.com'), pin('Mozilla', 1, 'mozilla.org')]); await load(page); await manage(page)
   await manager(page).getByLabel('Name', { exact: true }).fill('Docs')
-  await manager(page).getByLabel('URL', { exact: true }).fill('javascript:alert(1)'); await manager(page).getByRole('button', { name: 'Add site', exact: true }).click()
-  await expect(manager(page).getByRole('alert')).toBeVisible()
-  await manager(page).getByLabel('URL', { exact: true }).fill('https://user:password@example.com'); await manager(page).getByRole('button', { name: 'Add site', exact: true }).click()
-  await expect(manager(page).getByRole('alert')).toBeVisible()
+  await manager(page).getByLabel('URL', { exact: true }).fill('javascript:alert(1)'); await expect(manager(page).getByRole('button', { name: 'Add site', exact: true })).toBeDisabled()
+  await manager(page).getByLabel('URL', { exact: true }).press('Enter'); expect((await stored(page)).pinned).toHaveLength(2)
+  await manager(page).getByLabel('URL', { exact: true }).fill('https://user:password@example.com'); await expect(manager(page).getByRole('button', { name: 'Add site', exact: true })).toBeDisabled()
   await manager(page).getByLabel('URL', { exact: true }).fill('https://developer.mozilla.org/path?private=1#section'); await manager(page).getByRole('button', { name: 'Add site', exact: true }).click()
   await expect(manager(page).locator('[data-quick-pin]')).toHaveCount(3)
   const id = (await stored(page)).pinned[2].id
@@ -114,7 +116,7 @@ test('quick access: add/edit, pointer and keyboard reorder, validation and compl
   await expect(manager(page)).toHaveCount(0); await expect(page.locator('[data-quick-manage]')).toBeFocused()
   await page.reload(); await expect(tiles(page).getByRole('link', { name: 'MDN Docs', exact: true })).toBeVisible()
   expect((await stored(page)).pinned.map((p: { order: number }) => p.order)).toEqual([0, 1, 2])
-  await action(page, 'MDN Docs', 'Edit'); await expect(manager(page)).toHaveCSS('opacity', '1')
+  await manage(page); await manager(page).getByRole('button', { name: 'Edit: MDN Docs', exact: true }).click()
   await expect(manager(page).getByLabel('Name', { exact: true })).toHaveValue('MDN Docs')
   expect(await manager(page).evaluate(el => el.contains(document.activeElement))).toBe(true)
   await close(page)
@@ -126,14 +128,15 @@ test('quick access: recent visits are local and sanitized; delete, unpin and act
   const opened = page.waitForEvent('popup'); await tiles(page).getByRole('link', { name: 'GitHub', exact: true }).click(); await (await opened).close()
   await expect.poll(async () => (await stored(page)).recent.length).toBe(1)
   expect((await stored(page)).recent[0].url).toBe('https://github.com/')
-  await tiles(page).getByRole('link', { name: 'GitHub', exact: true }).click({ button: 'right' })
-  await page.getByRole('menuitem', { name: 'Unpin', exact: true }).click()
+  await page.evaluate(() => document.addEventListener('contextmenu', event => { (window as unknown as { contextPrevented: boolean }).contextPrevented = event.defaultPrevented }, { once: true }))
+  await tiles(page).getByRole('link', { name: 'GitHub', exact: true }).click({ button: 'right' }); await page.keyboard.press('Escape')
+  expect(await page.evaluate(() => (window as unknown as { contextPrevented: boolean }).contextPrevented)).toBe(false)
+  await expect(tiles(page).getByRole('button')).toHaveCount(0); await expect(page.locator('[data-quick-menu]')).toHaveCount(0)
+  await manage(page); await manager(page).getByRole('button', { name: 'Unpin: GitHub', exact: true }).click()
   await expect(tiles(page)).toHaveAttribute('data-pinned', 'false')
-  await action(page, 'GitHub', 'Pin to quick access'); await expect(tiles(page)).toHaveAttribute('data-pinned', 'true')
-  await action(page, 'GitHub', 'Delete')
-  const menuExit = await sampleMotion(page.locator('[data-quick-menu]'))
-  expect(menuExit.some(f => f.opacity > 0 && f.opacity < 1)).toBe(true)
-  expect(menuExit.at(-1)!.t).toBeGreaterThan(250)
+  await manager(page).getByText('Recent visits (1)', { exact: true }).click()
+  await manager(page).getByRole('button', { name: 'Pin to quick access: GitHub', exact: true }).click(); await expect(tiles(page)).toHaveAttribute('data-pinned', 'true')
+  await manager(page).getByRole('button', { name: 'Delete: GitHub', exact: true }).click(); await close(page)
   await expect(tiles(page)).toHaveCount(0)
   await expect(page.locator('[data-quick-manage]')).toBeFocused()
   expect((await stored(page)).pinned).toEqual([]); expect((await stored(page)).recent).toEqual([])
@@ -143,11 +146,6 @@ test('quick access: recent visits are local and sanitized; delete, unpin and act
   await expect(tiles(page).getByRole('link', { name: 'GitHub', exact: true })).toBeVisible()
   expect((await stored(page)).recent[0].count).toBe(1)
   expect(await page.evaluate(() => document.cookie)).not.toContain('github.com')
-  await tiles(page).getByRole('link', { name: 'GitHub', exact: true }).focus(); await page.keyboard.press('Shift+F10')
-  await expect(page.locator('[data-quick-menu]')).toHaveCSS('opacity', '1')
-  await expect(page.getByRole('menuitem', { name: 'Open', exact: true })).toBeFocused()
-  await page.keyboard.press('Escape'); await expect(page.locator('[data-quick-menu]')).toHaveCount(0)
-  await expect(tiles(page).getByRole('button')).toBeFocused()
   await manage(page); await manager(page).getByText('Recent visits (1)', { exact: true }).click()
   await manager(page).getByRole('button', { name: 'Pin to quick access: GitHub', exact: true }).click()
   expect((await stored(page)).pinned).toHaveLength(1)
@@ -172,20 +170,34 @@ test('quick access: responsive 12/10/8/4 slots preserve data, deduplicate, theme
   await page.screenshot({ path: testInfo.outputPath('quick-desktop-dark.png') })
   await page.emulateMedia({ colorScheme: 'light' }); await page.screenshot({ path: testInfo.outputPath('quick-desktop-light.png') })
   await page.setViewportSize({ width: 390, height: 844 }); await page.screenshot({ path: testInfo.outputPath('quick-mobile.png') })
-  await manage(page); await page.screenshot({ path: testInfo.outputPath('quick-mobile-manager.png') }); await close(page)
+  await manage(page)
+  for (const [width, height] of [[768, 360], [390, 844], [375, 667], [320, 480]]) {
+    await page.setViewportSize({ width, height })
+    const bounds = (await manager(page).boundingBox())!
+    const fields = manager(page).locator('form input, form button')
+    for (const box of await fields.evaluateAll(els => els.map(el => { const r = el.getBoundingClientRect(); return { x: r.x, right: r.right, width: r.width } }))) {
+      expect(box.x).toBeGreaterThanOrEqual(bounds.x); expect(box.right).toBeLessThanOrEqual(bounds.x + bounds.width)
+    }
+    for (const input of await manager(page).locator('form input').all()) expect((await input.boundingBox())!.width).toBeGreaterThan(150)
+    expect(await page.evaluate(() => [document.documentElement.scrollWidth, document.documentElement.scrollHeight])).toEqual([width, height])
+  }
+  await page.setViewportSize({ width: 390, height: 844 }); await page.screenshot({ path: testInfo.outputPath('quick-mobile-manager.png') }); await close(page)
   await page.emulateMedia({ reducedMotion: 'reduce' }); await page.reload(); await manage(page); await close(page)
 })
 
-test('quick access: touch actions have the same pin/delete and dialog access', async ({ browser }) => {
+test('quick access: touch management retains pin/edit/delete without per-site menus', async ({ browser }) => {
   const context = await browser.newContext({ baseURL: origin, viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })
   const page = await context.newPage()
   await seed(page, [], [{ url: 'https://github.com/', name: 'GitHub', count: 1, lastVisited: Date.now() }]); await load(page)
-  await tiles(page).getByRole('button').tap(); await expect(page.locator('[data-quick-menu]')).toHaveCSS('opacity', '1')
-  await page.getByRole('menuitem', { name: 'Pin to quick access', exact: true }).tap()
-  await expect(tiles(page)).toHaveAttribute('data-pinned', 'true')
-  await tiles(page).getByRole('button').tap(); await page.getByRole('menuitem', { name: 'Delete', exact: true }).tap()
-  await expect(tiles(page)).toHaveCount(0)
+  await expect(tiles(page).getByRole('button')).toHaveCount(0)
   await page.locator('[data-quick-manage]').tap(); await expect(manager(page)).toHaveCSS('opacity', '1')
+  await manager(page).getByText('Recent visits (1)', { exact: true }).tap()
+  await manager(page).getByRole('button', { name: 'Pin to quick access: GitHub', exact: true }).tap()
+  await expect(tiles(page)).toHaveAttribute('data-pinned', 'true')
+  await manager(page).getByRole('button', { name: 'Edit: GitHub', exact: true }).tap()
+  await manager(page).getByLabel('Name', { exact: true }).fill('GitHub Mobile'); await manager(page).getByRole('button', { name: 'Save', exact: true }).tap()
+  await manager(page).getByRole('button', { name: 'Delete: GitHub Mobile', exact: true }).tap()
+  await expect(tiles(page)).toHaveCount(0)
   await manager(page).getByRole('button', { name: 'Close quick access manager' }).tap(); await expect(manager(page)).toHaveCount(0)
   await context.close()
 })
@@ -213,3 +225,74 @@ test('quick access: pinned priority, recent fill, origin deduplication and regio
   expect(await page.evaluate(otherKey => JSON.parse(localStorage.getItem(otherKey)!).pinned[0].name, otherKey)).toBe('Foreign')
   await expect(page.getByRole('link', { name: 'Foreign', exact: true })).toHaveCount(0)
 })
+
+test('quick access: icon-only hover, compact stable form and shared 420ms input focus in both system themes', async ({ page }, testInfo) => {
+  test.setTimeout(60000)
+  await seed(page); await load(page)
+  await expect(page.locator('[data-quick-access]')).toHaveCSS('opacity', '1')
+  for (const scheme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme: scheme }); await page.mouse.move(4, 500)
+    const link = tiles(page).getByRole('link'), card = link.locator(':scope > span').first(), name = link.locator(':scope > span').last()
+    await expect(link).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)'); await expect(name).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
+    const idleCard = await card.evaluate(el => getComputedStyle(el).backgroundColor)
+    expect(idleCard).not.toBe('rgba(0, 0, 0, 0)')
+    await expect(card).toHaveCSS('box-shadow', 'none'); await expect(card).toHaveCSS('border-top-width', '0px'); await expect(card).toHaveCSS('transition-duration', '0.3s')
+    await name.hover(); await expect(card).not.toHaveCSS('background-color', idleCard)
+    await expect(link).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)'); await expect(name).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
+    await page.keyboard.press('Tab'); await link.focus(); await expect(link).toHaveCSS('outline-style', 'none')
+    expect(await card.evaluate(el => getComputedStyle(el).outlineColor)).not.toBe('rgba(0, 0, 0, 0)')
+    await page.locator('[data-quick-manage]').click()
+    const frames = (await sampleMotion(manager(page))).filter(f => f.opacity > 0)
+    expect(frames.some(f => f.opacity < 1)).toBe(true)
+    expect(Math.max(...frames.map(f => f.w)) - Math.min(...frames.map(f => f.w))).toBeLessThan(0.2)
+    expect(Math.max(...frames.map(f => f.h)) - Math.min(...frames.map(f => f.h))).toBeLessThan(0.2)
+    expect(frames.every(f => Math.abs(f.x + f.w / 2 - 640) < 0.2)).toBe(true)
+    const field = manager(page).getByLabel('Name', { exact: true }), url = manager(page).getByLabel('URL', { exact: true })
+    const confirm = manager(page).getByRole('button', { name: 'Add site', exact: true }), cancel = manager(page).getByRole('button', { name: 'Cancel edit', exact: true })
+    const boxes = await Promise.all([field, url, confirm, cancel].map(el => el.boundingBox()))
+    expect(boxes.every(r => Math.abs(r!.y - boxes[0]!.y) < 0.2)).toBe(true)
+    await expect(confirm).toBeDisabled(); await expect(cancel).toBeDisabled(); await expect(confirm).toHaveText(''); await expect(cancel).toHaveText('')
+    const disabledColor = await cancel.evaluate(el => getComputedStyle(el).backgroundColor)
+    await cancel.hover(); await page.waitForTimeout(350); await expect(cancel).toHaveCSS('background-color', disabledColor)
+    await confirm.evaluate((el: HTMLButtonElement) => el.click()); expect((await stored(page)).pinned).toHaveLength(1)
+    const dismiss = manager(page).getByRole('button', { name: 'Close quick access manager' })
+    const nameSurface = await inputSurface(page, field, dismiss), urlSurface = await inputSurface(page, url, dismiss)
+    expect(nameSurface).toEqual(urlSurface)
+    await manager(page).getByRole('button', { name: 'Edit: GitHub', exact: true }).click()
+    await expect(cancel).toBeEnabled(); await expect(manager(page).getByRole('button', { name: 'Save', exact: true })).toBeEnabled()
+    const editingBoxes = await Promise.all([field, url, manager(page).getByRole('button', { name: 'Save', exact: true }), cancel].map(el => el.boundingBox()))
+    expect(editingBoxes.map(r => [r!.x, r!.y, r!.width, r!.height])).toEqual(boxes.map(r => [r!.x, r!.y, r!.width, r!.height]))
+    await cancel.click(); await expect(field).toHaveValue(''); await expect(url).toHaveValue(''); await expect(cancel).toBeDisabled()
+    await expect(page.locator('[title]')).toHaveCount(0)
+    await page.screenshot({ path: testInfo.outputPath(`manager-${scheme}.png`) }); await close(page)
+    await page.locator('[data-start-weather]').click(); const weather = page.locator('[data-start-weather-details]')
+    await expect(weather).toHaveCSS('opacity', '1'); await weather.getByRole('button', { name: 'Choose city', exact: true }).click()
+    const citySurface = await inputSurface(page, weather.getByRole('combobox'), weather.getByRole('button', { name: 'Back to weather', exact: true }))
+    expect(citySurface).toEqual(nameSurface)
+    await page.keyboard.press('Escape'); await expect(weather.getByRole('button', { name: 'Choose city', exact: true })).toBeFocused()
+    await page.keyboard.press('Escape'); await expect(weather).toHaveCount(0)
+  }
+})
+
+async function inputSurface(page: Page, field: import('@playwright/test').Locator, blur: import('@playwright/test').Locator) {
+  await blur.focus(); await page.mouse.move(4, 500); await page.waitForTimeout(450)
+  await expect(field).toHaveCSS('outline-style', 'none'); await expect(field).toHaveCSS('box-shadow', 'none')
+  await expect(field).toHaveCSS('border-top-width', '0px'); await expect(field).toHaveCSS('transition-duration', '0.42s')
+  await expect(field).toHaveCSS('transition-timing-function', 'cubic-bezier(0.22, 1, 0.36, 1)')
+  const idle = await field.evaluate(el => getComputedStyle(el).backgroundColor)
+  await field.hover(); await page.waitForTimeout(450); await expect(field).toHaveCSS('background-color', idle)
+  const [focusFrames] = await Promise.all([sampleSurface(field), field.focus()])
+  expect(new Set(focusFrames).size).toBeGreaterThan(3)
+  const focused = focusFrames.at(-1)!
+  expect(focused).not.toBe(idle)
+  const [blurFrames] = await Promise.all([sampleSurface(field), blur.focus()])
+  expect(new Set(blurFrames).size).toBeGreaterThan(3); await expect(field).toHaveCSS('background-color', idle)
+  return { idle, focused }
+}
+async function sampleSurface(field: import('@playwright/test').Locator) {
+  return field.evaluate(el => new Promise<string[]>(resolve => {
+    const values: string[] = [], end = performance.now() + 480
+    const sample = () => { values.push(getComputedStyle(el).backgroundColor); if (performance.now() < end) requestAnimationFrame(sample); else resolve(values) }
+    requestAnimationFrame(sample)
+  }))
+}

@@ -28,4 +28,6 @@ Read `.agents/architecture.md` for boundaries and `README.md` for setup. `docs/v
 - Verify CSS Module pseudo-class selectors, matching and specificity in the browser, including overlapping states.
 - Use existing semantic tokens for focus feedback; suppress native black outlines only within components that provide their own accessible focus indicator.
 - Never clear outlines globally. Each component owns its keyboard accessibility.
+- Native HTML `title` tooltips are forbidden on all interactive controls and their wrappers, including attributes injected through props or DOM APIs. Use visible text / `aria-label` for accessible names and `aria-describedby` for necessary descriptions. Preserve document `<title>` and Dialog/Popover title semantics; do not add a tooltip library to replace removed native tips.
+- Compact overlay text inputs share `styles/_acrylic-input.scss`: no hover surface changes, outline, border or shadow; focus/blur changes the semantic background over 420ms with reduced-motion support. Keyboard focus must remain clearly visible.
 - For new inputs, buttons, menus and dialogs, check pointer hover/click and keyboard Tab focus in both Light and Dark themes.

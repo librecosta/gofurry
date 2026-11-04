@@ -177,7 +177,8 @@ test('start: logo navigation has stable first-frame placement and unavailable de
   for (const button of await buttons.all()) {
     const bounds = (await button.boundingBox())!
     await page.mouse.click(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2)
-    await expect(page).toHaveURL(englishPath); await expect(button).toHaveAttribute('title', 'Not available yet')
+    await expect(page).toHaveURL(englishPath); await expect(button).toHaveAccessibleDescription('Not available yet')
+    await expect(button).not.toHaveAttribute('title')
   }
   const final = (await popup.boundingBox())!, samples = await page.evaluate(() => (window as unknown as { navigationFrames: { x: number; y: number; w: number; h: number; opacity: number }[] }).navigationFrames)
   const visible = samples.filter(s => s.opacity > 0.01)

@@ -223,8 +223,8 @@ export function SearchBox() {
           onClick={(event) => chooseCategory(id, event.currentTarget)} className={cx(styles.chip, styles.category, category === id && styles.selected)}>{m.category[id]}</button>)}
       </div>
     </div>
-    {categoryEdges.left && <span aria-hidden="true" title={m.moreCategories} data-category-edge="left" className={cx(styles.edge, styles.edgeLeft)}><CaretLeftIcon size={12} /></span>}
-    {categoryEdges.right && <span aria-hidden="true" title={m.moreCategories} data-category-edge="right" className={cx(styles.edge, styles.edgeRight)}><CaretRightIcon size={12} /></span>}
+    {categoryEdges.left && <span aria-hidden="true" data-category-edge="left" className={cx(styles.edge, styles.edgeLeft)}><CaretLeftIcon size={12} /></span>}
+    {categoryEdges.right && <span aria-hidden="true" data-category-edge="right" className={cx(styles.edge, styles.edgeRight)}><CaretRightIcon size={12} /></span>}
     </div>
     <div className={styles.anchor}>
     <form role="search" aria-label={m.search} method="get" action={defaultAction} target="_blank" rel="noopener noreferrer" acceptCharset="UTF-8"
@@ -256,12 +256,12 @@ export function SearchBox() {
           if (panelRef.current === 'suggestions' && !popup.current?.contains(event.relatedTarget)) closePanel()
         }}
         className={cx(styles.input, !!keyword && styles.inputWithClear)} />
-      {!!keyword && <motion.button type="button" aria-label={m.clear} title={m.clear} data-search-clear initial={false} animate={{ opacity: 0.72 }} whileHover={{ opacity: 0.96 }} whileTap={{ opacity: 1 }} transition={hoverTransition}
+      {!!keyword && <motion.button type="button" aria-label={m.clear} data-search-clear initial={false} animate={{ opacity: 0.72 }} whileHover={{ opacity: 0.96 }} whileTap={{ opacity: 1 }} transition={hoverTransition}
         onPointerDown={(event) => event.preventDefault()} onClick={() => {
           cancelRequest(); closePanel(); composing.current = false; setKeyword('')
           skipFocusRequest.current = true; input.current?.focus({ preventScroll: true }); skipFocusRequest.current = false
         }} className={cx(styles.submit, styles.clear)}><XIcon size={18} aria-hidden="true" /></motion.button>}
-      <motion.button type="submit" aria-label={m.submit} title={m.submit} className={styles.submit} initial={false} animate={{ opacity: 0.72 }} whileHover={{ opacity: 0.96 }} whileTap={{ opacity: 1 }} transition={hoverTransition}><MagnifyingGlassIcon size={20} weight="bold" aria-hidden="true" /></motion.button>
+      <motion.button type="submit" aria-label={m.submit} className={styles.submit} initial={false} animate={{ opacity: 0.72 }} whileHover={{ opacity: 0.96 }} whileTap={{ opacity: 1 }} transition={hoverTransition}><MagnifyingGlassIcon size={20} weight="bold" aria-hidden="true" /></motion.button>
       <input type="hidden" name="adlt" value="strict" />
     </form>
       <AnimatePresence>{panel && <SearchPanel key="search-panel" ref={popup} id={panelId} label={panel === 'platforms' ? m.platforms : m.suggestions} kind={panel}
