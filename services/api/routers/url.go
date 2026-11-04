@@ -8,7 +8,7 @@ import (
 	"github.com/librecosta/gofurry/services/api/internal/handlers"
 )
 
-func registerURLs(v1 fiber.Router, backgrounds, suggestions, location, weather, cities fiber.Handler) {
+func registerURLs(v1 fiber.Router, backgrounds, suggestions, location, weather, cities, nearestCity fiber.Handler) {
 	v1.Get("/status", handlers.Status)
 	v1.Get("/start/backgrounds", backgrounds)
 	// Per-client and deployment-wide bounds also cover cache misses/unique queries.
@@ -25,4 +25,5 @@ func registerURLs(v1 fiber.Router, backgrounds, suggestions, location, weather, 
 	v1.Get("/start/location", limited(600, func(fiber.Ctx) string { return "location" }), limited(30, func(c fiber.Ctx) string { return c.IP() }), location)
 	v1.Get("/start/weather", limited(120, func(fiber.Ctx) string { return "weather" }), limited(20, func(c fiber.Ctx) string { return c.IP() }), weather)
 	v1.Get("/start/cities", limited(240, func(fiber.Ctx) string { return "cities" }), limited(40, func(c fiber.Ctx) string { return c.IP() }), cities)
+	v1.Post("/start/cities/nearest", limited(60, func(fiber.Ctx) string { return "nearest-city" }), limited(6, func(c fiber.Ctx) string { return c.IP() }), nearestCity)
 }

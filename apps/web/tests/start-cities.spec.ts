@@ -69,13 +69,16 @@ test('cities: debounce, IME, keyboard selection, ID-only persistence, new tab an
   expect(queries).toEqual(['成都']); await expect(popup(page).getByRole('option')).toContainText('Sichuan · CN')
   await input.press('Enter'); await expect(trigger(page)).toContainText('22.5°C')
   await expect(popup(page).getByRole('button', { name: 'Choose city', exact: true })).toBeFocused()
-  await expect(popup(page).getByRole('link', { name: 'GeoNames', exact: true })).toHaveAttribute('href', 'https://www.geonames.org')
+  await expect(popup(page).getByRole('link', { name: 'GeoNames', exact: true })).toHaveCount(0)
   expect(await page.evaluate(key => localStorage.getItem(key), storageKey)).toBe('1815286')
   const before = calls.length
   await page.reload(); await expect(trigger(page)).toContainText('22.5°C'); expect(calls.slice(before)).toEqual(['1815286'])
   const another = await context.newPage(), tabCalls: (string | null)[] = []
   await fixtures(another, tabCalls); await another.goto(path); await expect(trigger(another)).toContainText('22.5°C'); expect(tabCalls).toEqual(['1815286']); await another.close()
-  await open(page); await picker(page); await popup(page).getByRole('button', { name: 'Automatic location' }).click()
+  await open(page); await picker(page)
+  await expect(popup(page).getByRole('link', { name: 'GeoNames', exact: true })).toHaveAttribute('href', 'https://www.geonames.org')
+  await expect(popup(page).getByRole('link', { name: 'DB-IP', exact: true })).toHaveCount(0)
+  await popup(page).getByRole('button', { name: 'Use network location' }).click()
   await expect(trigger(page)).toHaveText('Weather'); await expect(popup(page)).toContainText('Weather unavailable')
   expect(await page.evaluate(key => localStorage.getItem(key), storageKey)).toBeNull(); expect(calls.at(-1)).toBeNull()
   await expect(popup(page).getByRole('button', { name: 'Choose city', exact: true })).toBeFocused()

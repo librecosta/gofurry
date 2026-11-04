@@ -79,7 +79,7 @@ func New(logger zerolog.Logger, cfg platform.Config) *Server {
 			logger.Info().Msg("weather city catalog loaded")
 		}
 	}
-	routers.Register(s.App, s.ready.Load, handlers.Backgrounds(objects), handlers.Suggestions(suggestions), handlers.Location(cities), handlers.Weather(cities, weatherService, catalog), handlers.Cities(catalog))
+	routers.Register(s.App, s.ready.Load, handlers.Backgrounds(objects), handlers.Suggestions(suggestions), handlers.Location(cities), handlers.Weather(cities, weatherService, catalog), handlers.Cities(catalog), handlers.NearestCity(catalog))
 	s.App.Hooks().OnListen(func(data fiber.ListenData) error {
 		s.ready.Store(true)
 		logger.Info().Str("host", data.Host).Str("port", data.Port).Msg("listening")

@@ -2,6 +2,7 @@ package cities
 
 import (
 	"encoding/json/v2"
+	"math"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -85,5 +86,42 @@ func TestLocalGeoNamesCatalog(t *testing.T) {
 			t.Fatal("local city query failed", query)
 		}
 		t.Logf("%s: %s / %s / %s / %s (ID %s)", query, found[0].Names.ZH, found[0].Names.EN, found[0].Admin, found[0].CountryCode, found[0].ID)
+	}
+	if city := catalog.Nearest(30.67, 104.07); city == nil || city.ID != "1815286" {
+		t.Fatal("local nearest-city lookup failed")
+	}
+}
+
+func TestNearestCity(t *testing.T) {
+	catalog, err := Open(catalogFixture(t, "["+chengdu+"]"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, point := range [][2]float64{{30.670123, 104.070456}, {30.8, 104.2}} {
+		city := catalog.Nearest(point[0], point[1])
+		if city == nil || city.ID != "1815286" {
+			t.Fatal("nearby city not found")
+		}
+		city.Name = "mutated"
+		if catalog.Nearest(point[0], point[1]).Name != "Chengdu" {
+			t.Fatal("catalog was mutated")
+		}
+	}
+	for _, point := range [][2]float64{{31.2, 104.07}, {0, 0}, {91, 0}, {0, -181}, {math.NaN(), 0}, {0, math.Inf(1)}} {
+		if catalog.Nearest(point[0], point[1]) != nil {
+			t.Fatal("invalid/distant position accepted")
+		}
+	}
+	if (*Catalog)(nil).Nearest(30.67, 104.07) != nil {
+		t.Fatal("disabled catalog must degrade")
+	}
+	// Haversine handles the date line without treating adjacent longitudes as distant.
+	dateline := strings.NewReplacer("30.67", "0", "104.07", "179.99").Replace(chengdu)
+	other, err := Open(catalogFixture(t, "["+dateline+"]"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if other.Nearest(0, -179.99) == nil {
+		t.Fatal("date-line match failed")
 	}
 }

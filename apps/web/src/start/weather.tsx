@@ -1,19 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Popover } from '@base-ui/react/popover'
 import { AnimatePresence, motion, useIsPresent } from 'motion/react'
-import { SunIcon } from '@phosphor-icons/react/dist/ssr/Sun'
-import { CloudSunIcon } from '@phosphor-icons/react/dist/ssr/CloudSun'
-import { CloudIcon } from '@phosphor-icons/react/dist/ssr/Cloud'
-import { CloudRainIcon } from '@phosphor-icons/react/dist/ssr/CloudRain'
-import { CloudSnowIcon } from '@phosphor-icons/react/dist/ssr/CloudSnow'
-import { CloudFogIcon } from '@phosphor-icons/react/dist/ssr/CloudFog'
-import { CloudLightningIcon } from '@phosphor-icons/react/dist/ssr/CloudLightning'
-import { CloudSlashIcon } from '@phosphor-icons/react/dist/ssr/CloudSlash'
-import { ThermometerIcon } from '@phosphor-icons/react/dist/ssr/Thermometer'
-import { WindIcon } from '@phosphor-icons/react/dist/ssr/Wind'
-import { QuestionIcon } from '@phosphor-icons/react/dist/ssr/Question'
 import { MapPinIcon } from '@phosphor-icons/react/dist/ssr/MapPin'
-import { ArrowLeftIcon } from '@phosphor-icons/react/dist/ssr/ArrowLeft'
 import { usePreferences } from '../preferences'
 import { useMotionTiming } from '../motion'
 import { useStartMessages } from './messages'
@@ -22,22 +10,7 @@ import styles from './weather.module.scss'
 import controls from './controls.module.scss'
 import { cx } from '../styles/classes'
 import { WeatherCityPicker } from './weather-city-picker'
-
-// Documented common conditions only; future/unknown codes stay neutral.
-// https://dev.qweather.com/docs/api/weather/weather-conditions/
-function conditionIcon(code?: string) {
-  if (!code) return CloudSlashIcon
-  if (code === '100') return SunIcon
-  if (['101', '102', '103'].includes(code)) return CloudSunIcon
-  if (code === '104') return CloudIcon
-  if (['302', '303', '304'].includes(code)) return CloudLightningIcon
-  if (['300', '301', '305', '306', '307', '308', '309', '310', '311', '312', '313', '314', '315', '316', '317', '318', '399'].includes(code)) return CloudRainIcon
-  if (['400', '401', '402', '403', '404', '405', '406', '407', '408', '409', '410', '499'].includes(code)) return CloudSnowIcon
-  if (['500', '501', '502', '509', '510', '511', '512', '513', '514', '515'].includes(code)) return CloudFogIcon
-  if (['503', '504', '507', '508'].includes(code)) return WindIcon
-  if (['900', '901'].includes(code)) return ThermometerIcon
-  return QuestionIcon
-}
+import { WeatherIcon } from './weather-icon'
 
 function useWeather() {
   const { locale, region } = usePreferences()
@@ -105,13 +78,12 @@ export function StartWeather() {
   const transition = useMotionTiming()
   const city = data.city?.[locale]
   const temperature = data.weather ? weatherTemperature(data.weather.temperature_c, locale) : null
-  const Icon = conditionIcon(data.weather?.condition_code)
   const label = temperature ? `${city}, ${data.weather!.condition_text}, ${temperature}` : m.unavailable
   const back = () => { restoreCityFocus.current = true; setSelecting(false) }
   return <Popover.Root open={open} onOpenChange={value => { setOpen(value); if (value) { setSelecting(false); restoreCityFocus.current = false } }}>
     <Popover.Trigger data-start-weather data-weather-state={data.state} aria-label={`${m.details}: ${label}`} className={cx(controls.header, styles.trigger)}>
       <span className={temperature ? styles.city : undefined}>{temperature ? city : m.title}</span>
-      <Icon size={20} aria-hidden="true" data-weather-icon={data.weather?.condition_code ?? 'unavailable'} />
+      <WeatherIcon code={data.weather?.condition_code} />
       {temperature && <span className={styles.temperature}>{temperature}</span>}
     </Popover.Trigger>
     <AnimatePresence>{open && <Popover.Portal keepMounted>
@@ -122,11 +94,10 @@ export function StartWeather() {
           <Popover.Title className={styles.title}>{selecting ? m.selectCity : city ?? m.title}</Popover.Title>
           <div className={styles.views}><AnimatePresence initial={false}>
           {selecting ? <WeatherView key="cities">
-            <button className={styles.cityAction} type="button" aria-label={m.back} onClick={back}><ArrowLeftIcon size={16} aria-hidden="true" />{m.back}</button>
-            <WeatherCityPicker selected={cityId} onBack={back} onSelect={id => { selectCity(id); back() }} />
+            <WeatherCityPicker selected={cityId} active={open} locationSource={data.locationSource} onBack={back} onSelect={id => { selectCity(id); back() }} />
           </WeatherView> : <WeatherView key="details" onEnter={() => { if (open && restoreCityFocus.current) { cityButton.current?.focus(); restoreCityFocus.current = false } }}>
           {data.weather ? <>
-            <div className={styles.current}><Icon size={28} aria-hidden="true" /><span>{temperature}</span></div>
+            <div className={styles.current}><WeatherIcon code={data.weather.condition_code} size={28} /><span>{temperature}</span></div>
             <Popover.Description className={styles.description}>{data.weather.condition_text}</Popover.Description>
             {data.state === 'stale' && <p className={styles.note}>{m.stale}</p>}
             <p className={styles.note}>{m.fetched} <time dateTime={data.weather.fetched_at}>{new Intl.DateTimeFormat(locale === 'zh' ? 'zh-CN' : 'en', {
@@ -135,10 +106,9 @@ export function StartWeather() {
           </> : <Popover.Description className={styles.description}>{m.unavailable}</Popover.Description>}
           <div className={styles.sources}>
             <p>{m.weatherSource} <a href="https://www.qweather.com" target="_blank" rel="noopener noreferrer">{m.provider}</a></p>
-            <p>{data.locationSource === 'manual' ? m.citySource : m.locationSource} <a href={data.locationSource === 'manual' ? 'https://www.geonames.org' : 'https://db-ip.com'} target="_blank" rel="noopener noreferrer">{data.locationSource === 'manual' ? 'GeoNames' : 'DB-IP'}</a></p>
             {data.attributions.length > 0 && <ul>{data.attributions.map((text, index) => {
               const url = safeAttributionURL(text)
-              return <li key={`${index}:${text}`}>{url ? <a href={url} target="_blank" rel="noopener noreferrer">{text}</a> : text}</li>
+              return <li key={`${index}:${text}`}>{url ? <a href={url} target="_blank" rel="noopener noreferrer">{m.sourceDetails}</a> : text}</li>
             })}</ul>}
           </div>
           <button ref={cityButton} type="button" className={styles.cityAction} onClick={() => setSelecting(true)}><MapPinIcon size={16} aria-hidden="true" />{m.selectCity}</button>

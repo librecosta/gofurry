@@ -119,6 +119,33 @@ func (c *Catalog) Resolve(id string) *geoip.Location {
 		Latitude: math.Round(*e.Latitude*100) / 100, Longitude: math.Round(*e.Longitude*100) / 100}
 }
 
+// Nearest only matches the existing city catalog, within 50 km. Coordinates are
+// transient inputs; no reverse-geocoding service, coordinate cache or new reader.
+func (c *Catalog) Nearest(latitude, longitude float64) *City {
+	if c == nil || math.IsNaN(latitude) || math.IsNaN(longitude) || math.IsInf(latitude, 0) || math.IsInf(longitude, 0) || math.Abs(latitude) > 90 || math.Abs(longitude) > 180 {
+		return nil
+	}
+	latitude, longitude = math.Round(latitude*100)/100, math.Round(longitude*100)/100
+	const radians = math.Pi / 180
+	best, distance := -1, 50.0
+	for i, e := range c.entries {
+		if math.Abs(*e.Latitude-latitude) > 0.5 {
+			continue
+		}
+		dLat, dLon := (*e.Latitude-latitude)*radians, (*e.Longitude-longitude)*radians
+		a := math.Pow(math.Sin(dLat/2), 2) + math.Cos(latitude*radians)*math.Cos(*e.Latitude*radians)*math.Pow(math.Sin(dLon/2), 2)
+		d := 6371 * 2 * math.Asin(math.Sqrt(max(0, min(1, a))))
+		if d < distance {
+			best, distance = i, d
+		}
+	}
+	if best < 0 {
+		return nil
+	}
+	city := c.entries[best].City
+	return &city
+}
+
 // A bounded local scan avoids a second search service or an unbounded query cache.
 // Exact/prefix names rank ahead of substrings; population resolves equal matches.
 func (c *Catalog) Search(q string) []City {

@@ -1,3 +1,9 @@
+@property --weather-scrollbar-alpha {
+  syntax: '<percentage>';
+  inherits: true;
+  initial-value: 22%;
+}
+
 .trigger {
   display: inline-flex;
   align-items: center;
@@ -62,6 +68,13 @@
 
 .views { display: grid; }
 .view { grid-area: 1 / 1; align-self: start; min-width: 0; }
+.cityToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  .cityAction { gap: 4px; padding-inline: 3px; margin-top: 0; font-size: 11px; white-space: nowrap; }
+}
 .cityAction {
   display: inline-flex;
   align-items: center;
@@ -79,8 +92,8 @@
   outline: 2px solid transparent;
   outline-offset: -2px;
   transition: background-color 300ms var(--overlay-easing);
-  &:hover { background: var(--overlay-surface-hover); }
-  &:active { background: var(--overlay-selected-surface); }
+  &:hover:not(:disabled) { background: var(--overlay-surface-hover); }
+  &:active:not(:disabled) { background: var(--overlay-selected-surface); }
   &:focus-visible { outline-color: var(--overlay-focus); }
   &:disabled { opacity: 0.55; cursor: not-allowed; }
 }
@@ -96,13 +109,33 @@
   font-size: 12px;
   background: color-mix(in srgb, var(--overlay-selected-surface) 45%, transparent);
   color: inherit;
-  outline: 2px solid transparent;
-  outline-offset: -2px;
+  outline: none;
+  transition: background-color 320ms cubic-bezier(0.22, 1, 0.36, 1);
   &::placeholder { color: inherit; opacity: 0.65; }
   &:hover { background: var(--overlay-surface-hover); }
-  &:focus-visible { outline-color: var(--overlay-focus); }
+  &:focus { background: color-mix(in srgb, var(--overlay-selected-surface) 85%, transparent); }
+  &:focus-visible { background: var(--overlay-selected-surface); }
 }
-.cityList { margin-top: 6px; max-height: 152px; overflow-y: auto; overscroll-behavior: contain; }
+.cityList {
+  margin-top: 6px;
+  max-height: 152px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  --weather-scrollbar-alpha: 22%;
+  --weather-scrollbar-ink: color-mix(in srgb, currentColor var(--weather-scrollbar-alpha), transparent);
+  transition: --weather-scrollbar-alpha 320ms cubic-bezier(0.22, 1, 0.36, 1);
+  scrollbar-width: thin;
+  scrollbar-color: var(--weather-scrollbar-ink) transparent;
+  &:hover { --weather-scrollbar-alpha: 38%; }
+  // Chromium's standardized 'thin' overrides the explicit WebKit width.
+  @supports selector(::-webkit-scrollbar) { scrollbar-width: auto; scrollbar-color: auto; &:hover { scrollbar-color: auto; } }
+  &::-webkit-scrollbar { width: 4px; height: 4px; }
+  &::-webkit-scrollbar-track { background: transparent; }
+  &::-webkit-scrollbar-thumb {
+    border-radius: 2px;
+    background: var(--weather-scrollbar-ink);
+  }
+}
 .cityOption {
   display: block;
   width: 100%;
@@ -125,4 +158,4 @@
   &:focus-visible { outline-color: var(--overlay-focus); }
 }
 .sourceLink { color: inherit; text-underline-offset: 3px; &:focus-visible { outline: 2px solid var(--overlay-focus); } }
-@media (prefers-reduced-motion: reduce) { .cityAction, .cityOption { transition-duration: 0s; } }
+@media (prefers-reduced-motion: reduce) { .cityAction, .cityOption, .cityInput, .cityList { transition-duration: 0s; } }
