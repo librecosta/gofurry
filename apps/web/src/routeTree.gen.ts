@@ -16,6 +16,7 @@ import { Route as ReadyzRouteImport } from './routes/readyz'
 import { Route as StatusRouteImport } from './routes/status'
 import { Route as StartStartRouteImport } from './routes/_start.start'
 import { Route as StartLanguageStartRouteImport } from './routes/_start.$language.start'
+import { Route as ApiV1StartWeatherRouteImport } from './routes/api.v1.start.weather'
 import { Route as ApiV1StartSearchSuggestionsRouteImport } from './routes/api.v1.start.search.suggestions'
 
 const IndexRoute = IndexRouteImport.update({
@@ -52,6 +53,11 @@ const StartLanguageStartRoute = StartLanguageStartRouteImport.update({
   path: '/$language/start',
   getParentRoute: () => StartRoute,
 } as any)
+const ApiV1StartWeatherRoute = ApiV1StartWeatherRouteImport.update({
+  id: '/api/v1/start/weather',
+  path: '/api/v1/start/weather',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiV1StartSearchSuggestionsRoute =
   ApiV1StartSearchSuggestionsRouteImport.update({
     id: '/api/v1/start/search/suggestions',
@@ -66,6 +72,7 @@ export interface FileRoutesByFullPath {
   '/status': typeof StatusRoute
   '/start': typeof StartStartRoute
   '/$language/start': typeof StartLanguageStartRoute
+  '/api/v1/start/weather': typeof ApiV1StartWeatherRoute
   '/api/v1/start/search/suggestions': typeof ApiV1StartSearchSuggestionsRoute
 }
 export interface FileRoutesByTo {
@@ -75,6 +82,7 @@ export interface FileRoutesByTo {
   '/status': typeof StatusRoute
   '/start': typeof StartStartRoute
   '/$language/start': typeof StartLanguageStartRoute
+  '/api/v1/start/weather': typeof ApiV1StartWeatherRoute
   '/api/v1/start/search/suggestions': typeof ApiV1StartSearchSuggestionsRoute
 }
 export interface FileRoutesById {
@@ -86,6 +94,7 @@ export interface FileRoutesById {
   '/status': typeof StatusRoute
   '/_start/start': typeof StartStartRoute
   '/_start/$language/start': typeof StartLanguageStartRoute
+  '/api/v1/start/weather': typeof ApiV1StartWeatherRoute
   '/api/v1/start/search/suggestions': typeof ApiV1StartSearchSuggestionsRoute
 }
 export interface FileRouteTypes {
@@ -97,6 +106,7 @@ export interface FileRouteTypes {
     | '/status'
     | '/start'
     | '/$language/start'
+    | '/api/v1/start/weather'
     | '/api/v1/start/search/suggestions'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -106,6 +116,7 @@ export interface FileRouteTypes {
     | '/status'
     | '/start'
     | '/$language/start'
+    | '/api/v1/start/weather'
     | '/api/v1/start/search/suggestions'
   id:
     | '__root__'
@@ -116,6 +127,7 @@ export interface FileRouteTypes {
     | '/status'
     | '/_start/start'
     | '/_start/$language/start'
+    | '/api/v1/start/weather'
     | '/api/v1/start/search/suggestions'
   fileRoutesById: FileRoutesById
 }
@@ -125,6 +137,7 @@ export interface RootRouteChildren {
   LivezRoute: typeof LivezRoute
   ReadyzRoute: typeof ReadyzRoute
   StatusRoute: typeof StatusRoute
+  ApiV1StartWeatherRoute: typeof ApiV1StartWeatherRoute
   ApiV1StartSearchSuggestionsRoute: typeof ApiV1StartSearchSuggestionsRoute
 }
 
@@ -179,6 +192,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof StartLanguageStartRouteImport
       parentRoute: typeof StartRoute
     }
+    '/api/v1/start/weather': {
+      id: '/api/v1/start/weather'
+      path: '/api/v1/start/weather'
+      fullPath: '/api/v1/start/weather'
+      preLoaderRoute: typeof ApiV1StartWeatherRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/v1/start/search/suggestions': {
       id: '/api/v1/start/search/suggestions'
       path: '/api/v1/start/search/suggestions'
@@ -207,6 +227,7 @@ const rootRouteChildren: RootRouteChildren = {
   LivezRoute: LivezRoute,
   ReadyzRoute: ReadyzRoute,
   StatusRoute: StatusRoute,
+  ApiV1StartWeatherRoute: ApiV1StartWeatherRoute,
   ApiV1StartSearchSuggestionsRoute: ApiV1StartSearchSuggestionsRoute,
 }
 export const routeTree = rootRouteImport

@@ -17,6 +17,7 @@ import { cnFiling } from './filing.config'
 import { useStartMessages } from './messages'
 import { localizedPath } from '../locale-path'
 import { StartSettings } from './settings'
+import { StartWeather } from './weather'
 
 export function StartHeader() {
   const { locale, region } = usePreferences()
@@ -46,6 +47,7 @@ export function StartHeader() {
       </Popover.Portal>}</AnimatePresence>
     </Popover.Root>
     <div data-start-actions className={styles.actions}>
+      <StartWeather />
       <StartSettings />
       <Menu.Root open={userOpen} onOpenChange={setUserOpen} modal={false} highlightItemOnHover={false}>
         <Menu.Trigger aria-label={m.user} title={m.user} className={cx(controls.glass, styles.action)}><UserCircleIcon size={21} aria-hidden="true" /></Menu.Trigger>
