@@ -13,6 +13,17 @@ geoip:
   database_path: ""
 # database_path: data/geoip/dbip-city-lite-2026-11.mmdb
 
+# Optional current weather. Host is the dedicated hostname, without https://.
+# All file paths are relative to this YAML. No environment proxy/credential lookup.
+qweather:
+  enabled: false
+  api_host: ""
+  developer_id: ""
+  project_id: ""
+  credential_id: ""
+  private_key_path: data/private/qweather/gofurry-dev-private.pem
+  proxy_url: ""
+
 # Explicit opt-in. Blank proxy_url means direct access (no HTTP_PROXY lookup).
 # CN requires exact reviewed phrases; disable if no reliable review is available.
 # INTL uses the conservative SFW filter; no NSFW mode is implemented.

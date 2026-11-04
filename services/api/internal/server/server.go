@@ -15,6 +15,7 @@ import (
 	"github.com/librecosta/gofurry/services/api/internal/platform"
 	"github.com/librecosta/gofurry/services/api/internal/search"
 	"github.com/librecosta/gofurry/services/api/internal/storage"
+	"github.com/librecosta/gofurry/services/api/internal/weather"
 	"github.com/librecosta/gofurry/services/api/routers"
 	"github.com/rs/zerolog"
 )
@@ -62,7 +63,12 @@ func New(logger zerolog.Logger, cfg platform.Config) *Server {
 			logger.Info().Msg("city database loaded")
 		}
 	}
-	routers.Register(s.App, s.ready.Load, handlers.Backgrounds(objects), handlers.Suggestions(suggestions), handlers.Location(cities))
+	provider, weatherErr := weather.NewProvider(cfg.QWeather)
+	if weatherErr != nil {
+		logger.Warn().Strs("missing_fields", cfg.QWeather.MissingFields()).Msg("weather provider unavailable")
+	}
+	weatherService := weather.NewService(provider)
+	routers.Register(s.App, s.ready.Load, handlers.Backgrounds(objects), handlers.Suggestions(suggestions), handlers.Location(cities), handlers.Weather(cities, weatherService))
 	s.App.Hooks().OnListen(func(data fiber.ListenData) error {
 		s.ready.Store(true)
 		logger.Info().Str("host", data.Host).Str("port", data.Port).Msg("listening")
@@ -75,6 +81,7 @@ func New(logger zerolog.Logger, cfg platform.Config) *Server {
 	})
 	s.App.Hooks().OnPostShutdown(func(err error) error {
 		suggestions.Close()
+		weatherService.Close()
 		if closeErr := cities.Close(); closeErr != nil {
 			logger.Warn().Msg("city database close failed")
 		}

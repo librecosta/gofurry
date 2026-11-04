@@ -27,6 +27,7 @@ type Config struct {
 	Storage           *StorageConfig           `mapstructure:"storage"`
 	SearchSuggestions *SearchSuggestionsConfig `mapstructure:"search_suggestions"`
 	GeoIP             *GeoIPConfig             `mapstructure:"geoip"`
+	QWeather          *QWeatherConfig          `mapstructure:"qweather"`
 }
 
 type GeoIPConfig struct {
@@ -104,6 +105,20 @@ func LoadConfig(path string) (Config, error) {
 		cfg.GeoIP.DatabasePath, err = filepath.Abs(cfg.GeoIP.DatabasePath)
 		if err != nil {
 			return cfg, fmt.Errorf("resolve geoip.database_path")
+		}
+	}
+	if q := cfg.QWeather; q != nil {
+		if err := q.Validate(); err != nil {
+			return cfg, err
+		}
+		if q.PrivateKeyPath != "" {
+			if !filepath.IsAbs(q.PrivateKeyPath) {
+				q.PrivateKeyPath = filepath.Join(filepath.Dir(path), q.PrivateKeyPath)
+			}
+			q.PrivateKeyPath, err = filepath.Abs(q.PrivateKeyPath)
+			if err != nil {
+				return cfg, fmt.Errorf("resolve qweather.private_key_path")
+			}
 		}
 	}
 	if s := cfg.Storage; s != nil {
