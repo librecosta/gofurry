@@ -43,7 +43,7 @@ func TestNearestCityHTTPPrivacyAndLimits(t *testing.T) {
 				t.Fatal("nearest client quota missing")
 			}
 		}
-		for _, path := range []string{"/api/v1/start/weather", "/api/v1/start/location", "/api/v1/start/backgrounds", "/api/v1/start/cities?q=Chengdu", "/api/v1/start/search/suggestions?q=golang"} {
+		for _, path := range []string{"/api/v1/start/weather", "/api/v1/start/location", "/api/v1/start/backgrounds", "/api/v1/start/cities?q=Chengdu", "/api/v1/start/search/suggestions?q="} {
 			res, _ := s.App.Test(httptest.NewRequest("GET", path, nil))
 			res.Body.Close()
 			if res.StatusCode != 200 {

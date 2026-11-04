@@ -2,8 +2,10 @@ package search
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -20,14 +22,14 @@ func reply(status int, body string) *http.Response {
 }
 
 func TestSuggestionsJSONv2AndBounds(t *testing.T) {
-	s := New(&platform.SearchSuggestionsConfig{Enabled: true}, "INTL")
+	s := New(&platform.SearchSuggestionsConfig{Enabled: true}, "INTL", nil)
 	defer s.Close()
 	for _, tc := range []struct {
 		name, body    string
 		status, count int
 		failed        bool
 	}{
-		{"dedup and SFW", `[{"phrase":" Go tutorial "},{"phrase":"go tutorial"},{"phrase":"porn"},{"phrase":"ｐｏｒｎ"},{"phrase":"safe"}]`, 200, 2, false},
+		{"dedup without content restrictions", `[{"phrase":" Go tutorial "},{"phrase":"go tutorial"},{"phrase":"porn"},{"phrase":"ｐｏｒｎ"},{"phrase":"safe"}]`, 200, 4, false},
 		{"empty", `[]`, 200, 0, false},
 		{"null", `null`, 200, 0, true},
 		{"missing phrase", `[{}]`, 200, 0, true},
@@ -61,7 +63,7 @@ func TestSuggestionsJSONv2AndBounds(t *testing.T) {
 }
 
 func TestSuggestionsCacheLimitsAndCopies(t *testing.T) {
-	s := New(&platform.SearchSuggestionsConfig{Enabled: true}, "INTL")
+	s := New(&platform.SearchSuggestionsConfig{Enabled: true}, "INTL", nil)
 	defer s.Close()
 	var calls int
 	s.client.Transport = roundTrip(func(r *http.Request) (*http.Response, error) {
@@ -74,7 +76,7 @@ func TestSuggestionsCacheLimitsAndCopies(t *testing.T) {
 	if calls != 1 || b[0] != "a" || len(b) != maxSuggestions {
 		t.Fatal("cache is mutable or unbounded")
 	}
-	s.cache["go"] = entry{expires: time.Now().Add(-time.Second)}
+	s.cache[platform.RedisKey("INTL", "suggestions", "go")] = entry{expires: time.Now().Add(-time.Second)}
 	s.Suggestions(context.Background(), "go")
 	if calls != 2 {
 		t.Fatal("expired entry reused")
@@ -87,38 +89,101 @@ func TestSuggestionsCacheLimitsAndCopies(t *testing.T) {
 	}
 }
 
-func TestSuggestionsCNFailClosedAndExplicitProxy(t *testing.T) {
+func TestSuggestionsRegionalEqualityAndExplicitProxy(t *testing.T) {
 	t.Setenv("HTTP_PROXY", "http://127.0.0.1:1")
 	t.Setenv("HTTPS_PROXY", "http://127.0.0.1:1")
-	for _, cfg := range []*platform.SearchSuggestionsConfig{nil, {Enabled: false}, {Enabled: true}} {
-		s := New(cfg, "CN")
-		s.client.Transport = roundTrip(func(*http.Request) (*http.Response, error) { t.Fatal("disabled CN called upstream"); return nil, nil })
-		got, err := s.Suggestions(context.Background(), "go")
-		if err != nil || len(got) != 0 || s.transport.Proxy != nil {
-			t.Fatal("CN/environment fail-closed broken")
+	for _, region := range []string{"CN", "INTL"} {
+		for _, cfg := range []*platform.SearchSuggestionsConfig{nil, {Enabled: true}, {Enabled: true, ProxyURL: "http://127.0.0.1:7897"}} {
+			s := New(cfg, region, nil)
+			if cfg == nil || cfg.ProxyURL == "" {
+				if s.transport.Proxy != nil {
+					t.Fatal("environment proxy used")
+				}
+			} else {
+				proxy, _ := s.transport.Proxy(&http.Request{})
+				if proxy.String() != cfg.ProxyURL {
+					t.Fatal("explicit proxy ignored")
+				}
+			}
+			s.client.Transport = roundTrip(func(*http.Request) (*http.Response, error) {
+				return reply(200, `[{"phrase":"furry"},{"phrase":"兽人"},{"phrase":"GoFurry"},{"phrase":"unreviewed phrase"},{"phrase":"porn"}]`), nil
+			})
+			for _, q := range []string{"furry", "兽人", "GoFurry", "p.o.r.n"} {
+				got, err := s.Suggestions(context.Background(), q)
+				if err != nil || len(got) != 5 {
+					t.Fatal("regional/content restriction remains", region, q)
+				}
+			}
+			s.Close()
+		}
+		disabled := New(&platform.SearchSuggestionsConfig{Enabled: false}, region, nil)
+		if _, err := disabled.Suggestions(context.Background(), "furry"); !errors.Is(err, ErrDisabled) {
+			t.Fatal("explicit disable is not diagnosable")
+		}
+		disabled.Close()
+	}
+}
+
+func TestSuggestionsFailureDiagnosticsAndInput(t *testing.T) {
+	for _, tc := range []struct {
+		status     int
+		body, kind string
+	}{
+		{503, `[]`, "upstream_http"}, {429, `[]`, "upstream_http"}, {200, `not json`, "invalid_response"}, {200, strings.Repeat("x", maxBody+1), "response_size"},
+	} {
+		s := New(nil, "CN", nil)
+		s.client.Transport = roundTrip(func(*http.Request) (*http.Response, error) { return reply(tc.status, tc.body), nil })
+		_, err := s.Suggestions(context.Background(), "furry")
+		kind, status := Diagnostic(err)
+		if err == nil || kind != tc.kind || (tc.kind == "upstream_http" && status != tc.status) {
+			t.Fatal("upstream error was disguised as empty success")
 		}
 		s.Close()
 	}
-	s := New(&platform.SearchSuggestionsConfig{Enabled: true, ProxyURL: "http://127.0.0.1:7897", CNAllowlist: []string{"Go tutorial", "porn"}}, "CN")
+	s := New(nil, "CN", nil)
 	defer s.Close()
-	proxy, _ := s.transport.Proxy(&http.Request{})
-	if proxy.String() != "http://127.0.0.1:7897" {
-		t.Fatal("YAML proxy ignored")
+	s.client.Transport = roundTrip(func(*http.Request) (*http.Response, error) { return nil, context.DeadlineExceeded })
+	_, err := s.Suggestions(context.Background(), "furry")
+	if kind, _ := Diagnostic(err); kind != "timeout" {
+		t.Fatal("timeout not diagnosed")
 	}
+	for _, q := range []string{"go\nlang", "go\u200blang", "\xff", strings.Repeat("城", 129)} {
+		if _, err := s.Suggestions(context.Background(), q); !errors.Is(err, ErrQuery) {
+			t.Fatal("invalid input accepted")
+		}
+	}
+}
+
+func TestSuggestionsSameKeyMerging(t *testing.T) {
+	s := New(nil, "CN", nil)
+	defer s.Close()
+	var calls atomic.Int32
+	entered, release := make(chan struct{}), make(chan struct{})
 	s.client.Transport = roundTrip(func(*http.Request) (*http.Response, error) {
-		return reply(200, `[{"phrase":"Go tutorial"},{"phrase":"unreviewed phrase"},{"phrase":"porn"}]`), nil
+		if calls.Add(1) == 1 {
+			close(entered)
+		}
+		<-release
+		return reply(200, `[{"phrase":"furry"}]`), nil
 	})
-	got, err := s.Suggestions(context.Background(), "go")
-	if err != nil || len(got) != 1 || got[0] != "Go tutorial" {
-		t.Fatalf("CN leaked unreviewed suggestions: %v %v", got, err)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { _, err := s.Suggestions(ctx, "furry"); done <- err }()
+	<-entered
+	remaining := make(chan error, 1)
+	go func() { _, err := s.Suggestions(context.Background(), "furry"); remaining <- err }()
+	cancel()
+	if err := <-done; !errors.Is(err, context.Canceled) {
+		t.Fatal("waiter cancellation ignored")
 	}
-	if got, _ := s.Suggestions(context.Background(), "p.o.r.n"); len(got) != 0 {
-		t.Fatal("blocked query accepted")
+	close(release)
+	if err := <-remaining; err != nil || calls.Load() != 1 {
+		t.Fatal("same key was not merged")
 	}
 }
 
 func TestSuggestionsConcurrentAdmissionAndCancellation(t *testing.T) {
-	s := New(&platform.SearchSuggestionsConfig{Enabled: true}, "INTL")
+	s := New(&platform.SearchSuggestionsConfig{Enabled: true}, "INTL", nil)
 	defer s.Close()
 	var started atomic.Int32
 	s.client.Transport = roundTrip(func(r *http.Request) (*http.Response, error) {
@@ -129,8 +194,8 @@ func TestSuggestionsConcurrentAdmissionAndCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	done := make(chan struct{}, 4)
-	for range 4 {
-		go func() { s.Suggestions(ctx, "go"); done <- struct{}{} }()
+	for i := range 4 {
+		go func() { s.Suggestions(ctx, "go"+strconv.Itoa(i)); done <- struct{}{} }()
 	}
 	deadline := time.Now().Add(time.Second)
 	for started.Load() != 4 && time.Now().Before(deadline) {

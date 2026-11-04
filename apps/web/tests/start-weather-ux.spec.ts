@@ -49,7 +49,7 @@ test('weather UX: device permission is gesture-only, rounded POST resolves ID, w
   expect(new URL(calls.at(-1)!).searchParams.toString()).toBe('lang=en&city_id=1815286')
   expect(await page.evaluate(k => localStorage.getItem(k), key)).toBe(city.city_id)
   await expect(popup(page)).toContainText('Clear')
-  await expect(popup(page).getByRole('link', { name: 'Source details' })).toHaveAttribute('href', 'https://example.com/license')
+  await expect(popup(page).getByRole('link', { name: 'example.com' })).toHaveAttribute('href', 'https://example.com/license')
   await expect(popup(page)).toContainText('Required attribution statement.')
   await expect(popup(page)).not.toContainText('https://')
   await popup(page).getByRole('button', { name: 'Choose city', exact: true }).click()

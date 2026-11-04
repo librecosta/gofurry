@@ -15,6 +15,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/librecosta/gofurry/services/api/internal/platform"
+	"github.com/redis/go-redis/v9"
 )
 
 const (
@@ -29,118 +30,263 @@ var (
 	ErrQuery       = errors.New("invalid suggestion query")
 	ErrUnavailable = errors.New("suggestions unavailable")
 	ErrBusy        = errors.New("suggestions busy")
+	ErrDisabled    = errors.New("suggestions disabled")
 )
+
+type upstreamError struct {
+	kind   string
+	status int
+}
+
+func (*upstreamError) Error() string { return "suggestions upstream unavailable" }
+func (*upstreamError) Unwrap() error { return ErrUnavailable }
+
+// Only bounded categories/statuses are suitable for diagnostics, never raw
+// transport errors (which contain query URLs and possibly proxy credentials).
+func Diagnostic(err error) (string, int) {
+	var upstream *upstreamError
+	if errors.As(err, &upstream) {
+		return upstream.kind, upstream.status
+	}
+	switch {
+	case errors.Is(err, ErrDisabled):
+		return "disabled", 0
+	case errors.Is(err, ErrQuery):
+		return "invalid_query", 0
+	case errors.Is(err, ErrBusy):
+		return "busy", 0
+	case errors.Is(err, context.Canceled):
+		return "cancelled", 0
+	default:
+		return "unavailable", 0
+	}
+}
 
 type entry struct {
 	phrases []string
 	expires time.Time
 }
+type sharedEntry struct {
+	Phrases []string  `json:"phrases"`
+	Expires time.Time `json:"expires_at"`
+}
+type flight struct {
+	done    chan struct{}
+	phrases []string
+	err     error
+}
 
-// Service owns one regional upstream client and a bounded, public-query cache.
-// There is no legacy service, user data, environment proxy or credential fallback.
 type Service struct {
 	client    *http.Client
 	transport *http.Transport
 	enabled   bool
+	configErr bool
 	region    string
-	allow     map[string]bool
+	redis     *redis.Client
 	mu        sync.Mutex
 	cache     map[string]entry
-	slots     chan struct{}
+	flights   map[string]*flight
+	ctx       context.Context
+	cancel    context.CancelFunc
+	closed    bool
 }
 
-func New(cfg *platform.SearchSuggestionsConfig, region string) *Service {
-	s := &Service{region: region, allow: make(map[string]bool), cache: make(map[string]entry), slots: make(chan struct{}, 4)}
+func New(cfg *platform.SearchSuggestionsConfig, region string, shared *redis.Client) *Service {
+	ctx, cancel := context.WithCancel(context.Background())
+	s := &Service{enabled: cfg == nil || cfg.Enabled, region: region, redis: shared, cache: make(map[string]entry), flights: make(map[string]*flight), ctx: ctx, cancel: cancel}
 	transport := &http.Transport{
 		DialContext:         (&net.Dialer{Timeout: 2 * time.Second, KeepAlive: 30 * time.Second}).DialContext,
-		TLSHandshakeTimeout: 2 * time.Second, ResponseHeaderTimeout: requestTimeout,
-		MaxResponseHeaderBytes: 8 << 10, MaxConnsPerHost: 4, MaxIdleConnsPerHost: 4, IdleConnTimeout: 30 * time.Second,
+		TLSHandshakeTimeout: requestTimeout, ResponseHeaderTimeout: requestTimeout, MaxResponseHeaderBytes: 8 << 10,
+		MaxConnsPerHost: 4, MaxIdleConnsPerHost: 4, IdleConnTimeout: 30 * time.Second,
 	}
-	if cfg != nil {
-		s.enabled = cfg.Enabled && (region == "CN" || region == "INTL")
-		for _, phrase := range cfg.CNAllowlist {
-			phrase = strings.TrimSpace(phrase)
-			if safe(phrase) {
-				s.allow[strings.ToLower(phrase)] = true
-			}
+	if cfg != nil && cfg.ProxyURL != "" {
+		proxy, err := url.Parse(cfg.ProxyURL)
+		if err != nil || proxy.Hostname() == "" {
+			s.configErr = true
+		} else {
+			transport.Proxy = http.ProxyURL(proxy)
 		}
-		if cfg.ProxyURL != "" {
-			proxy, err := url.Parse(cfg.ProxyURL)
-			if err != nil {
-				s.enabled = false
-			} else {
-				transport.Proxy = http.ProxyURL(proxy)
-			}
-		}
-	}
-	if region == "CN" && len(s.allow) == 0 {
-		s.enabled = false
 	}
 	s.transport = transport
 	s.client = &http.Client{Transport: transport, Timeout: requestTimeout, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	return s
 }
+func (s *Service) Close() {
+	s.mu.Lock()
+	s.closed = true
+	s.mu.Unlock()
+	s.cancel()
+	s.transport.CloseIdleConnections()
+}
 
-func (s *Service) Close() { s.transport.CloseIdleConnections() }
-
+func validText(text string) bool {
+	return utf8.ValidString(text) && utf8.RuneCountInString(text) <= 128 && strings.IndexFunc(text, func(r rune) bool { return unicode.IsControl(r) || unicode.Is(unicode.Cf, r) }) < 0
+}
 func (s *Service) Suggestions(ctx context.Context, query string) ([]string, error) {
-	query = strings.TrimSpace(query)
-	if !utf8.ValidString(query) || utf8.RuneCountInString(query) > 128 {
+	if !validText(query) {
 		return nil, ErrQuery
 	}
-	empty := []string{}
-	if !s.enabled || query == "" || !safe(query) {
-		return empty, nil
+	query = strings.TrimSpace(query)
+	if query == "" {
+		return []string{}, nil
 	}
-	key := strings.ToLower(query)
+	if !s.enabled {
+		return nil, ErrDisabled
+	}
+	if s.configErr {
+		return nil, &upstreamError{kind: "configuration"}
+	}
+	key := platform.RedisKey(s.region, "suggestions", strings.ToLower(query))
 	s.mu.Lock()
-	cached, ok := s.cache[key]
-	s.mu.Unlock()
-	if ok && time.Now().Before(cached.expires) {
-		return append(empty, cached.phrases...), nil
-	}
-	select {
-	case s.slots <- struct{}{}:
-		defer func() { <-s.slots }()
-	default:
-		return nil, ErrBusy
-	}
-	ctx, cancel := context.WithTimeout(ctx, requestTimeout)
-	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://duckduckgo.com/ac/?"+url.Values{"q": {query}}.Encode(), nil)
-	if err != nil {
+	if s.closed {
+		s.mu.Unlock()
 		return nil, ErrUnavailable
 	}
+	if cached, ok := s.cache[key]; ok && time.Now().Before(cached.expires) {
+		s.mu.Unlock()
+		return append([]string{}, cached.phrases...), nil
+	}
+	pending := s.flights[key]
+	if pending == nil {
+		if len(s.flights) >= 4 {
+			s.mu.Unlock()
+			return nil, ErrBusy
+		}
+		pending = &flight{done: make(chan struct{})}
+		s.flights[key] = pending
+		go s.load(key, query, pending)
+	}
+	s.mu.Unlock()
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-pending.done:
+		return append([]string{}, pending.phrases...), pending.err
+	}
+}
+
+func (s *Service) load(key, query string, pending *flight) {
+	ctx, cancel := context.WithTimeout(s.ctx, 4*time.Second)
+	defer cancel()
+	cached, err := s.sharedOrFetch(ctx, key, query)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err == nil && !s.closed {
+		if len(s.cache) >= maxCache {
+			var oldest string
+			var expires time.Time
+			for k, v := range s.cache {
+				if expires.IsZero() || v.expires.Before(expires) {
+					oldest, expires = k, v.expires
+				}
+			}
+			delete(s.cache, oldest)
+		}
+		s.cache[key] = entry{phrases: append([]string{}, cached.phrases...), expires: cached.expires}
+	}
+	pending.phrases, pending.err = cached.phrases, err
+	delete(s.flights, key)
+	close(pending.done)
+}
+func (s *Service) sharedOrFetch(ctx context.Context, key, query string) (entry, error) {
+	read := func() (entry, bool, bool) {
+		raw, hit, available := platform.RedisRead(ctx, s.redis, key)
+		var value sharedEntry
+		if hit && len(raw) <= maxBody && json.Unmarshal(raw, &value) == nil && value.Phrases != nil && len(value.Phrases) <= maxSuggestions && time.Now().Before(value.Expires) && value.Expires.Sub(time.Now()) <= cacheTTL {
+			for _, p := range value.Phrases {
+				if !validText(p) || strings.TrimSpace(p) == "" {
+					return entry{}, false, available
+				}
+			}
+			return entry{phrases: value.Phrases, expires: value.Expires}, true, available
+		}
+		return entry{}, false, available
+	}
+	cached, hit, available := read()
+	if hit {
+		return cached, nil
+	}
+	if available {
+		release, owned, reachable := platform.RedisLease(ctx, s.redis, key, 5*time.Second)
+		defer release()
+		if reachable && !owned {
+			ticker := time.NewTicker(50 * time.Millisecond)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return entry{}, ErrBusy
+				case <-ticker.C:
+					cached, hit, available = read()
+					if hit {
+						return cached, nil
+					}
+					if !available {
+						phrases, err := s.fetch(ctx, query)
+						return entry{phrases: phrases, expires: time.Now().Add(cacheTTL)}, err
+					}
+				}
+			}
+		}
+		available = reachable
+		// The owner may have finished between the first GET and our lease.
+		if available {
+			if cached, hit, _ = read(); hit {
+				return cached, nil
+			}
+		}
+	}
+	phrases, err := s.fetch(ctx, query)
+	cached = entry{phrases: phrases, expires: time.Now().Add(cacheTTL)}
+	if err == nil && available {
+		data, _ := json.Marshal(sharedEntry{Phrases: phrases, Expires: cached.expires})
+		platform.RedisWrite(ctx, s.redis, key, platform.RedisKey(s.region, "suggestions", "index"), data, cacheTTL, maxCache)
+	}
+	return cached, err
+}
+func (s *Service) fetch(ctx context.Context, query string) ([]string, error) {
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, "https://duckduckgo.com/ac/?"+url.Values{"q": {query}}.Encode(), nil)
 	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; GoFurry/0.1)")
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8")
 	response, err := s.client.Do(req)
 	if err != nil {
-		return nil, ErrUnavailable
+		kind := "network"
+		var timeout net.Error
+		if errors.As(err, &timeout) && timeout.Timeout() {
+			kind = "timeout"
+		}
+		return nil, &upstreamError{kind: kind}
 	}
 	defer response.Body.Close()
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return nil, ErrUnavailable
+		return nil, &upstreamError{kind: "upstream_http", status: response.StatusCode}
 	}
 	body, err := io.ReadAll(io.LimitReader(response.Body, maxBody+1))
-	if err != nil || len(body) > maxBody {
-		return nil, ErrUnavailable
+	if err != nil {
+		return nil, &upstreamError{kind: "response_body"}
+	}
+	if len(body) > maxBody {
+		return nil, &upstreamError{kind: "response_size"}
 	}
 	var decoded []struct {
 		Phrase *string `json:"phrase"`
 	}
 	if err = json.Unmarshal(body, &decoded); err != nil || decoded == nil {
-		return nil, ErrUnavailable
+		return nil, &upstreamError{kind: "invalid_response"}
 	}
-	phrases := empty
+	phrases := []string{}
 	seen := make(map[string]bool)
 	for _, item := range decoded {
 		if item.Phrase == nil {
-			return nil, ErrUnavailable
+			return nil, &upstreamError{kind: "invalid_response"}
+		}
+		if !validText(*item.Phrase) {
+			continue
 		}
 		phrase := strings.TrimSpace(*item.Phrase)
 		id := strings.ToLower(phrase)
-		if utf8.RuneCountInString(phrase) > 128 || !safe(phrase) || seen[id] || (s.region == "CN" && !s.allow[id]) {
+		if phrase == "" || seen[id] {
 			continue
 		}
 		seen[id] = true
@@ -149,45 +295,5 @@ func (s *Service) Suggestions(ctx context.Context, query string) ([]string, erro
 			break
 		}
 	}
-	s.mu.Lock()
-	if len(s.cache) >= maxCache {
-		var oldest string
-		var expires time.Time
-		for k, value := range s.cache {
-			if expires.IsZero() || value.expires.Before(expires) {
-				oldest, expires = k, value.expires
-			}
-		}
-		delete(s.cache, oldest)
-	}
-	s.cache[key] = entry{phrases: append(empty, phrases...), expires: time.Now().Add(cacheTTL)}
-	s.mu.Unlock()
 	return phrases, nil
-}
-
-// A conservative denylist is defense in depth, not an assertion that third-party
-// suggestions are moderated. CN additionally requires exact reviewed matches.
-func safe(phrase string) bool {
-	if phrase == "" {
-		return false
-	}
-	var folded strings.Builder
-	for _, r := range strings.ToLower(phrase) {
-		if unicode.IsControl(r) || unicode.Is(unicode.Cf, r) {
-			return false
-		}
-		if r >= '！' && r <= '～' {
-			r -= 0xfee0
-		}
-		if unicode.IsLetter(r) || unicode.IsDigit(r) {
-			folded.WriteRune(r)
-		}
-	}
-	text := folded.String()
-	for _, blocked := range []string{"porn", "nsfw", "nude", "naked", "sex", "xxx", "hentai", "yiff", "fetish", "rule34", "r34", "xvideos", "色情", "成人", "裸体", "裸聊", "做爱", "性爱", "性交", "黄片", "色图", "兽交"} {
-		if strings.Contains(text, blocked) {
-			return false
-		}
-	}
-	return text != ""
 }

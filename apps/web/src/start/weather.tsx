@@ -80,6 +80,10 @@ export function StartWeather() {
   const temperature = data.weather ? weatherTemperature(data.weather.temperature_c, locale) : null
   const label = temperature ? `${city}, ${data.weather!.condition_text}, ${temperature}` : m.unavailable
   const back = () => { restoreCityFocus.current = true; setSelecting(false) }
+  // A provider name/URL already visible on the source line needs no duplicate
+  // row. Other actual targets remain inline, and required declarations stay intact.
+  const attributionLinks = [...new Set(data.attributions.map(safeAttributionURL).filter((url): url is string => !!url && url !== 'https://www.qweather.com/' && url !== 'https://developer.qweather.com/attribution.html'))]
+  const attributionText = data.attributions.filter(text => !safeAttributionURL(text) && !['qweather', '和风天气', '和风天气 / qweather'].includes(text.trim().toLowerCase()))
   return <Popover.Root open={open} onOpenChange={value => { setOpen(value); if (value) { setSelecting(false); restoreCityFocus.current = false } }}>
     <Popover.Trigger data-start-weather data-weather-state={data.state} aria-label={`${m.details}: ${label}`} className={cx(controls.header, styles.trigger)}>
       <span className={temperature ? styles.city : undefined}>{temperature ? city : m.title}</span>
@@ -105,11 +109,8 @@ export function StartWeather() {
             }).format(new Date(data.weather.fetched_at))}</time></p>
           </> : <Popover.Description className={styles.description}>{m.unavailable}</Popover.Description>}
           <div className={styles.sources}>
-            <p>{m.weatherSource} <a href="https://www.qweather.com" target="_blank" rel="noopener noreferrer">{m.provider}</a></p>
-            {data.attributions.length > 0 && <ul>{data.attributions.map((text, index) => {
-              const url = safeAttributionURL(text)
-              return <li key={`${index}:${text}`}>{url ? <a href={url} target="_blank" rel="noopener noreferrer">{m.sourceDetails}</a> : text}</li>
-            })}</ul>}
+            <p>{m.weatherSource} <a href="https://www.qweather.com" target="_blank" rel="noopener noreferrer">{m.provider}</a>{attributionLinks.map(url => <span key={url}> · <a href={url} target="_blank" rel="noopener noreferrer">{new URL(url).hostname}</a></span>)}</p>
+            {attributionText.length > 0 && <ul>{attributionText.map((text,index) => <li key={`${index}:${text}`}>{text}</li>)}</ul>}
           </div>
           <button ref={cityButton} type="button" className={styles.cityAction} onClick={() => setSelecting(true)}><MapPinIcon size={16} aria-hidden="true" />{m.selectCity}</button>
           </WeatherView>}

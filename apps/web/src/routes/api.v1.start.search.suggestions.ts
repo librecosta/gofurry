@@ -14,6 +14,7 @@ export const Route = createFileRoute('/api/v1/start/search/suggestions')({
       if (response.headers.get('x-gofurry-region') !== (process.env.WEB_REGION ?? 'CN') || response.headers.get('x-gofurry-content-mode') !== 'SFW') return unavailable()
       const headers = new Headers({ 'Cache-Control': 'no-store', 'X-GoFurry-Region': response.headers.get('x-gofurry-region')!, 'X-GoFurry-Content-Mode': 'SFW' })
       if (response.headers.has('retry-after')) headers.set('Retry-After', response.headers.get('retry-after')!)
+      if (response.headers.has('x-gofurry-suggestions-state')) headers.set('X-GoFurry-Suggestions-State', response.headers.get('x-gofurry-suggestions-state')!)
       return Response.json(await response.json(), { status: response.status, headers })
     } catch { return unavailable() }
   } } },

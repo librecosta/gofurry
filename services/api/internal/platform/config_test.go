@@ -29,11 +29,14 @@ func TestConfigSingleSource(t *testing.T) {
 		{"duplicate", validYAML + "server: {}\n", false},
 		{"invalid YAML", "server: [", false},
 		{"suggestions disabled CN", validYAML + "search_suggestions:\n  enabled: false\n", true},
-		{"suggestions unreviewed CN", validYAML + "search_suggestions:\n  enabled: true\n", false},
-		{"suggestions reviewed CN", validYAML + "search_suggestions:\n  enabled: true\n  cn_allowlist: [golang tutorial]\n  proxy_url: http://127.0.0.1:7897\n", true},
+		{"suggestions enabled CN", validYAML + "search_suggestions:\n  enabled: true\n", true},
+		{"removed allowlist rejected", validYAML + "search_suggestions:\n  cn_allowlist: [golang tutorial]\n", false},
 		{"suggestions INTL", strings.ReplaceAll(validYAML, "region: CN", "region: INTL") + "search_suggestions:\n  enabled: true\n", true},
 		{"invalid proxy", validYAML + "search_suggestions:\n  proxy_url: file:///private\n", false},
 		{"proxy endpoint path", validYAML + "search_suggestions:\n  proxy_url: https://proxy.example/api?q=x\n", false},
+		{"Redis ACL", validYAML + "redis:\n  address: redis.example:6379\n  username: dev\n  password: yaml-secret\n  db: 0\n", true},
+		{"Redis invalid address", validYAML + "redis:\n  address: https://redis.example\n", false},
+		{"Redis invalid DB", validYAML + "redis:\n  address: redis.example:6379\n  db: -1\n", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if err := os.WriteFile(path, []byte(tc.data), 0600); err != nil {
@@ -45,6 +48,15 @@ func TestConfigSingleSource(t *testing.T) {
 			}
 			if tc.valid && cfg.ProbeURL() != "http://127.0.0.1:17321/readyz" {
 				t.Fatal(cfg.ProbeURL())
+			}
+			if tc.valid && !strings.Contains(tc.data, "enabled: false") && !cfg.SearchSuggestions.Enabled {
+				t.Fatal("suggestions must default on in both regions")
+			}
+			if tc.valid && cfg.Redis != nil {
+				encoded, _ := MarshalJSON(cfg.Redis)
+				if strings.Contains(string(encoded), "yaml-secret") {
+					t.Fatal("Redis password was serialized")
+				}
 			}
 		})
 	}

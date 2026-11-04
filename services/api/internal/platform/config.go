@@ -29,6 +29,14 @@ type Config struct {
 	GeoIP             *GeoIPConfig             `mapstructure:"geoip"`
 	QWeather          *QWeatherConfig          `mapstructure:"qweather"`
 	Cities            *CitiesConfig            `mapstructure:"cities"`
+	Redis             *RedisConfig             `mapstructure:"redis"`
+}
+
+type RedisConfig struct {
+	Address  string `mapstructure:"address" json:"-"`
+	Username string `mapstructure:"username" json:"-"`
+	Password string `mapstructure:"password" json:"-"`
+	DB       int    `mapstructure:"db"`
 }
 
 type CitiesConfig struct {
@@ -39,12 +47,11 @@ type GeoIPConfig struct {
 	DatabasePath string `mapstructure:"database_path" json:"-"`
 }
 
-// Online autocomplete is opt-in. CN only returns exact, locally reviewed phrases;
-// DuckDuckGo autocomplete does not inherit its search-results Safe Search setting.
+// Autocomplete has one policy in both deployments. Enabled defaults to true when
+// omitted from YAML; an explicit false disables it for that deployment.
 type SearchSuggestionsConfig struct {
-	Enabled     bool     `mapstructure:"enabled"`
-	ProxyURL    string   `mapstructure:"proxy_url" json:"-"`
-	CNAllowlist []string `mapstructure:"cn_allowlist"`
+	Enabled  bool   `mapstructure:"enabled"`
+	ProxyURL string `mapstructure:"proxy_url" json:"-"`
 }
 
 // S3-compatible configuration, initially used with R2. Credentials have no
@@ -59,7 +66,8 @@ type StorageConfig struct {
 }
 
 // LoadConfig reads one explicit YAML file. No search paths, environment bindings,
-// defaults, business flags or secondary files are merged into it.
+// business flags or secondary files are merged into it. The documented enabled
+// default below applies only when that feature flag is absent from this YAML.
 func LoadConfig(path string) (Config, error) {
 	var cfg Config
 	if path == "" {
@@ -73,6 +81,19 @@ func LoadConfig(path string) (Config, error) {
 	}
 	if err := v.UnmarshalExact(&cfg); err != nil {
 		return cfg, fmt.Errorf("decode config: %w", err)
+	}
+	if cfg.SearchSuggestions == nil {
+		cfg.SearchSuggestions = &SearchSuggestionsConfig{}
+	}
+	if !v.IsSet("search_suggestions.enabled") {
+		cfg.SearchSuggestions.Enabled = true
+	}
+	if r := cfg.Redis; r != nil && r.Address != "" {
+		host, port, err := net.SplitHostPort(r.Address)
+		n, parseErr := strconv.Atoi(port)
+		if err != nil || host == "" || parseErr != nil || n < 1 || n > 65535 || r.DB < 0 {
+			return cfg, fmt.Errorf("redis requires address host:port and a non-negative db")
+		}
 	}
 	host, port, err := net.SplitHostPort(cfg.Server.Address)
 	if err != nil || net.ParseIP(host) == nil {
@@ -152,17 +173,6 @@ func LoadConfig(path string) (Config, error) {
 			if err != nil || u.Hostname() == "" || (u.Scheme != "http" && u.Scheme != "https" && u.Scheme != "socks5" && u.Scheme != "socks5h") || (u.Path != "" && u.Path != "/") || u.RawQuery != "" || u.Fragment != "" {
 				return cfg, fmt.Errorf("search_suggestions.proxy_url must be an explicit HTTP(S)/SOCKS proxy URL")
 			}
-		}
-		if len(s.CNAllowlist) > 256 {
-			return cfg, fmt.Errorf("search_suggestions.cn_allowlist exceeds 256 phrases")
-		}
-		for _, phrase := range s.CNAllowlist {
-			if len(phrase) == 0 || len([]rune(phrase)) > 128 {
-				return cfg, fmt.Errorf("search_suggestions.cn_allowlist phrases must contain 1..128 characters")
-			}
-		}
-		if s.Enabled && cfg.Deployment.Region == "CN" && len(s.CNAllowlist) == 0 {
-			return cfg, fmt.Errorf("CN online suggestions require a reviewed cn_allowlist; otherwise set enabled: false")
 		}
 	}
 	return cfg, nil

@@ -20,7 +20,7 @@ export function SearchBox() {
   const { region, locale } = usePreferences()
   const m = useStartMessages()
   const [category, setCategory] = useState<Category>('search')
-  const [selected, setSelected] = useState(defaultPlatform('search', region).id)
+  const [selected, setSelected] = useState(defaultPlatform('search').id)
   const [keyword, setKeyword] = useState('')
   const [panel, setPanel] = useState<Panel>(null)
   const [suggestions, setSuggestions] = useState<Suggestions>({ query: '', items: [] })
@@ -139,7 +139,7 @@ export function SearchBox() {
   }
   function chooseCategory(next: Category, button: HTMLButtonElement) {
     cancelRequest(); closePanel()
-    setCategory(next); setSelected(defaultPlatform(next, region).id)
+    setCategory(next); setSelected(defaultPlatform(next).id)
     revealCategory(button)
   }
   function choosePlatform(id: string, fromMobile = false) {
@@ -181,7 +181,7 @@ export function SearchBox() {
     const end = index + suggestions.query.length
     return <span>{phrase.slice(0, index)}<mark className={styles.highlight}>{phrase.slice(index, end)}</mark>{phrase.slice(end)}</span>
   }
-  const defaultAction = region === 'CN' ? 'https://www.bing.com/search' : 'https://www.google.com/search'
+  const defaultAction = 'https://www.bing.com/search'
   return <div ref={shell} data-start-search className={styles.shell}
     onBlur={(event) => {
       if (!event.currentTarget.contains(event.relatedTarget)) { cancelRequest(); closePanel() }
@@ -232,7 +232,7 @@ export function SearchBox() {
           skipFocusRequest.current = true; input.current?.focus({ preventScroll: true }); skipFocusRequest.current = false
         }} className={cx(styles.submit, styles.clear)}><XIcon size={18} aria-hidden="true" /></motion.button>}
       <motion.button type="submit" aria-label={m.submit} title={m.submit} className={styles.submit} initial={false} animate={{ opacity: 0.72 }} whileHover={{ opacity: 0.96 }} whileTap={{ opacity: 1 }} transition={hoverTransition}><MagnifyingGlassIcon size={20} weight="bold" aria-hidden="true" /></motion.button>
-      <input type="hidden" name={region === 'CN' ? 'adlt' : 'safe'} value={region === 'CN' ? 'strict' : 'active'} />
+      <input type="hidden" name="adlt" value="strict" />
     </form>
       <AnimatePresence>{panel && <SearchPanel key="search-panel" ref={popup} id={panelId} label={panel === 'platforms' ? m.platforms : m.suggestions} kind={panel}
         onKeyDown={(event) => {

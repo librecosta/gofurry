@@ -29,13 +29,19 @@ qweather:
   private_key_path: data/private/qweather/gofurry-dev-private.pem
   proxy_url: ""
 
-# Explicit opt-in. Blank proxy_url means direct access (no HTTP_PROXY lookup).
-# CN requires exact reviewed phrases; disable if no reliable review is available.
-# INTL uses the conservative SFW filter; no NSFW mode is implemented.
+# Enabled by default in both regions. An explicit false disables suggestions.
+# Blank proxy_url means direct access, never HTTP_PROXY discovery.
 search_suggestions:
-  enabled: false
+  enabled: true
   proxy_url: ""
-  cn_allowlist: []
+
+# Existing regional Redis, optional local fallback if blank/unavailable.
+# Username is only needed for ACL authentication. Credentials stay in private YAML.
+redis:
+  address: ""
+  username: ""
+  password: ""
+  db: 0
 
 # Optional S3-compatible public assets. null keeps the theme-only fallback.
 # Set the complete mapping in private config.yaml; do not use environment keys.

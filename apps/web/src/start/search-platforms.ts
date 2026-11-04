@@ -1,4 +1,4 @@
-import type { Locale, Region } from '../preferences'
+import type { Locale } from '../preferences'
 
 export const categories = ['search', 'furry', 'games', 'art', 'novel'] as const
 export type Category = typeof categories[number]
@@ -27,8 +27,8 @@ export const platforms: Record<Category, Platform[]> = {
   ],
 }
 
-export function defaultPlatform(category: Category, region: Region) {
-  return category === 'search' && region === 'INTL' ? platforms.search[1] : platforms[category][0]
+export function defaultPlatform(category: Category) {
+  return platforms[category][0]
 }
 
 export function searchURL(target: Platform, keyword: string, locale: Locale) {

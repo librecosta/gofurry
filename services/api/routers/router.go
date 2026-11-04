@@ -1,8 +1,11 @@
 package routers
 
-import "github.com/gofiber/fiber/v3"
+import (
+	"github.com/gofiber/fiber/v3"
+	"github.com/redis/go-redis/v9"
+)
 
-func Register(app *fiber.App, ready func() bool, backgrounds, suggestions, location, weather, cities, nearestCity fiber.Handler) {
+func Register(app *fiber.App, ready func() bool, backgrounds, suggestions, location, weather, cities, nearestCity fiber.Handler, shared *redis.Client, region string) {
 	registerHealth(app, ready)
-	registerURLs(app.Group("/api").Group("/v1"), backgrounds, suggestions, location, weather, cities, nearestCity)
+	registerURLs(app.Group("/api").Group("/v1"), backgrounds, suggestions, location, weather, cities, nearestCity, shared, region)
 }

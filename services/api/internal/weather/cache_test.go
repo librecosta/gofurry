@@ -26,7 +26,7 @@ func TestWeatherFreshStaleExpiredAndCooldown(t *testing.T) {
 	start := now
 	calls := 0
 	fail := false
-	s := NewService(nil)
+	s := NewService(nil, nil, "CN")
 	s.now = func() time.Time { return now }
 	s.provider = &fakeFetcher{fetch: func(context.Context, float64, float64, string) (*observation, error) {
 		calls++
@@ -77,7 +77,7 @@ func TestWeatherFreshStaleExpiredAndCooldown(t *testing.T) {
 }
 
 func TestWeatherCapacityNormalizationAndLanguage(t *testing.T) {
-	s := NewService(nil)
+	s := NewService(nil, nil, "CN")
 	now := time.Unix(1800000000, 0)
 	s.now = func() time.Time { return now }
 	calls := 0
@@ -112,7 +112,7 @@ func TestWeatherCapacityNormalizationAndLanguage(t *testing.T) {
 }
 
 func TestWeatherSingleFlightCancellationAndStaleWaiters(t *testing.T) {
-	s := NewService(nil)
+	s := NewService(nil, nil, "CN")
 	now := time.Unix(1800000000, 0)
 	s.now = func() time.Time { return now }
 	entered := make(chan struct{}, 1)
@@ -168,7 +168,7 @@ func TestWeatherSingleFlightCancellationAndStaleWaiters(t *testing.T) {
 
 func TestWeatherInstancesDoNotShareCache(t *testing.T) {
 	for _, temperature := range []float64{10, 20} {
-		s := NewService(nil)
+		s := NewService(nil, nil, "CN")
 		calls := 0
 		s.provider = &fakeFetcher{fetch: func(context.Context, float64, float64, string) (*observation, error) {
 			calls++
@@ -185,7 +185,7 @@ func TestWeatherInstancesDoNotShareCache(t *testing.T) {
 }
 
 func TestWeatherConcurrencyAnd429Cooling(t *testing.T) {
-	s := NewService(nil)
+	s := NewService(nil, nil, "CN")
 	entered := make(chan struct{}, maxConcurrent)
 	release := make(chan struct{})
 	var calls atomic.Int32
@@ -209,7 +209,7 @@ func TestWeatherConcurrencyAnd429Cooling(t *testing.T) {
 	close(release)
 	wg.Wait()
 	now := time.Unix(1800000000, 0)
-	s = NewService(nil)
+	s = NewService(nil, nil, "CN")
 	s.now = func() time.Time { return now }
 	calls.Store(0)
 	s.provider = &fakeFetcher{fetch: func(context.Context, float64, float64, string) (*observation, error) {

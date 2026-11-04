@@ -41,7 +41,7 @@ func TestWeatherHTTPBoundaryLimitAndDegradation(t *testing.T) {
 				t.Fatal("weather rate/error contract missing")
 			}
 		}
-		for _, path := range []string{"/api/v1/status", "/api/v1/start/location", "/api/v1/start/backgrounds", "/api/v1/start/search/suggestions?q=golang"} {
+		for _, path := range []string{"/api/v1/status", "/api/v1/start/location", "/api/v1/start/backgrounds", "/api/v1/start/search/suggestions?q="} {
 			res, err := s.App.Test(httptest.NewRequest("GET", path, nil))
 			if err != nil {
 				t.Fatal(err)

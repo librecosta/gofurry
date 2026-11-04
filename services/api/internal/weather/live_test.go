@@ -71,7 +71,7 @@ func TestQWeatherLive(t *testing.T) {
 	}
 	counter := &countingTransport{base: p.transport}
 	p.client.Transport = counter
-	s := NewService(p)
+	s := NewService(p, nil, "CN")
 	defer s.Close()
 	for _, lang := range []string{"zh", "en"} {
 		counter.expectedLang = lang

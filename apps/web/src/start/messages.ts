@@ -7,7 +7,7 @@ const messages = {
     categories: '搜索分类', platforms: '搜索平台', search: '搜索站点或内容…', submit: '搜索（新标签页）',
     suggestions: '搜索建议',
     weather: {
-      title: '天气', details: '天气详情', unavailable: '天气暂不可用', stale: '缓存天气，暂未获取到更新数据。', fetched: '数据获取于', weatherSource: '天气数据：', locationSource: 'IP 定位：', provider: '和风天气 / QWeather', sourceDetails: '来源说明',
+      title: '天气', details: '天气详情', unavailable: '天气暂不可用', stale: '缓存天气，暂未获取到更新数据。', fetched: '数据获取于', weatherSource: '天气数据：', locationSource: 'IP 定位：', provider: '和风天气 / QWeather',
       selectCity: '选择城市', network: '使用网络位置', locate: '定位当前位置', locating: '正在定位…', locationHint: '需位置权限，仅用于匹配附近城市，不保存精确位置。',
       locationDenied: '未获得位置权限，仍可手动搜索城市。', locationTimeout: '定位超时，请重试或手动搜索城市。', locationFailed: '暂时无法定位，请手动搜索城市。', locationUnsupported: '当前浏览器或连接不支持设备定位，请手动搜索城市。', noNearbyCity: '附近未找到合适城市，请手动搜索。',
       citySearch: '搜索城市（中文 / English）', cityResults: '匹配城市', cityUnavailable: '城市搜索暂不可用', noCities: '未找到匹配城市', citySource: '城市数据：', back: '返回天气',
@@ -25,7 +25,7 @@ const messages = {
     categories: 'Search categories', platforms: 'Search platform', search: 'Search sites or content…', submit: 'Search (new tab)',
     suggestions: 'Search suggestions',
     weather: {
-      title: 'Weather', details: 'Weather details', unavailable: 'Weather unavailable', stale: 'Cached weather; updated data is not available yet.', fetched: 'Fetched', weatherSource: 'Weather:', locationSource: 'IP location:', provider: 'QWeather', sourceDetails: 'Source details',
+      title: 'Weather', details: 'Weather details', unavailable: 'Weather unavailable', stale: 'Cached weather; updated data is not available yet.', fetched: 'Fetched', weatherSource: 'Weather:', locationSource: 'IP location:', provider: 'QWeather',
       selectCity: 'Choose city', network: 'Use network location', locate: 'Locate current position', locating: 'Locating…', locationHint: 'Location permission matches a nearby city. Precise location is not saved.',
       locationDenied: 'Location permission denied. You can still search for a city.', locationTimeout: 'Location timed out. Retry or search for a city.', locationFailed: 'Location unavailable. Please search for a city.', locationUnsupported: 'Device location is not supported by this browser or connection. Please search for a city.', noNearbyCity: 'No suitable nearby city. Please search manually.',
       citySearch: 'Search cities (中文 / English)', cityResults: 'Matching cities', cityUnavailable: 'City search unavailable', noCities: 'No matching cities', citySource: 'City data:', back: 'Back to weather',

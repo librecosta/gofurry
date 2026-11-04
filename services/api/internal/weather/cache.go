@@ -5,6 +5,8 @@ import (
 	"errors"
 	"sync"
 	"time"
+
+	"github.com/redis/go-redis/v9"
 )
 
 const freshTTL = 20 * time.Minute
@@ -32,6 +34,8 @@ type Result struct {
 type Service struct {
 	mu       sync.Mutex
 	provider fetcher
+	redis    *redis.Client
+	region   string
 	cache    map[string]cacheEntry
 	flights  map[string]*flight
 	cooldown time.Time
@@ -39,8 +43,8 @@ type Service struct {
 	now      func() time.Time
 }
 
-func NewService(provider *Provider) *Service {
-	s := &Service{cache: make(map[string]cacheEntry), flights: make(map[string]*flight), now: time.Now}
+func NewService(provider *Provider, shared *redis.Client, region string) *Service {
+	s := &Service{cache: make(map[string]cacheEntry), flights: make(map[string]*flight), now: time.Now, redis: shared, region: region}
 	if provider != nil {
 		s.provider = provider
 	}
@@ -99,13 +103,16 @@ func (s *Service) Get(ctx context.Context, lat, lon float64, lang string) Result
 	pending := &flight{done: make(chan struct{})}
 	s.flights[key] = pending
 	s.mu.Unlock()
-	data, err := s.provider.Fetch(ctx, lat, lon, lang)
+	data, err := s.sharedFetch(ctx, lat, lon, lang, key, entry.data)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	now = s.now()
 	if err == nil && data != nil {
 		entry = cacheEntry{data: data, lastUsed: now}
 	} else {
+		if result(data, now).Weather != nil {
+			entry.data = data
+		}
 		pause := 15 * time.Second
 		var upstream *upstreamError
 		if errors.As(err, &upstream) {

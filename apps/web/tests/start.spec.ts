@@ -27,7 +27,7 @@ test('start: explicit language URLs own SSR metadata and ignore conflicting cook
     await expect(page.locator('[data-start-actions] > *')).toHaveCount(3)
     await expect(page.locator('[data-start-logo]')).toHaveCSS('background-color', 'rgb(215, 220, 226)')
     await expect(page.locator('[data-start-filing]')).toHaveCount(region === 'CN' ? 1 : 0)
-    await expect(page.getByRole('search')).toHaveAttribute('action', region === 'CN' ? 'https://www.bing.com/search' : 'https://www.google.com/search')
+    await expect(page.getByRole('search')).toHaveAttribute('action', 'https://www.bing.com/search')
     await context.close()
   }
 })

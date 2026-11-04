@@ -53,7 +53,17 @@ func New(logger zerolog.Logger, cfg platform.Config) *Server {
 	if cfg.Storage != nil {
 		objects = storage.New(*cfg.Storage)
 	}
-	suggestions := search.New(cfg.SearchSuggestions, cfg.Deployment.Region)
+	shared := platform.NewRedis(cfg.Redis)
+	if shared != nil {
+		probe, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+		if shared.Ping(probe).Err() != nil {
+			logger.Warn().Msg("Redis unavailable; using local cache and limits")
+		} else {
+			logger.Info().Msg("Redis connected")
+		}
+		cancel()
+	}
+	suggestions := search.New(cfg.SearchSuggestions, cfg.Deployment.Region, shared)
 	var cities *geoip.Resolver
 	if cfg.GeoIP != nil && cfg.GeoIP.DatabasePath != "" {
 		var err error
@@ -68,7 +78,7 @@ func New(logger zerolog.Logger, cfg platform.Config) *Server {
 	if weatherErr != nil {
 		logger.Warn().Strs("missing_fields", cfg.QWeather.MissingFields()).Msg("weather provider unavailable")
 	}
-	weatherService := weather.NewService(provider)
+	weatherService := weather.NewService(provider, shared, cfg.Deployment.Region)
 	var catalog *citycatalog.Catalog
 	if cfg.Cities != nil && cfg.Cities.IndexPath != "" {
 		var err error
@@ -79,7 +89,7 @@ func New(logger zerolog.Logger, cfg platform.Config) *Server {
 			logger.Info().Msg("weather city catalog loaded")
 		}
 	}
-	routers.Register(s.App, s.ready.Load, handlers.Backgrounds(objects), handlers.Suggestions(suggestions), handlers.Location(cities), handlers.Weather(cities, weatherService, catalog), handlers.Cities(catalog), handlers.NearestCity(catalog))
+	routers.Register(s.App, s.ready.Load, handlers.Backgrounds(objects), handlers.Suggestions(suggestions, logger), handlers.Location(cities), handlers.Weather(cities, weatherService, catalog), handlers.Cities(catalog), handlers.NearestCity(catalog), shared, cfg.Deployment.Region)
 	s.App.Hooks().OnListen(func(data fiber.ListenData) error {
 		s.ready.Store(true)
 		logger.Info().Str("host", data.Host).Str("port", data.Port).Msg("listening")
@@ -93,6 +103,11 @@ func New(logger zerolog.Logger, cfg platform.Config) *Server {
 	s.App.Hooks().OnPostShutdown(func(err error) error {
 		suggestions.Close()
 		weatherService.Close()
+		if shared != nil {
+			if shared.Close() != nil {
+				logger.Warn().Msg("Redis close failed")
+			}
+		}
 		if closeErr := cities.Close(); closeErr != nil {
 			logger.Warn().Msg("city database close failed")
 		}

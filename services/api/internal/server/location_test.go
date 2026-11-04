@@ -48,7 +48,7 @@ func TestLocationUnavailableAndRateLimit(t *testing.T) {
 				t.Fatalf("rate/error contract: %d %s", res.StatusCode, body)
 			}
 		}
-		for _, path := range []string{"/api/v1/status", "/api/v1/start/backgrounds", "/api/v1/start/search/suggestions?q=golang", "/livez"} {
+		for _, path := range []string{"/api/v1/status", "/api/v1/start/backgrounds", "/api/v1/start/search/suggestions?q=", "/livez"} {
 			res, err := s.App.Test(httptest.NewRequest("GET", path, nil))
 			if err != nil {
 				t.Fatal(err)
