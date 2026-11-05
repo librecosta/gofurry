@@ -81,6 +81,9 @@ func LoadConfig(path string) (Config, error) {
 	if err := v.ReadInConfig(); err != nil {
 		return cfg, fmt.Errorf("cannot read explicit YAML configuration")
 	}
+	if err := validateWallpaperSource(v); err != nil {
+		return cfg, err
+	}
 	if err := v.UnmarshalExact(&cfg); err != nil {
 		return cfg, fmt.Errorf("invalid YAML configuration fields or types")
 	}

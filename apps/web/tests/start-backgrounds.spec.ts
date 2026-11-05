@@ -158,7 +158,7 @@ test('live: AVIF failure keeps the real WebP and does not block search', async (
   await page.goto('/start')
   await expect(page.locator('[data-start-background]')).toHaveAttribute('data-stage', 'preview', { timeout: 20000 })
   await expect(page.locator('[data-start-preview]')).toHaveCSS('opacity', '1')
-  const action = region === 'CN' ? 'https://www.bing.com/search' : 'https://www.google.com/search'
+  const action = 'https://www.bing.com/search'
   await expect(page.getByRole('search')).toHaveAttribute('action', action)
   await page.context().route(`${new URL(action).origin}/**`, (route) => route.fulfill({ contentType: 'text/html', body: '<!doctype html><title>Search intercepted</title>' }))
   await page.locator('input[name="q"]').fill('GoFurry 狼 & SFW')

@@ -37,11 +37,11 @@ export function StartBackground() {
     void image.decode().then(ready, failed)
   }
   return <div aria-hidden="true" data-start-background data-stage={imageReady ? 'image' : previewReady ? 'preview' : 'theme'} className={styles.container}>
-    <AnimatePresence>{background && <motion.img key={background.preview.url} src={background.preview.url} width={background.preview.width} height={background.preview.height}
+    <AnimatePresence>{background && <motion.img key={`preview:${background.preview.url}`} src={background.preview.url} width={background.preview.width} height={background.preview.height}
         alt="" draggable={false} decoding="async" fetchPriority="low" data-start-preview
         onLoad={(event) => decoded(event, () => setPreviewReady(true), () => setPreviewFailed(true))}
         onError={() => setPreviewFailed(true)} className={styles.image} initial={{ opacity: 0 }} animate={{ opacity: previewReady ? 1 : 0 }} exit={{ opacity: 0 }} transition={transition} />}
-      {background && (previewReady || previewFailed) && <motion.img key={background.image.url} src={background.image.url} width={background.image.width} height={background.image.height}
+      {background && (previewReady || previewFailed) && <motion.img key={`image:${background.image.url}`} src={background.image.url} width={background.image.width} height={background.image.height}
         alt="" draggable={false} decoding="async" fetchPriority="low" data-start-hd
         onLoad={(event) => decoded(event, () => setImageReady(true), () => {})}
         className={styles.image} initial={{ opacity: 0 }} animate={{ opacity: imageReady ? 1 : 0 }} exit={{ opacity: 0 }} transition={transition} />}

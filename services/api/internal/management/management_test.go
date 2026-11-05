@@ -29,12 +29,17 @@ func TestBearerAndActorBoundary(t *testing.T) {
 	}{
 		{"missing", "", "", "", 401}, {"wrong", "Bearer incorrect", "", "", 401}, {"query only", "", "", "", 401},
 		{"valid", "Bearer " + token, "", "", 503},
+		{"query with header", "Bearer " + token, "", "", 400},
 		{"region", "Bearer " + token, "X-LC-Region", "INTL", 403}, {"environment", "Bearer " + token, "X-LC-Environment", "production", 403},
 		{"actor", "Bearer " + token, "X-LC-Actor-ID", "invalid", 400}, {"role", "Bearer " + token, "X-LC-Actor-Role", "root", 400}, {"id", "Bearer " + token, "X-Request-ID", "invalid", 400},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			req := httptest.NewRequest("GET", "/internal/v1/readyz?token="+token, nil)
+			path := "/internal/v1/readyz?untrusted=secret-query"
+			if tc.name == "query only" || tc.name == "query with header" {
+				path = "/internal/v1/readyz?token=" + token
+			}
+			req := httptest.NewRequest("GET", path, nil)
 			req.Header.Set("Authorization", tc.auth)
 			req.Header.Set("Cookie", "admin_session=secret-cookie")
 			req.Header.Set("X-LC-Actor-ID", uuid.NewV7().String())

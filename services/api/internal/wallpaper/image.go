@@ -120,7 +120,7 @@ func checkWebP(r io.ReaderAt, size int64) error {
 			if n != 10 {
 				return ErrInvalid
 			}
-			if _, e := r.ReadAt(flag[:], off+8); e != nil || flag[0]&0xce != 0 {
+			if _, e := r.ReadAt(flag[:], off+8); e != nil || flag[0]&0xcf != 0 {
 				return ErrInvalid
 			}
 		case "ALPH", "ICCP":

@@ -58,6 +58,15 @@ func TestRealImageValidation(t *testing.T) {
 		t.Fatal("accepted cancelled work")
 	}
 	s := New(nil, nil, false)
+	large, e := os.CreateTemp(t.TempDir(), "oversized")
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer large.Close()
+	large.Truncate(MaxImageBytes + 1)
+	if _, e := ValidateAsset(context.Background(), large, "image/avif", false); e != ErrInvalid {
+		t.Fatal("oversized file accepted")
+	}
 	release1, e := s.AcquireUpload()
 	if e != nil {
 		t.Fatal(e)

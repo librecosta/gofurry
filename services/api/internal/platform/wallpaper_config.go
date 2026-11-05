@@ -3,6 +3,7 @@ package platform
 import (
 	"encoding/base64"
 	"errors"
+	"github.com/spf13/viper"
 	"net"
 	"strconv"
 	"time"
@@ -24,6 +25,52 @@ type DatabaseConfig struct {
 type ManagementConfig struct {
 	Address string `mapstructure:"address"`
 	Token   string `mapstructure:"token" json:"-"`
+}
+
+// Reject weak coercion and integer overflow before mapstructure narrows values.
+func validateWallpaperSource(v *viper.Viper) error {
+	invalid := errors.New("invalid database/management YAML field types or bounds")
+	for _, section := range []string{"database", "management"} {
+		if !v.IsSet(section) {
+			continue
+		}
+		keys := []string{"host", "name", "user", "ssl_mode", "connect_timeout", "max_connection_lifetime", "max_connection_idle_time"}
+		if section == "management" {
+			keys = []string{"address", "token"}
+		}
+		for _, key := range keys {
+			if _, ok := v.Get(section + "." + key).(string); !ok {
+				return invalid
+			}
+		}
+	}
+	if v.IsSet("database") {
+		if value := v.Get("database.password"); value != nil {
+			if _, ok := value.(string); !ok {
+				return invalid
+			}
+		}
+		for key, bound := range map[string]int64{"port": 65535, "max_connections": 20, "min_connections": 20} {
+			var n int64
+			switch value := v.Get("database." + key).(type) {
+			case int:
+				n = int64(value)
+			case int64:
+				n = value
+			case uint64:
+				if value > uint64(bound) {
+					return invalid
+				}
+				n = int64(value)
+			default:
+				return invalid
+			}
+			if n < 0 || n > bound {
+				return invalid
+			}
+		}
+	}
+	return nil
 }
 
 func (c Config) ValidateWallpaperRuntime() error {

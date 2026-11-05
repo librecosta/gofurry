@@ -39,6 +39,32 @@ tasks:
     dir: services/api
     cmds:
       - go run github.com/sqlc-dev/sqlc/cmd/sqlc@v1.31.1 diff
+  check:wallpapers:
+    cmds:
+      - go -C services/api test ./internal/wallpaper ./internal/management ./internal/storage ./internal/platform
+  check:wallpapers:db:
+    desc: Reset only an explicitly configured owned gofurry_c2_*_test database; storage is simulated
+    cmds:
+      - go -C services/api test -count=1 -tags=integration ./internal/wallpaper -args -wallpaper-config "{{.CONFIG}}"
+  check:wallpapers:storage:
+    desc: Real isolated development storage and native management acceptance; stop other test instances first
+    requires:
+      vars: [BUCKET, PUBLIC_BASE]
+    cmds:
+      - go -C services/api test -count=1 -tags=integration ./internal/wallpaper -args -wallpaper-config "{{.CONFIG}}" -development-bucket "{{.BUCKET}}" -development-public-base "{{.PUBLIC_BASE}}"
+      - go -C services/api test -count=1 -tags=integration ./internal/server -run '^TestManagementRealDevelopmentHTTP$' -args -wallpaper-runtime-config "{{.CONFIG}}" -development-bucket "{{.BUCKET}}" -development-public-base "{{.PUBLIC_BASE}}"
+  check:wallpapers:schema:
+    desc: Explicit migration acceptance on an owned gofurry_c2_*_empty_test database
+    cmds:
+      - go -C services/api test -count=1 -tags=integration ./internal/database -args -empty-wallpaper-config "{{.CONFIG}}"
+  wallpaper:import:
+    requires:
+      vars: [BUCKET, PUBLIC_BASE]
+    vars:
+      INPUT: '{{default (print .ROOT_DIR "/services/api/internal/handlers/backgrounds.json") .INPUT}}'
+      REVIEWED: '{{default "false" .REVIEWED}}'
+    cmds:
+      - go -C services/api run ./cmd/api wallpaper-import "{{.INPUT}}" --config "{{.CONFIG}}" --development-bucket "{{.BUCKET}}" --development-public-base "{{.PUBLIC_BASE}}" --confirm-reviewed-sfw={{.REVIEWED}}
   check:
     desc: Verify toolchains, Go formatting/vet/tests/build, Web build/types and browser smoke tests
     cmds:

@@ -3,6 +3,9 @@ package platform
 import (
 	"crypto/rand"
 	"encoding/base64"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -31,5 +34,21 @@ func TestWallpaperRuntimeConfig(t *testing.T) {
 	var off Config
 	if off.ValidateWallpaperRuntime() != nil {
 		t.Fatal("optional dependency required")
+	}
+}
+func TestWallpaperYAMLNumericBounds(t *testing.T) {
+	const database = "database:\n  host: 127.0.0.1\n  port: 5432\n  name: gofurry_test\n  user: test\n  password: ''\n  ssl_mode: disable\n  connect_timeout: 2s\n  max_connections: 5\n  min_connections: 0\n  max_connection_lifetime: 30m\n  max_connection_idle_time: 5m\n"
+	file := filepath.Join(t.TempDir(), "config.yaml")
+	for _, tc := range []struct {
+		data  string
+		valid bool
+	}{{database, true}, {strings.Replace(database, "port: 5432", "port: 65537", 1), false}, {strings.Replace(database, "port: 5432", "port: '5432'", 1), false}, {strings.Replace(database, "max_connections: 5", "max_connections: 4294967301", 1), false}, {strings.Replace(database, "connect_timeout: 2s", "connect_timeout: 2", 1), false}} {
+		if e := os.WriteFile(file, []byte(validYAML+tc.data), 0600); e != nil {
+			t.Fatal(e)
+		}
+		_, e := LoadConfig(file)
+		if (e == nil) != tc.valid {
+			t.Fatal("invalid YAML type or overflow handling", e)
+		}
 	}
 }

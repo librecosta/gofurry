@@ -34,6 +34,25 @@ func (m *Metadata) Validate() error {
 		if e != nil || len(m.SourceURL) > 2048 || !BoundedText(m.SourceURL, 2048, false) || u.Scheme != "https" || u.Hostname() == "" || u.User != nil {
 			return ErrInvalid
 		}
+		query, e := url.ParseQuery(u.RawQuery)
+		if e != nil {
+			return ErrInvalid
+		}
+		for name := range query {
+			key := strings.ToLower(name)
+			if key == "key" || key == "sig" || key == "auth" || key == "code" {
+				return ErrInvalid
+			}
+			for _, secret := range []string{"token", "password", "secret", "credential", "authorization", "signature", "api_key", "apikey"} {
+				if strings.Contains(key, secret) {
+					return ErrInvalid
+				}
+			}
+		}
+		// OAuth-style fragments are never appropriate public source metadata.
+		if strings.Contains(strings.ToLower(u.Fragment), "token=") || strings.Contains(strings.ToLower(u.Fragment), "code=") {
+			return ErrInvalid
+		}
 	}
 	return nil
 }
@@ -60,7 +79,11 @@ func (s *Service) write(ctx context.Context, fn func(context.Context, *dbgen.Que
 	if e != nil {
 		return ErrUnavailable
 	}
-	defer tx.Rollback(context.Background())
+	defer func() {
+		cleanup, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		_ = tx.Rollback(cleanup)
+	}()
 	if e = fn(ctx, s.q.WithTx(tx)); e != nil {
 		return e
 	}
@@ -94,7 +117,10 @@ func audit(ctx context.Context, q *dbgen.Queries, actor Actor, action string, id
 	if e != nil {
 		return ErrInvalid
 	}
-	return databaseError(q.AppendWallpaperAudit(ctx, dbgen.AppendWallpaperAuditParams{ID: uuid.NewV7(), ActorAccountID: actor.ID, ActorName: actor.Name, ActorRole: actor.Role, Action: action, WallpaperID: &id, RequestID: actor.RequestID, BeforeData: b, AfterData: a}))
+	if q.AppendWallpaperAudit(ctx, dbgen.AppendWallpaperAuditParams{ID: uuid.NewV7(), ActorAccountID: actor.ID, ActorName: actor.Name, ActorRole: actor.Role, Action: action, WallpaperID: &id, RequestID: actor.RequestID, BeforeData: b, AfterData: a}) != nil {
+		return ErrUnavailable
+	}
+	return nil
 }
 func (s *Service) AcquireUpload() (func(), error) {
 	select {

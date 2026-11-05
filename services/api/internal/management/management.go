@@ -8,6 +8,7 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"time"
 	"uuid"
 
@@ -25,6 +26,7 @@ type invalidIDKey struct{}
 
 func Current(c fiber.Ctx) wallpaper.Actor { return fiber.Locals[wallpaper.Actor](c, actorKey{}) }
 func New(logger zerolog.Logger, cfg platform.Config, service *wallpaper.Service) *fiber.App {
+	var listening atomic.Bool
 	app := fiber.New(fiber.Config{AppName: "gofurry-management", JSONEncoder: platform.MarshalJSON, JSONDecoder: platform.UnmarshalJSON, ErrorHandler: ErrorHandler,
 		ReadTimeout: 30 * time.Second, WriteTimeout: 120 * time.Second, IdleTimeout: 15 * time.Second, BodyLimit: 64 << 20, StreamRequestBody: true, DisablePreParseMultipartForm: true, Concurrency: 16, TrustProxy: false, EnableIPValidation: true})
 	app.Use(func(c fiber.Ctx) error {
@@ -38,6 +40,12 @@ func New(logger zerolog.Logger, cfg platform.Config, service *wallpaper.Service)
 		return c.Next()
 	})
 	middleware.Register(app, logger, cfg.Server.Environment == "production", cfg.Logging.SlowRequest)
+	app.Hooks().OnListen(func(fiber.ListenData) error {
+		listening.Store(true)
+		logger.Info().Msg("management listening")
+		return nil
+	})
+	app.Hooks().OnPreShutdown(func() error { listening.Store(false); logger.Info().Msg("management draining"); return nil })
 	// Constant global key: bounded limiter state; forwarded addresses never matter.
 	app.Use(limiter.New(limiter.Config{Max: 120, Expiration: time.Minute, KeyGenerator: func(fiber.Ctx) string { return "management" }}))
 	app.Use(authenticate(cfg))
@@ -49,7 +57,7 @@ func New(logger zerolog.Logger, cfg platform.Config, service *wallpaper.Service)
 		return c.Next()
 	})
 	app.Get("/internal/v1/readyz", func(c fiber.Ctx) error {
-		if service.Ready(c.Context()) != nil {
+		if !listening.Load() || service.Ready(c.Context()) != nil {
 			return fiber.ErrServiceUnavailable
 		}
 		return c.JSON(fiber.Map{"ready": true})
@@ -70,6 +78,12 @@ func authenticate(cfg platform.Config) fiber.Handler {
 		got := sha256.Sum256([]byte(supplied))
 		if expected == "" || !ok || len(supplied) != len(expected) || subtle.ConstantTimeCompare(got[:], want[:]) != 1 {
 			return fiber.ErrUnauthorized
+		}
+		if c.Request().URI().QueryArgs().Has("token") || c.Request().URI().QueryArgs().Has("access_token") {
+			return fiber.ErrBadRequest
+		}
+		if c.Get("Content-Encoding") != "" {
+			return fiber.ErrUnsupportedMediaType
 		}
 		// These are trusted-service assertions, never independently trusted credentials.
 		if c.Get("X-LC-Region") != cfg.Deployment.Region || c.Get("X-LC-Environment") != cfg.Server.Environment {
