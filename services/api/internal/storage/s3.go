@@ -37,7 +37,10 @@ type Object struct {
 type Store struct {
 	client             *s3.Client
 	bucket, publicBase string
+	transport          *http.Transport
 }
+
+func (s *Store) Close() { s.transport.CloseIdleConnections() }
 
 func (s *Store) URL(key string) string {
 	if !backgroundKey.MatchString(key) {
@@ -48,10 +51,12 @@ func (s *Store) URL(key string) string {
 }
 
 func New(cfg platform.StorageConfig) *Store {
-	return &Store{bucket: cfg.Bucket, publicBase: cfg.PublicBaseURL, client: s3.New(s3.Options{
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.Proxy = nil
+	return &Store{transport: transport, bucket: cfg.Bucket, publicBase: cfg.PublicBaseURL, client: s3.New(s3.Options{
 		Region: cfg.Region, BaseEndpoint: aws.String(cfg.Endpoint), UsePathStyle: true,
 		Credentials: credentials.NewStaticCredentialsProvider(cfg.AccessKeyID, cfg.SecretAccessKey, ""),
-		HTTPClient:  &http.Client{Timeout: 30 * time.Second}, RetryMaxAttempts: 2,
+		HTTPClient:  &http.Client{Timeout: 30 * time.Second, Transport: transport, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}, RetryMaxAttempts: 2,
 		RequestChecksumCalculation: aws.RequestChecksumCalculationWhenRequired,
 		ResponseChecksumValidation: aws.ResponseChecksumValidationWhenRequired,
 	})}

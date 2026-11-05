@@ -54,10 +54,11 @@ type Service struct {
 	objects    Objects
 	configured bool
 	uploads    chan struct{}
+	decodes    chan struct{}
 }
 
 func New(pool *pgxpool.Pool, objects Objects, configured bool) *Service {
-	s := &Service{pool: pool, objects: objects, configured: configured, uploads: make(chan struct{}, 2)}
+	s := &Service{pool: pool, objects: objects, configured: configured, uploads: make(chan struct{}, 2), decodes: make(chan struct{}, 1)}
 	if pool != nil {
 		s.q = dbgen.New(pool)
 	}

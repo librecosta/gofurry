@@ -155,6 +155,9 @@ func New(logger zerolog.Logger, cfg platform.Config) *Server {
 			if pool != nil {
 				pool.Close()
 			}
+			if objects != nil {
+				objects.Close()
+			}
 		})
 	}
 	s.App.Hooks().OnPostShutdown(func(err error) error {

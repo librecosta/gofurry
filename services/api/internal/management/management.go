@@ -53,6 +53,7 @@ func New(logger zerolog.Logger, cfg platform.Config, service *wallpaper.Service)
 		}
 		return c.JSON(fiber.Map{"ready": true})
 	})
+	app.Post("/internal/v1/start/wallpapers", upload(service))
 	app.Use(func(fiber.Ctx) error { return fiber.ErrNotFound })
 	return app
 }
