@@ -28,6 +28,7 @@ func New(logger zerolog.Logger, cfg platform.Config, service *wallpaper.Service)
 	app := fiber.New(fiber.Config{AppName: "gofurry-management", JSONEncoder: platform.MarshalJSON, JSONDecoder: platform.UnmarshalJSON, ErrorHandler: ErrorHandler,
 		ReadTimeout: 30 * time.Second, WriteTimeout: 120 * time.Second, IdleTimeout: 15 * time.Second, BodyLimit: 64 << 20, StreamRequestBody: true, DisablePreParseMultipartForm: true, Concurrency: 16, TrustProxy: false, EnableIPValidation: true})
 	app.Use(func(c fiber.Ctx) error {
+		c.Set("Cache-Control", "no-store")
 		raw := c.Get("X-Request-ID")
 		id, e := uuid.Parse(raw)
 		if e != nil || raw != id.String() || id == uuid.Nil() {
@@ -53,7 +54,7 @@ func New(logger zerolog.Logger, cfg platform.Config, service *wallpaper.Service)
 		}
 		return c.JSON(fiber.Map{"ready": true})
 	})
-	app.Post("/internal/v1/start/wallpapers", upload(service))
+	registerWallpapers(app, service)
 	app.Use(func(fiber.Ctx) error { return fiber.ErrNotFound })
 	return app
 }

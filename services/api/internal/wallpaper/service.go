@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"sync"
 	"time"
 	"unicode"
 	"unicode/utf8"
@@ -55,6 +56,10 @@ type Service struct {
 	configured bool
 	uploads    chan struct{}
 	decodes    chan struct{}
+	cacheMu    sync.Mutex
+	cache      []PublicBackground
+	cacheAt    time.Time
+	generation uint64
 }
 
 func New(pool *pgxpool.Pool, objects Objects, configured bool) *Service {
