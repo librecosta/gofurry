@@ -203,7 +203,7 @@ func TestManagementRealDevelopmentHTTP(t *testing.T) {
 	for _, tc := range []struct {
 		image, preview, typ string
 		corrupt             bool
-	}{{"image.webp", "preview.webp", "image/avif", false}, {"image.avif", "", "image/avif", false}, {"image.avif", "preview.webp", "image/avif", true}} {
+	}{{"image.webp", "preview.webp", "image/avif", false}, {"image.webp", "preview.webp", "image/webp", false}, {"nonwide.avif", "preview.webp", "image/avif", false}, {"image.avif", "nonwide.webp", "image/avif", false}, {"image.avif", "", "image/avif", false}, {"image.avif", "preview.webp", "image/avif", true}} {
 		status, _ := upload(tc.image, tc.preview, tc.typ, tc.corrupt)
 		if status != 400 {
 			t.Fatalf("invalid upload: %d", status)
@@ -314,6 +314,20 @@ func TestManagementRealDevelopmentHTTP(t *testing.T) {
 	}
 	if status, _ = request("DELETE", base+"/"+row.ID.String(), strings.NewReader(`{"revision":4}`), nil); status != 204 {
 		t.Fatal("draft deletion failed", status)
+	}
+	status, b = upload("4k.avif", "preview.webp", "image/avif", false)
+	if status != 201 || json.Unmarshal(b, &row) != nil {
+		t.Fatal("real 4K AVIF rejected", status)
+	}
+	var width, height int
+	if e = pool.QueryRow(ctx, "SELECT width,height FROM start_wallpapers WHERE id=$1", row.ID).Scan(&width, &height); e != nil || width != 3840 || height != 2160 {
+		t.Fatal("4K dimensions altered")
+	}
+	if status, _ = upload("4k.avif", "preview.webp", "image/avif", false); status != 409 {
+		t.Fatal("4K original duplicated")
+	}
+	if status, _ = request("DELETE", base+"/"+row.ID.String(), strings.NewReader(`{"revision":1}`), nil); status != 204 {
+		t.Fatal("4K fixture cleanup failed")
 	}
 	// Disconnect while the handler is spooling a streamed body; temp files must disappear.
 	conn, e := net.DialTimeout("tcp", cfg.Management.Address, time.Second)

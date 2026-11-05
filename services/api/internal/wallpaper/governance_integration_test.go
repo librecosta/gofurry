@@ -112,6 +112,7 @@ func TestPostgresConstraintsRevisionAndAudit(t *testing.T) {
 		t.Fatal(e)
 	}
 	for _, query := range []string{
+		"UPDATE start_wallpapers SET width=127", "UPDATE start_wallpapers SET preview_width=63", "UPDATE start_wallpapers SET image_type='image/webp',image_key='start/backgrounds/'||image_sha256||'.webp'",
 		"UPDATE start_wallpapers SET id='00000000-0000-4000-8000-000000000001'", "UPDATE start_wallpapers SET status='deleted'", "UPDATE start_wallpapers SET title=' '", "UPDATE start_wallpapers SET image_key='../secret'", "UPDATE start_wallpapers SET image_sha256=upper(image_sha256)", "UPDATE start_wallpapers SET image_type='image/png'", "UPDATE start_wallpapers SET image_bytes=0", "UPDATE start_wallpapers SET preview_key='start/backgrounds/invalid.webp'", "UPDATE start_wallpapers SET width=20000", "UPDATE start_wallpapers SET preview_height=0", "UPDATE start_wallpapers SET revision=0", "UPDATE start_wallpapers SET status='published',published_at=NULL",
 	} {
 		if _, e = s.pool.Exec(ctx, query); e == nil {

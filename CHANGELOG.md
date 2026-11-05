@@ -1,5 +1,7 @@
 # Changelog
 
+- C3: require AVIF HD and exact 16:9 official wallpapers with an incremental legacy-preserving constraint; add real 4K/invalid-format, migration and cross-service audit acceptance.
+
 ## Unreleased
 
 - C2-A: regional wallpaper PostgreSQL/sqlc/Goose infrastructure and authenticated loopback management runtime.

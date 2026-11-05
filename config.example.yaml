@@ -71,6 +71,7 @@ database: null
 
 # Disabled unless complete. Generate 32 crypto/rand bytes as unpadded base64url.
 # Token goes only in private YAML. Storage and database are required.
+# Admin must use the same region/environment. New uploads: 16:9 AVIF + WebP.
 management: null
 # management:
 #   address: 127.0.0.1:17324

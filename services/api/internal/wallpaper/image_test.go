@@ -12,7 +12,7 @@ func TestRealImageValidation(t *testing.T) {
 	for _, tc := range []struct {
 		name, typ string
 		preview   bool
-	}{{"image.avif", "image/avif", false}, {"preview.webp", "image/webp", true}} {
+	}{{"image.avif", "image/avif", false}, {"4k.avif", "image/avif", false}, {"preview.webp", "image/webp", true}} {
 		f, e := os.Open("testdata/" + tc.name)
 		if e != nil {
 			t.Fatal(e)
@@ -21,6 +21,20 @@ func TestRealImageValidation(t *testing.T) {
 		f.Close()
 		if e != nil || a.Width < 1 || a.Height < 1 || len(a.SHA256) != 64 {
 			t.Fatalf("real %s rejected: %v", tc.name, e)
+		}
+	}
+	for _, tc := range []struct {
+		name, typ string
+		preview   bool
+	}{{"nonwide.avif", "image/avif", false}, {"nonwide.webp", "image/webp", true}, {"image.webp", "image/webp", false}} {
+		f, e := os.Open("testdata/" + tc.name)
+		if e != nil {
+			t.Fatal(e)
+		}
+		_, e = ValidateAsset(context.Background(), f, tc.typ, tc.preview)
+		f.Close()
+		if e != ErrInvalid {
+			t.Fatal("non-official format accepted", tc.name)
 		}
 	}
 	webp, e := os.ReadFile("testdata/image.webp")

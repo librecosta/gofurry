@@ -57,6 +57,12 @@ tasks:
     desc: Explicit migration acceptance on an owned gofurry_c2_*_empty_test database
     cmds:
       - go -C services/api test -count=1 -tags=integration ./internal/database -args -empty-wallpaper-config "{{.CONFIG}}"
+  check:wallpapers:link:
+    desc: Read-only audit correlation against an explicit C3 browser observation
+    requires:
+      vars: [OBSERVATION]
+    cmds:
+      - go -C services/api test -count=1 -tags=integration ./internal/wallpaper -run '^TestC3CrossServiceAudit$' -args -wallpaper-config "{{.CONFIG}}" -c3-observation "{{.OBSERVATION}}"
   wallpaper:import:
     requires:
       vars: [BUCKET, PUBLIC_BASE]
