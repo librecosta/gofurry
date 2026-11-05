@@ -89,7 +89,7 @@ func (m *mockObjects) PutNew(_ context.Context, k, typ, hash string, r io.ReadSe
 }
 func uploadFixture(t *testing.T, ctx context.Context, s *Service, actor Actor) (Detail, error) {
 	t.Helper()
-	image, e := os.Open("testdata/image.webp")
+	image, e := os.Open("testdata/image.avif")
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -99,7 +99,7 @@ func uploadFixture(t *testing.T, ctx context.Context, s *Service, actor Actor) (
 		t.Fatal(e)
 	}
 	defer preview.Close()
-	row, e := s.Upload(ctx, actor, Metadata{Title: "Isolated test wallpaper"}, image, preview, "image/webp", "image/webp")
+	row, e := s.Upload(ctx, actor, Metadata{Title: "Isolated test wallpaper"}, image, preview, "image/avif", "image/webp")
 	return s.detail(row), e
 }
 func TestPostgresConstraintsRevisionAndAudit(t *testing.T) {

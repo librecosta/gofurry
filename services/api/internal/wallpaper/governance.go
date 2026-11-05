@@ -132,6 +132,9 @@ func (s *Service) Transition(ctx context.Context, actor Actor, id uuid.UUID, rev
 		return result, ErrConflict
 	}
 	image, preview := s.assets(before)
+	if target == "published" && !officialFormat(image, preview) {
+		return result, ErrInvalid
+	}
 	if e = s.verify(ctx, image); e != nil {
 		return result, e
 	}
@@ -164,6 +167,10 @@ func (s *Service) Transition(ctx context.Context, actor Actor, id uuid.UUID, rev
 		s.invalidate()
 	}
 	return
+}
+
+func officialFormat(image, preview Asset) bool {
+	return image.ContentType == "image/avif" && preview.ContentType == "image/webp" && image.Width > 0 && image.Height > 0 && image.Width*9 == image.Height*16 && preview.Width > 0 && preview.Height > 0 && preview.Width*9 == preview.Height*16 && preview.Width <= 480 && preview.Height <= 270
 }
 func (s *Service) Delete(ctx context.Context, actor Actor, id uuid.UUID, revision int64) error {
 	if revision < 1 {

@@ -82,6 +82,14 @@ func TestRealDevelopmentUpload(t *testing.T) {
 			typ = "image/webp"
 		}
 		row, e := s.Upload(ctx, actor, Metadata{Title: "Development fixture " + name}, image, preview, typ, "image/webp")
+		if typ == "image/webp" {
+			image.Close()
+			preview.Close()
+			if e != ErrInvalid {
+				t.Fatal("高清 WebP accepted")
+			}
+			continue
+		}
 		if e != nil {
 			t.Fatalf("real development upload: %v", e)
 		}

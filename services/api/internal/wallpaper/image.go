@@ -44,7 +44,7 @@ func ValidateAsset(ctx context.Context, f *os.File, contentType string, preview 
 	if e != nil || st.Size() < 12 || st.Size() > limit || ctx.Err() != nil {
 		return a, ErrInvalid
 	}
-	if contentType != "image/avif" && contentType != "image/webp" || preview && contentType != "image/webp" {
+	if !preview && contentType != "image/avif" || preview && contentType != "image/webp" {
 		return a, ErrInvalid
 	}
 	size := st.Size()
@@ -67,10 +67,13 @@ func ValidateAsset(ctx context.Context, f *os.File, contentType string, preview 
 	maxPixels := int64(36000000)
 	maxSide := 16384
 	if preview {
-		maxPixels = 4000000
-		maxSide = 4096
+		maxPixels = 480 * 270
+		maxSide = 480
 	}
 	if e != nil || cfg.Width < 1 || cfg.Height < 1 || cfg.Width > maxSide || cfg.Height > maxSide || pixels > maxPixels || pixels > size*20000 {
+		return a, ErrInvalid
+	}
+	if cfg.Width*9 != cfg.Height*16 || preview && cfg.Height > 270 {
 		return a, ErrInvalid
 	}
 	f.Seek(0, io.SeekStart)

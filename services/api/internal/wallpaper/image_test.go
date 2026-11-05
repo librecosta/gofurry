@@ -12,7 +12,7 @@ func TestRealImageValidation(t *testing.T) {
 	for _, tc := range []struct {
 		name, typ string
 		preview   bool
-	}{{"image.avif", "image/avif", false}, {"image.webp", "image/webp", false}, {"preview.webp", "image/webp", true}} {
+	}{{"image.avif", "image/avif", false}, {"preview.webp", "image/webp", true}} {
 		f, e := os.Open("testdata/" + tc.name)
 		if e != nil {
 			t.Fatal(e)
@@ -37,7 +37,7 @@ func TestRealImageValidation(t *testing.T) {
 		data    []byte
 		typ     string
 		preview bool
-	}{{webp, "image/avif", false}, {avif, "image/webp", false}, {avif, "image/avif", true}, {avif[:len(avif)/2], "image/avif", false}, {webp[:len(webp)/2], "image/webp", false}, {metadata, "image/webp", false}, {[]byte("\x00\x00\x00\x18ftypavif000000000000"), "image/avif", false}} {
+	}{{webp, "image/webp", false}, {webp, "image/avif", false}, {avif, "image/webp", false}, {avif, "image/avif", true}, {avif[:len(avif)/2], "image/avif", false}, {webp[:len(webp)/2], "image/webp", false}, {metadata, "image/webp", false}, {[]byte("\x00\x00\x00\x18ftypavif000000000000"), "image/avif", false}} {
 		path := filepath.Join(t.TempDir(), "upload")
 		os.WriteFile(path, tc.data, 0600)
 		f, e := os.Open(path)
