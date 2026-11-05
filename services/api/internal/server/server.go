@@ -3,27 +3,38 @@ package server
 import (
 	"context"
 	"errors"
+	"net"
 	"net/http"
+	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/gofiber/fiber/v3/middleware/requestid"
+	"github.com/jackc/pgx/v5/pgxpool"
 	citycatalog "github.com/librecosta/gofurry/services/api/internal/cities"
+	"github.com/librecosta/gofurry/services/api/internal/database"
 	"github.com/librecosta/gofurry/services/api/internal/geoip"
 	"github.com/librecosta/gofurry/services/api/internal/handlers"
+	"github.com/librecosta/gofurry/services/api/internal/management"
 	"github.com/librecosta/gofurry/services/api/internal/middleware"
 	"github.com/librecosta/gofurry/services/api/internal/platform"
 	"github.com/librecosta/gofurry/services/api/internal/search"
 	"github.com/librecosta/gofurry/services/api/internal/storage"
+	"github.com/librecosta/gofurry/services/api/internal/wallpaper"
 	"github.com/librecosta/gofurry/services/api/internal/weather"
 	"github.com/librecosta/gofurry/services/api/routers"
 	"github.com/rs/zerolog"
 )
 
 type Server struct {
-	App   *fiber.App
-	ready atomic.Bool
+	App               *fiber.App
+	Management        *fiber.App
+	Wallpapers        *wallpaper.Service
+	managementAddress string
+	close             func()
+	initErr           error
+	ready             atomic.Bool
 }
 
 func New(logger zerolog.Logger, cfg platform.Config) *Server {
@@ -52,6 +63,34 @@ func New(logger zerolog.Logger, cfg platform.Config) *Server {
 	var objects *storage.Store
 	if cfg.Storage != nil {
 		objects = storage.New(*cfg.Storage)
+	}
+	var pool *pgxpool.Pool
+	if cfg.Database != nil {
+		var err error
+		pool, err = database.Open(context.Background(), *cfg.Database)
+		if err != nil {
+			s.initErr = err
+		} else {
+			ctx, cancel := context.WithTimeout(context.Background(), cfg.Database.ConnectTimeout)
+			if pool.Ping(ctx) != nil {
+				logger.Warn().Msg("wallpaper database unavailable; unrelated APIs remain available")
+			}
+			cancel()
+		}
+	}
+	var wallpaperObjects wallpaper.Objects
+	if objects != nil {
+		wallpaperObjects = objects
+	}
+	s.Wallpapers = wallpaper.New(pool, wallpaperObjects, cfg.Database != nil)
+	if cfg.Management != nil {
+		if err := cfg.ValidateWallpaperRuntime(); err != nil {
+			s.initErr = err
+		}
+		if s.initErr == nil {
+			s.Management = management.New(logger, cfg, s.Wallpapers)
+			s.managementAddress = cfg.Management.Address
+		}
 	}
 	shared := platform.NewRedis(cfg.Redis)
 	if shared != nil {
@@ -100,16 +139,27 @@ func New(logger zerolog.Logger, cfg platform.Config) *Server {
 		logger.Info().Msg("draining")
 		return nil
 	})
-	s.App.Hooks().OnPostShutdown(func(err error) error {
-		suggestions.Close()
-		weatherService.Close()
-		if shared != nil {
-			if shared.Close() != nil {
-				logger.Warn().Msg("Redis close failed")
+	var once sync.Once
+	s.close = func() {
+		once.Do(func() {
+			suggestions.Close()
+			weatherService.Close()
+			if shared != nil {
+				if shared.Close() != nil {
+					logger.Warn().Msg("Redis close failed")
+				}
 			}
-		}
-		if closeErr := cities.Close(); closeErr != nil {
-			logger.Warn().Msg("city database close failed")
+			if closeErr := cities.Close(); closeErr != nil {
+				logger.Warn().Msg("city database close failed")
+			}
+			if pool != nil {
+				pool.Close()
+			}
+		})
+	}
+	s.App.Hooks().OnPostShutdown(func(err error) error {
+		if s.Management == nil {
+			s.close()
 		}
 		if err != nil {
 			logger.Error().Err(err).Msg("shutdown failed")
@@ -122,11 +172,41 @@ func New(logger zerolog.Logger, cfg platform.Config) *Server {
 }
 
 func (s *Server) Listen(ctx context.Context, address string) error {
-	return s.App.Listen(address, fiber.ListenConfig{
-		GracefulContext:       ctx,
-		ShutdownTimeout:       10 * time.Second,
-		DisableStartupMessage: true,
-	})
+	defer s.close()
+	if s.initErr != nil {
+		return s.initErr
+	}
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	public, err := net.Listen("tcp", address)
+	if err != nil {
+		return errors.New("public listener unavailable")
+	}
+	defer public.Close()
+	var internal net.Listener
+	if s.Management != nil {
+		internal, err = net.Listen("tcp", s.managementAddress)
+		if err != nil {
+			return errors.New("management listener unavailable")
+		}
+		defer internal.Close()
+	}
+	options := fiber.ListenConfig{GracefulContext: ctx, ShutdownTimeout: 10 * time.Second, DisableStartupMessage: true}
+	results := make(chan error, 2)
+	count := 1
+	go func() { results <- s.App.Listener(public, options) }()
+	if internal != nil {
+		count++
+		go func() { results <- s.Management.Listener(internal, options) }()
+	}
+	var failure error
+	for range count {
+		if e := <-results; e != nil {
+			failure = errors.New("HTTP lifecycle failed")
+		}
+		cancel()
+	}
+	return failure
 }
 
 func errorHandler(c fiber.Ctx, err error) error {

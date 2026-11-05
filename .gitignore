@@ -14,5 +14,7 @@ config.yaml
 /data/geoip/
 /data/cities/
 /data/private/
+.local/
+config.*.local.yaml
 *.mmdb
 *.mmdb.gz

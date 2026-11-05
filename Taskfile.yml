@@ -3,6 +3,9 @@ version: '3'
 env:
   GOTOOLCHAIN: go1.27.3
 
+vars:
+  CONFIG: '{{.ROOT_DIR}}/config.yaml'
+
 tasks:
   tools:
     desc: Verify pinned runtime and package manager versions
@@ -23,6 +26,19 @@ tasks:
     desc: Download a manual GeoNames snapshot and build the ignored weather city catalog (Python 3.10+)
     cmds:
       - python scripts/init-geonames.py
+  migrate:
+    vars:
+      ACTION: '{{default "status" .ACTION}}'
+    cmds:
+      - go -C services/api run ./cmd/api migrate {{.ACTION}} --config "{{.CONFIG}}" --dir "{{.ROOT_DIR}}/services/api/migrations"
+  sql:generate:
+    dir: services/api
+    cmds:
+      - go run github.com/sqlc-dev/sqlc/cmd/sqlc@v1.31.1 generate
+  sql:check:
+    dir: services/api
+    cmds:
+      - go run github.com/sqlc-dev/sqlc/cmd/sqlc@v1.31.1 diff
   check:
     desc: Verify toolchains, Go formatting/vet/tests/build, Web build/types and browser smoke tests
     cmds:

@@ -39,6 +39,14 @@ type Store struct {
 	bucket, publicBase string
 }
 
+func (s *Store) URL(key string) string {
+	if !backgroundKey.MatchString(key) {
+		return ""
+	}
+	u, _ := url.JoinPath(s.publicBase, key)
+	return u
+}
+
 func New(cfg platform.StorageConfig) *Store {
 	return &Store{bucket: cfg.Bucket, publicBase: cfg.PublicBaseURL, client: s3.New(s3.Options{
 		Region: cfg.Region, BaseEndpoint: aws.String(cfg.Endpoint), UsePathStyle: true,

@@ -53,3 +53,25 @@ storage: null
 #   access_key_id: <private>
 #   secret_access_key: <private>
 #   public_base_url: https://<verified-development-cdn>
+
+# Optional, independent for every CN/INTL deployment. No static catalog fallback.
+database: null
+# database:
+#   host: 127.0.0.1
+#   port: 5432
+#   name: gofurry_cn
+#   user: gofurry_cn
+#   password: ""
+#   ssl_mode: disable
+#   connect_timeout: 3s
+#   max_connections: 5
+#   min_connections: 0
+#   max_connection_lifetime: 30m
+#   max_connection_idle_time: 5m
+
+# Disabled unless complete. Generate 32 crypto/rand bytes as unpadded base64url.
+# Token goes only in private YAML. Storage and database are required.
+management: null
+# management:
+#   address: 127.0.0.1:17324
+#   token: <private-random-32-byte-base64url>

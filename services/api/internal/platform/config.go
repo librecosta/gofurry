@@ -30,6 +30,8 @@ type Config struct {
 	QWeather          *QWeatherConfig          `mapstructure:"qweather"`
 	Cities            *CitiesConfig            `mapstructure:"cities"`
 	Redis             *RedisConfig             `mapstructure:"redis"`
+	Database          *DatabaseConfig          `mapstructure:"database"`
+	Management        *ManagementConfig        `mapstructure:"management"`
 }
 
 type RedisConfig struct {
@@ -77,10 +79,13 @@ func LoadConfig(path string) (Config, error) {
 	v.SetConfigFile(path)
 	v.SetConfigType("yaml")
 	if err := v.ReadInConfig(); err != nil {
-		return cfg, fmt.Errorf("read config: %w", err)
+		return cfg, fmt.Errorf("cannot read explicit YAML configuration")
 	}
 	if err := v.UnmarshalExact(&cfg); err != nil {
-		return cfg, fmt.Errorf("decode config: %w", err)
+		return cfg, fmt.Errorf("invalid YAML configuration fields or types")
+	}
+	if err := cfg.ValidateWallpaperRuntime(); err != nil {
+		return cfg, err
 	}
 	if cfg.SearchSuggestions == nil {
 		cfg.SearchSuggestions = &SearchSuggestionsConfig{}
