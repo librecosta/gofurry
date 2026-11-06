@@ -304,6 +304,7 @@ function SearchTailView({ children, onMeasure }: { children: ReactNode; onMeasur
 function SearchPanel({ ref, id, label, kind, onKeyDown, children }: { ref: Ref<HTMLDivElement>; id: string; label: string; kind: Exclude<Panel, null>; onKeyDown: KeyboardEventHandler<HTMLDivElement>; children: ReactNode }) {
   const present = useIsPresent()
   const transition = useMotionTiming()
+  // Both lists fade without moving glyphs across fractional device pixels.
   return <motion.div ref={ref} id={id} role="listbox" aria-label={label} data-search-panel={kind} data-open={present} aria-hidden={!present} inert={!present}
-    onKeyDown={onKeyDown} className={styles.panel} initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={transition}>{children}</motion.div>
+    onKeyDown={onKeyDown} className={styles.panel} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={transition}>{children}</motion.div>
 }

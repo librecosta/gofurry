@@ -320,3 +320,69 @@ test('start: cold menu fonts are fetched with SSR, not on first open', async ({ 
   await info.attach('font-evidence',{body:JSON.stringify(evidence,null,2),contentType:'application/json'})
   expect(errors).toEqual([])
 })
+
+test.describe('start: popup focus and scaled-display text', () => {
+  test.use({ deviceScaleFactor: 1.25 })
+
+  test('pointer opening never focuses Home; keyboard entry retains a visible focus indicator', async ({ page }) => {
+    await page.goto(chinesePath); await page.waitForLoadState('networkidle')
+    const trigger=page.locator('[data-start-logo]').locator('..'),popup=page.locator('[data-start-brand]'),home=popup.locator('nav > :first-child')
+    for(const colorScheme of ['light','dark'] as const){
+      await page.emulateMedia({colorScheme})
+      for(const fromInput of [false,true]){
+        if(fromInput)await input(page).click()
+        await trigger.click();await expect(popup).toBeFocused();await expect(home).not.toBeFocused()
+        const frames=await home.evaluate(el=>new Promise<string[]>(resolve=>{
+          const frames:string[]=[],start=performance.now()
+          const sample=()=>{frames.push(getComputedStyle(el).outlineStyle);if(performance.now()-start>=480)resolve(frames);else requestAnimationFrame(sample)};sample()
+        }))
+        expect(new Set(frames)).toEqual(new Set(['none']))
+        await page.keyboard.press('Tab');await expect(home).toBeFocused();await expect(home).toHaveCSS('outline-style','solid')
+        await page.keyboard.press('Escape');await expect(popup).toHaveCount(0);await expect(trigger).toBeFocused()
+      }
+      await trigger.press('Enter');await expect(home).toBeFocused();await expect(home).toHaveCSS('outline-style','solid')
+      await page.keyboard.press('Escape');await expect(popup).toHaveCount(0);await expect(trigger).toBeFocused()
+      await trigger.click();await expect(popup).toBeFocused()
+      await page.mouse.click(900,800);await expect(popup).toHaveCount(0)
+    }
+  })
+
+  test('Logo, User and both search lists fade on a fixed text grid, including full exits', async ({ page, context, baseURL }, info) => {
+    await context.addCookies([{name:`gf-quick-access-${region}`,value:'1',url:baseURL!}])
+    await page.route('**/api/v1/start/search/suggestions?*',r=>r.fulfill({headers:{'X-GoFurry-Region':region,'X-GoFurry-Content-Mode':'SFW'},json:{suggestions:['furry Google','furry DuckDuckGo']}}))
+    await english(page)
+    const evidence=[]
+    for(const kind of ['brand','user','platforms','suggestions']){
+      const selector=kind==='brand'?'[data-start-brand]':kind==='user'?'[data-start-user-menu]':'[data-search-panel]'
+      await page.evaluate(selector=>{
+        type Frame={x:number;y:number;width:number;font:string;opacity:number;transform:string}
+        const frames:Frame[]=[];(window as unknown as {stableTextFrames:Frame[]}).stableTextFrames=frames
+        const start=performance.now()
+        const sample=()=>{
+          const popup=document.querySelector(selector),row=popup?.querySelector('nav > :first-child,[role=menuitem],[role=option]')
+          if(popup && row){
+            const walker=document.createTreeWalker(row,NodeFilter.SHOW_TEXT);let node:Node|null
+            while((node=walker.nextNode()) && !node.textContent?.trim()){}
+            if(node){const range=document.createRange();range.selectNodeContents(node);const r=range.getBoundingClientRect(),s=getComputedStyle(popup)
+              frames.push({x:r.x,y:r.y,width:r.width,font:getComputedStyle(row).font,opacity:Number(s.opacity),transform:s.transform})}
+          }
+          if(performance.now()-start<1600)requestAnimationFrame(sample)
+        };requestAnimationFrame(sample)
+      },selector)
+      if(kind==='suggestions')await input(page).fill('furry')
+      else await page.locator(kind==='brand'?'[data-start-logo]':kind==='user'?'[data-start-actions] > button:last-child':'[data-mobile-platform-trigger]').click()
+      const popup=page.locator(selector);await expect(popup).toHaveCSS('opacity','1')
+      const frames=await page.evaluate(()=>(window as unknown as {stableTextFrames:{x:number;y:number;width:number;font:string;opacity:number;transform:string}[]}).stableTextFrames.filter(f=>f.opacity>.01))
+      expect(frames.length).toBeGreaterThan(3);expect(frames.some(f=>f.opacity<1)).toBe(true)
+      for(const key of ['x','y','width'] as const)expect(Math.max(...frames.map(f=>f[key]))-Math.min(...frames.map(f=>f[key]))).toBeLessThan(.01)
+      expect(new Set(frames.map(f=>f.font)).size).toBe(1);expect(new Set(frames.map(f=>f.transform))).toEqual(new Set(['none']))
+      evidence.push({kind,frames});await page.screenshot({path:info.outputPath(kind+'.png')})
+      await page.keyboard.press('Escape');const exit=await sampleMotion(popup)
+      expect(exit.some(f=>f.opacity>0 && f.opacity<1)).toBe(true);expect(exit.at(-1)!.t).toBeGreaterThan(250)
+      const painted=exit.filter(f=>f.opacity>.01 && f.w>0 && f.h>0)
+      expect(Math.max(...painted.map(f=>f.y))-Math.min(...painted.map(f=>f.y))).toBeLessThan(.01)
+      await expect(popup).toHaveCount(0)
+    }
+    await info.attach('stable-text-frames',{body:JSON.stringify(evidence),contentType:'application/json'})
+  })
+})

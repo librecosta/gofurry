@@ -1,6 +1,6 @@
 import { cx } from '../styles/classes'
 import { Link } from '@tanstack/react-router'
-import { useId, useState } from 'react'
+import { useId, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import { useMotionTiming } from '../motion'
 import { HouseIcon } from '@phosphor-icons/react/dist/ssr/House'
@@ -25,9 +25,11 @@ export function StartHeader() {
   const home = localizedPath('/', locale, region)
   const [brandOpen, setBrandOpen] = useState(false)
   const [userOpen, setUserOpen] = useState(false)
+  const brandPopup = useRef<HTMLDivElement>(null)
   const unavailableId = useId()
   const transition = useMotionTiming()
-  const animation = { initial: { opacity: 0, y: -4 }, animate: { opacity: 1, y: 0 }, exit: { opacity: 0, y: -4 }, transition }
+  // Keep text on its final pixel grid throughout the fade, including scaled displays.
+  const animation = { initial: { opacity: 0 }, animate: { opacity: 1 }, exit: { opacity: 0 }, transition }
   return <header className={styles.header}>
     <Popover.Root open={brandOpen} onOpenChange={setBrandOpen}>
       <Popover.Trigger aria-label={m.brand} className={styles.brandTrigger}>
@@ -35,7 +37,8 @@ export function StartHeader() {
       </Popover.Trigger>
       <AnimatePresence>{brandOpen && <Popover.Portal keepMounted>
         <Popover.Positioner positionMethod="fixed" align="start" sideOffset={8} collisionPadding={16} className={styles.menuPositioner}>
-          <Popover.Popup data-start-brand className={cx(styles.menu, styles.brandPopup)} render={<motion.div {...animation} />}>
+          <Popover.Popup ref={brandPopup} data-start-brand initialFocus={type => type === 'keyboard' ? true : brandPopup.current}
+            className={cx(styles.menu, styles.brandPopup)} render={<motion.div {...animation} />}>
             <Popover.Title className={styles.srOnly}>{m.navigation}</Popover.Title>
             <p id={unavailableId} className={styles.srOnly}>{m.unavailable}</p>
             <nav aria-label={m.navigation}>
