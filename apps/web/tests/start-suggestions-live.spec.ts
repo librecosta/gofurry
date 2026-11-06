@@ -35,12 +35,12 @@ test('live: identical regional suggestions, selected targets and compact weather
   await target.waitForLoadState('domcontentloaded')
   expect(new URL(target.url()).hostname).toBe('www.bing.com')
   expect(new URL(target.url()).searchParams.get('q')).toBe(catalog.get('furry')![1]); await target.close()
-  await page.locator('[data-desktop-platforms]').getByRole('button', { name: 'Google', exact: true }).click()
+  await page.locator('[data-desktop-platforms]').getByRole('button', { name: region === 'CN' ? '百度' : 'Google', exact: true }).click()
   await field.fill('兽人'); await expect(panel).toHaveCSS('opacity', '1')
   const clicked = page.waitForEvent('popup'); await panel.getByRole('option').last().click(); const selected = await clicked
   await selected.waitForLoadState('domcontentloaded')
-  expect(new URL(selected.url()).hostname).toBe('www.google.com')
-  expect(new URL(selected.url()).searchParams.get('q')).toBe(catalog.get('兽人')!.at(-1)); await selected.close()
+  expect(new URL(selected.url()).hostname).toBe(region === 'CN' ? 'www.baidu.com' : 'www.google.com')
+  expect(new URL(selected.url()).searchParams.get(region === 'CN' ? 'wd' : 'q')).toBe(catalog.get('兽人')!.at(-1)); await selected.close()
   await page.locator('[data-search-clear]').click(); await page.mouse.click(4, 500)
   for (const theme of ['light', 'dark']) {
     await page.locator('[data-start-settings]').click()

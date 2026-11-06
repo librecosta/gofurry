@@ -1,5 +1,5 @@
 import { cx } from '../styles/classes'
-import { useEffect, useLayoutEffect, useId, useRef, useState, type KeyboardEvent, type KeyboardEventHandler, type ReactNode, type Ref } from 'react'
+import { useEffect, useLayoutEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type KeyboardEventHandler, type ReactNode, type Ref } from 'react'
 import { AnimatePresence, motion, useIsPresent } from 'motion/react'
 import { useMotionTiming } from '../motion'
 import { MagnifyingGlassIcon } from '@phosphor-icons/react/dist/ssr/MagnifyingGlass'
@@ -11,14 +11,14 @@ import { QuickAccess } from './quick-access'
 import { usePreferences } from '../preferences'
 import styles from './search.module.scss'
 import { useStartMessages } from './messages'
-import { categories, defaultPlatform, platforms, searchURL, type Category } from './search-platforms'
+import { categories, availablePlatforms, resolveSelection, searchURL, type Category } from './search-platforms'
 
 type Panel = 'platforms' | 'suggestions' | null
 type Suggestions = { query: string; items: string[] }
 
 export function SearchBox() {
   const hoverTransition = useMotionTiming(0.3)
-  const { region, locale, quickAccess } = usePreferences()
+  const { region, locale, quickAccess, contentPreference, showFurrySearch } = usePreferences()
   const m = useStartMessages()
   const [mobile, setMobile] = useState<boolean | null>(null)
   const [platformWidth, setPlatformWidth] = useState<number>()
@@ -26,8 +26,7 @@ export function SearchBox() {
   const platformMeasured = useRef(false)
   const [tailHeight, setTailHeight] = useState<number>()
   const tailTransition = useMotionTiming()
-  const [category, setCategory] = useState<Category>('search')
-  const [selected, setSelected] = useState(defaultPlatform('search').id)
+  const [selection, setSelection] = useState<{ category: Category; id: string }>({ category: 'search', id: 'bing' })
   const [keyword, setKeyword] = useState('')
   const [panel, setPanel] = useState<Panel>(null)
   const [suggestions, setSuggestions] = useState<Suggestions>({ query: '', items: [] })
@@ -48,8 +47,17 @@ export function SearchBox() {
   const skipFocusRequest = useRef(false)
   const [categoryEdges, setCategoryEdges] = useState({ left: false, right: false })
   const panelId = useId()
-  const available = platforms[category]
-  const target = available.find((item) => item.id === selected)!
+  const catalog = useMemo(() => availablePlatforms(region, contentPreference, showFurrySearch), [region, contentPreference, showFurrySearch])
+  // Resolve synchronously: no render or submit can use a hidden/missing target.
+  const { category, target, choices: available } = resolveSelection(catalog, selection.category, selection.id)
+  const selected = target.id
+  useEffect(() => {
+    setSelection(previous => {
+      const next = resolveSelection(catalog, previous.category, previous.id)
+      return previous.category === next.category && previous.id === next.target.id ? previous : { category: next.category, id: next.target.id }
+    })
+    cancelRequest(); closePanel()
+  }, [catalog])
 
   useLayoutEffect(() => {
     let active = true
@@ -84,7 +92,7 @@ export function SearchBox() {
     observer.observe(track); observer.observe(track.firstElementChild!)
     void document.fonts.ready.then(measure)
     return () => { active = false; observer.disconnect() }
-  }, [])
+  }, [showFurrySearch])
 
   useEffect(() => {
     const query = matchMedia('(max-width: 767px)')
@@ -168,11 +176,13 @@ export function SearchBox() {
   }
   function chooseCategory(next: Category, button: HTMLButtonElement) {
     cancelRequest(); closePanel()
-    setCategory(next); setSelected(defaultPlatform(next).id)
+    const resolved = resolveSelection(catalog, next, '')
+    setSelection({ category: resolved.category, id: resolved.target.id })
     revealCategory(button)
   }
   function choosePlatform(id: string, fromMobile = false) {
-    setSelected(id)
+    if (!available.some(item => item.id === id)) return
+    setSelection({ category, id })
     if (fromMobile) { cancelRequest(); closePanel(); trigger.current?.focus({ preventScroll: true }) }
   }
   function groupKeys(event: KeyboardEvent<HTMLElement>) {
@@ -219,7 +229,7 @@ export function SearchBox() {
     <div ref={categoryTrack} data-category-track onScroll={updateCategoryEdges} className={cx(styles.categoryTrack, categoryEdges.left && styles.fadeLeft, categoryEdges.right && styles.fadeRight, categoryEdges.left && categoryEdges.right && styles.fadeBoth)}>
       <div role="group" aria-label={m.categories} aria-description={categoryEdges.left || categoryEdges.right ? m.moreCategories : undefined} data-categories onKeyDown={groupKeys}
         onFocusCapture={(event) => { if (event.target instanceof HTMLButtonElement) revealCategory(event.target) }} className={styles.categories}>
-        {categories.map((id) => <button key={id} type="button" aria-pressed={category === id}
+        {categories.filter(id => catalog.some(item => item.category === id)).map((id) => <button key={id} type="button" aria-pressed={category === id}
           onClick={(event) => chooseCategory(id, event.currentTarget)} className={cx(styles.chip, styles.category, category === id && styles.selected)}>{m.category[id]}</button>)}
       </div>
     </div>

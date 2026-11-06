@@ -9,7 +9,7 @@ export type Locale = 'zh' | 'en'
 export type Theme = 'light' | 'dark'
 export type ThemePreference = Theme | 'system'
 export type ContentPreference = 'SFW' | 'NSFW'
-export type Preferences = { region: Region; locale: Locale; theme: Theme; themePreference: ThemePreference; contentPreference: ContentPreference; quickAccess: boolean }
+export type Preferences = { region: Region; locale: Locale; theme: Theme; themePreference: ThemePreference; contentPreference: ContentPreference; quickAccess: boolean; showFurrySearch: boolean }
 
 // Region belongs to the deployment; no request parameter or preference changes it.
 export const readPreferences = createServerFn({ method: 'GET' }).validator((pathname: string) => {
@@ -27,11 +27,12 @@ export const readPreferences = createServerFn({ method: 'GET' }).validator((path
     locale: isStartPath(pathname) ? localeForPath(pathname, region) : locale === 'zh' || locale === 'en' ? locale : region === 'CN' ? 'zh' : 'en',
     theme: themePreference === 'dark' ? 'dark' : 'light', themePreference,
     quickAccess: getCookie(`gf-quick-access-${region}`) === '1',
+    showFurrySearch: getCookie(`gf-furry-search-${region}`) !== '0',
     contentPreference: region === 'INTL' && getCookie('gf-content-preference') === 'NSFW' ? 'NSFW' : 'SFW',
   }
 })
 
-type Context = Preferences & { setLocale: (locale: Locale) => void; setTheme: (theme: ThemePreference) => void; setContentPreference: (value: ContentPreference) => void; setQuickAccess: (value: boolean) => void }
+type Context = Preferences & { setLocale: (locale: Locale) => void; setTheme: (theme: ThemePreference) => void; setContentPreference: (value: ContentPreference) => void; setQuickAccess: (value: boolean) => void; setShowFurrySearch: (value: boolean) => void }
 const PreferencesContext = createContext<Context | null>(null)
 
 function remember(name: string, value: string) {
@@ -46,6 +47,7 @@ export function PreferencesProvider({ initial, children }: { initial: Preference
   const [themePreference, changeThemePreference] = useState(initial.themePreference)
   const [contentPreference, changeContentPreference] = useState(initial.contentPreference)
   const [quickAccess, changeQuickAccess] = useState(initial.quickAccess)
+  const [showFurrySearch, changeShowFurrySearch] = useState(initial.showFurrySearch)
   useEffect(() => { changeLocale(null) }, [pathname])
   useEffect(() => {
     const media = matchMedia('(prefers-color-scheme: dark)')
@@ -56,7 +58,11 @@ export function PreferencesProvider({ initial, children }: { initial: Preference
     return () => media.removeEventListener('change', update)
   }, [themePreference])
   return <PreferencesContext value={{
-    region: initial.region, locale: isStartPath(pathname) ? localeForPath(pathname, initial.region) : legacyLocale ?? initial.locale, theme, themePreference, contentPreference, quickAccess,
+    region: initial.region, locale: isStartPath(pathname) ? localeForPath(pathname, initial.region) : legacyLocale ?? initial.locale, theme, themePreference, contentPreference, quickAccess, showFurrySearch,
+    setShowFurrySearch: value => {
+      try { remember(`gf-furry-search-${initial.region}`, value ? '1' : '0') } catch { /* In-memory preference remains usable. */ }
+      changeShowFurrySearch(value)
+    },
     setQuickAccess: value => {
       try { remember(`gf-quick-access-${initial.region}`, value ? '1' : '0') } catch { /* In-memory preference remains usable. */ }
       changeQuickAccess(value)

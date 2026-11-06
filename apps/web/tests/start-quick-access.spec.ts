@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const region = process.env.WEB_REGION ?? 'CN'
+const searchDestination = region === 'CN' ? { name: 'Baidu', host: 'www.baidu.com' } : { name: 'DuckDuckGo', host: 'duckduckgo.com' }
 const path = region === 'CN' ? '/en/start' : '/start'
 const chinese = region === 'CN' ? '/start' : '/zh/start'
 const origin = 'http://127.0.0.1:17320'
@@ -80,12 +81,12 @@ test('quick access: default and remembered SSR layout, smooth toggle and search 
   await toggle.click()
   await closeSettings(page)
   await expect(page.locator('[data-mobile-platform-trigger]')).toBeVisible()
-  await page.locator('[data-mobile-platform-trigger]').click(); await page.getByRole('option', { name: 'DuckDuckGo', exact: true }).click()
+  await page.locator('[data-mobile-platform-trigger]').click(); await page.getByRole('option', { name: searchDestination.name, exact: true }).click()
   await page.route('**/api/v1/start/search/suggestions?*', route => route.fulfill({ headers: { 'X-GoFurry-Region': region, 'X-GoFurry-Content-Mode': 'SFW' }, json: { suggestions: ['furry art'] } }))
   await page.evaluate(() => { (window as unknown as { targets: string[] }).targets = []; window.open = url => { (window as unknown as { targets: string[] }).targets.push(String(url)); return null } })
   await page.locator('input[name=q]').fill('furry'); await expect(page.getByRole('option', { name: 'furry art' })).toBeVisible()
   await page.locator('input[name=q]').press('Enter')
-  expect(await page.evaluate(() => (window as unknown as { targets: string[] }).targets[0])).toContain('duckduckgo.com')
+  expect(await page.evaluate(() => (window as unknown as { targets: string[] }).targets[0])).toContain(searchDestination.host)
   expect((await stored(page))?.recent ?? []).toEqual([])
   await page.reload(); await expect(page.locator('[data-start-search]')).toHaveAttribute('data-quick-enabled', 'true')
   await page.goto(chinese); await expect(page.locator('[data-quick-manage]')).toBeEnabled()

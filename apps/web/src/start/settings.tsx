@@ -24,7 +24,7 @@ import { useWallpaper } from './wallpaper-state'
 import { CaretRightIcon } from '@phosphor-icons/react/dist/ssr/CaretRight'
 
 export function StartSettings() {
-  const { region, locale, themePreference, contentPreference, setLocale, setContentPreference, quickAccess, setQuickAccess } = usePreferences()
+  const { region, locale, themePreference, contentPreference, setLocale, setContentPreference, quickAccess, setQuickAccess, showFurrySearch, setShowFurrySearch } = usePreferences()
   const m = useStartMessages()
   const q = useQuickMessages()
   const themes = useRef<HTMLDivElement>(null)
@@ -73,6 +73,9 @@ export function StartSettings() {
               </fieldset>
               <label className={styles.quickSetting}>{q.toggle}<Switch.Root checked={quickAccess} onCheckedChange={setQuickAccess} className={styles.switch}>
                 <Switch.Thumb className={styles.switchThumb} render={<motion.span initial={false} animate={{ x: quickAccess ? 16 : 0 }} transition={selectionTransition} />} />
+              </Switch.Root></label>
+              <label className={styles.quickSetting}>{m.showFurrySearch}<Switch.Root checked={showFurrySearch} onCheckedChange={setShowFurrySearch} className={styles.switch}>
+                <Switch.Thumb className={styles.switchThumb} render={<motion.span initial={false} animate={{ x: showFurrySearch ? 16 : 0 }} transition={selectionTransition} />} />
               </Switch.Root></label>
               <button type="button" data-open-wallpapers className={styles.wallpaperSetting} onClick={() => { pendingLibrary.current = true; setOpen(false) }}><span>{locale === 'zh' ? '背景' : 'Background'}</span><span>{locale === 'zh' ? ({ random: '随机', fixed: '固定', off: '关闭' }[preference?.mode ?? 'random']) : preference?.mode ?? 'random'} <CaretRightIcon size={14} /></span></button>
               {region === 'INTL' && <fieldset className={styles.field}><legend className={styles.label}>{m.contentPreference}</legend>
