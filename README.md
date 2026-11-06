@@ -17,6 +17,7 @@ Stop local services with `task stop`, or only one with `task stop:web` / `task s
 
 - Web: <http://127.0.0.1:17320>; development `/api/**` proxies through Nitro route rules to API port 17321. Production has no general automatic API proxy or cross-region fallback.
 - API: <http://127.0.0.1:17321/api/v1/status>. Both expose `/livez` and `/readyz`.
+- Official wallpapers need `database` and development `storage` configured in the same root `config.yaml` used by `task dev:api`, with PostgreSQL running and explicit migrations applied. `/readyz` can remain healthy while this optional feature is unavailable. A missing database makes detail/random return 503; it never silently loads `.local` integration YAML or static JSON. Keep daily development databases separate from resettable `_test` databases. See [wallpaper setup and development import](docs/wallpapers.md).
 - Standalone API: `bin/api --config config.yaml` (`bin/api.exe` on Windows). Probe: `bin/api healthcheck --config config.yaml`. The probe derives host/port from that YAML, including wildcard listeners.
 - Production Web: `task build:web`, then `pnpm --filter @gofurry/web start`. For local Node, set `HOST=127.0.0.1 PORT=17320` (PowerShell: `$env:HOST='127.0.0.1'; $env:PORT='17320'`). The container retains internal port 3000.
 

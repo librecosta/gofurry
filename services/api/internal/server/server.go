@@ -77,6 +77,8 @@ func New(logger zerolog.Logger, cfg platform.Config) *Server {
 			}
 			cancel()
 		}
+	} else {
+		logger.Warn().Msg("wallpaper database is not configured; background selection is unavailable")
 	}
 	var wallpaperObjects wallpaper.Objects
 	if objects != nil {
