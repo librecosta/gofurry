@@ -20,7 +20,7 @@ export function useLocalFolder(region: string) {
   const root = useRef<DirectoryHandle | undefined>(undefined), index = useRef<LocalFile[]>([]), work = useRef<AbortController | null>(null)
   const lastRandom = useRef('')
   const [files, setFiles] = useState<LocalFile[]>([]), [status, setStatus] = useState(''), [persistent, setPersistent] = useState(true)
-  const cancel = useCallback(() => { work.current?.abort(); work.current = null }, [])
+  const cancel = useCallback(() => { work.current?.abort(); work.current = null; setStatus(value => value === 'scanning' ? '' : value) }, [])
   useEffect(() => () => cancel(), [cancel])
   const getRoot = useCallback(async () => {
     const handle = root.current ?? await handleStore(region)
@@ -67,9 +67,6 @@ export function useLocalFolder(region: string) {
       await scan(undefined, handle); return true
     } catch (e) { if (!(e instanceof DOMException && e.name === 'AbortError')) setStatus('permission') }
   }, [region, scan])
-  const authorize = useCallback(async () => {
-    try { const handle = root.current ?? await handleStore(region); if (!handle || await handle.requestPermission({ mode: 'read' }) !== 'granted') { setStatus('permission'); return false }; root.current=handle; await scan(undefined,handle); return true } catch { setStatus('permission'); return false }
-  }, [region, scan])
   const fallback = useCallback((selected: FileList) => {
     cancel(); root.current=undefined; setPersistent(false)
     const out:LocalFile[]=[];let visited=0,limited=false
@@ -97,7 +94,7 @@ export function useLocalFolder(region: string) {
     await withLocalBudget(signal, async()=>{const bitmap=await createImageBitmap(file);try{checkDimensions(bitmap)}finally{bitmap.close()}})
     aborted(signal); return file
   }, [getRoot, scan])
-  return { files, status, persistent, pick, authorize, fallback, browse, scan, cancel, resolve }
+  return { files, status, persistent, pick, fallback, browse, scan, cancel, resolve }
 }
 
 // Reject animated variants and large files before invoking a decoder. No EXIF/GPS upload.
@@ -129,7 +126,7 @@ export async function localThumbnail(entry: LocalFile, signal: AbortSignal) {
       const canvas=document.createElement('canvas'), ratio=Math.min(1,480/bitmap.width,270/bitmap.height)
       canvas.width=Math.max(1,Math.round(bitmap.width*ratio));canvas.height=Math.max(1,Math.round(bitmap.height*ratio));canvas.getContext('2d')!.drawImage(bitmap,0,0,canvas.width,canvas.height)
       const blob=await new Promise<Blob>((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(new Error('decode')),'image/webp',.78)); aborted(signal)
-      return { url:URL.createObjectURL(blob),width:bitmap.width,height:bitmap.height }
+      return { url:URL.createObjectURL(blob),blob,width:bitmap.width,height:bitmap.height }
     } finally { bitmap.close() }
   })
 }
