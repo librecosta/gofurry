@@ -19,6 +19,9 @@ import { usePreferences, type ContentPreference, type Locale, type ThemePreferen
 import controls from './controls.module.scss'
 import { useStartMessages } from './messages'
 import { useThemeReveal } from './theme-reveal'
+import { WallpaperLibrary } from './wallpaper-library'
+import { useWallpaper } from './wallpaper-state'
+import { CaretRightIcon } from '@phosphor-icons/react/dist/ssr/CaretRight'
 
 export function StartSettings() {
   const { region, locale, themePreference, contentPreference, setLocale, setContentPreference, quickAccess, setQuickAccess } = usePreferences()
@@ -27,14 +30,17 @@ export function StartSettings() {
   const themes = useRef<HTMLDivElement>(null)
   const reveal = useThemeReveal()
   const [open, setOpen] = useState(false)
+  const [library, setLibrary] = useState(false)
+  const pendingLibrary = useRef(false), trigger = useRef<HTMLButtonElement>(null)
+  const { preference } = useWallpaper()
   const [tab, setTab] = useState('basic')
   const layoutId = useId()
   const transition = useMotionTiming()
   const selectionTransition = useMotionTiming(0.4)
   const radioTransition = useMotionTiming(0.3)
-  return <Dialog.Root open={open} onOpenChange={(value) => { if (value) setTab('basic'); setOpen(value) }}>
-    <Dialog.Trigger aria-label={m.settings} data-start-settings className={cx(controls.header, styles.trigger)}><GearSixIcon size={21} aria-hidden="true" /></Dialog.Trigger>
-    <AnimatePresence>{open && <Dialog.Portal keepMounted>
+  return <><Dialog.Root open={open} onOpenChange={(value) => { if (value) setTab('basic'); setOpen(value) }}>
+    <Dialog.Trigger ref={trigger} aria-label={m.settings} data-start-settings className={cx(controls.header, styles.trigger)}><GearSixIcon size={21} aria-hidden="true" /></Dialog.Trigger>
+    <AnimatePresence onExitComplete={() => { if (pendingLibrary.current) { pendingLibrary.current = false; setLibrary(true) } }}>{open && <Dialog.Portal keepMounted>
       <Dialog.Backdrop className={styles.backdrop} render={<motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={transition} />} />
       <Dialog.Popup data-start-preferences className={styles.popup} render={<motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }} transition={transition} />}>
         <div className={styles.heading}>
@@ -68,6 +74,7 @@ export function StartSettings() {
               <label className={styles.quickSetting}>{q.toggle}<Switch.Root checked={quickAccess} onCheckedChange={setQuickAccess} className={styles.switch}>
                 <Switch.Thumb className={styles.switchThumb} render={<motion.span initial={false} animate={{ x: quickAccess ? 16 : 0 }} transition={selectionTransition} />} />
               </Switch.Root></label>
+              <button type="button" data-open-wallpapers className={styles.wallpaperSetting} onClick={() => { pendingLibrary.current = true; setOpen(false) }}><span>{locale === 'zh' ? '背景' : 'Background'}</span><span>{locale === 'zh' ? ({ random: '随机', fixed: '固定', off: '关闭' }[preference?.mode ?? 'random']) : preference?.mode ?? 'random'} <CaretRightIcon size={14} /></span></button>
               {region === 'INTL' && <fieldset className={styles.field}><legend className={styles.label}>{m.contentPreference}</legend>
                 <RadioGroup aria-label={m.contentPreference} value={contentPreference} onValueChange={(value: ContentPreference) => setContentPreference(value)} className={cx(styles.track, styles.twoColumns)}>
                   <motion.span aria-hidden="true" data-settings-selection="content" className={styles.selection} initial={false} animate={{ x: contentPreference === 'SFW' ? '0%' : '100%' }} transition={selectionTransition} />
@@ -83,5 +90,5 @@ export function StartSettings() {
         <footer className={styles.footer}><GithubLogoIcon size={17} aria-hidden="true" className={styles.githubIcon} /><p className={styles.caption}>{m.githubLead}<a href="https://github.com/gofurry" target="_blank" rel="noopener noreferrer" aria-label={m.github} className={styles.github}>GitHub</a>{m.githubStop}</p></footer>
       </Dialog.Popup>
     </Dialog.Portal>}</AnimatePresence>
-  </Dialog.Root>
+  </Dialog.Root><WallpaperLibrary open={library} close={() => setLibrary(false)} finalFocus={trigger} /></>
 }

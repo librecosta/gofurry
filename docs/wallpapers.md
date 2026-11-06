@@ -1,5 +1,7 @@
 # Official wallpapers
 
+The Start background entry closes Settings completely before opening a separate Base UI/Motion library Dialog, restoring focus to Settings on exit. The desktop workspace is 38% preview/details and 62% browser, at most 1280px/94vw and 90dvh; mobile stacks independently scrollable sections. Featured/精选 and Local/本地 are the only source tabs. Browsing or tab changes never apply an image. Featured pages request nine WebP previews with 300ms cancellable search, fixed-size loading slots and stable paging. At most three recently visited pages live in component memory for 30 seconds. HD is opt-in in the preview; only applying a wallpaper starts the fullscreen HD pipeline. Card and detail pin actions share the same preference. Off, random and fixed are explicit modes; only a confirmed fixed-detail 404 resets the preference.
+
 Each deployment owns `start_wallpapers` and `wallpaper_audit_logs`; no Admin database or identity integration. UUIDv7 IDs, bound pgx/sqlc queries and explicit Goose migrations are authoritative. Configure one private YAML; optional `database: null` and `management: null` keep other APIs independent. Never inherit PG*/DATABASE_URL credentials.
 
 `task migrate ACTION=status|up CONFIG=<absolute YAML>` maintains only the configured deployment. Status is read-only; serve never migrates. `task sql:generate` / `task sql:check` use pinned sqlc. CN/INTL need physically separate databases and credentials.

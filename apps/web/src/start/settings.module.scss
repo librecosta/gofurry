@@ -299,3 +299,4 @@
   &[data-disabled] { opacity: 0.5; cursor: default; }
 }
 .switchThumb { display: block; width: 14px; height: 14px; border-radius: 50%; background: var(--overlay-text); }
+.wallpaperSetting { display:flex; align-items:center; justify-content:space-between; width:100%; border:0; border-radius:6px; padding:8px 0; background:transparent; color:inherit; font:inherit; cursor:pointer; outline:2px solid transparent; outline-offset:2px; span:last-child { display:flex; align-items:center; gap:6px; opacity:.7; } &:hover { background:var(--overlay-surface-hover); } &:active { background:var(--overlay-selected-surface); } &:focus-visible { outline-color:var(--overlay-focus); } }
