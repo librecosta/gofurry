@@ -18,6 +18,7 @@ async function handleStore(region: string, value?: DirectoryHandle) {
 }
 export function useLocalFolder(region: string) {
   const root = useRef<DirectoryHandle | undefined>(undefined), index = useRef<LocalFile[]>([]), work = useRef<AbortController | null>(null)
+  const lastRandom = useRef('')
   const [files, setFiles] = useState<LocalFile[]>([]), [status, setStatus] = useState(''), [persistent, setPersistent] = useState(true)
   const cancel = useCallback(() => { work.current?.abort(); work.current = null }, [])
   useEffect(() => () => cancel(), [cancel])
@@ -60,19 +61,25 @@ export function useLocalFolder(region: string) {
       const picker = (window as Window & { showDirectoryPicker?: (options: { mode: 'read'; id: string }) => Promise<DirectoryHandle> }).showDirectoryPicker
       if (!picker) return false
       const handle = await picker({ mode: 'read', id: `gofurry-wallpaper-${region}` })
-      if (await handle.requestPermission({ mode: 'read' }) !== 'granted') { setStatus('permission'); return true }
+      if (await handle.requestPermission({ mode: 'read' }) !== 'granted') { setStatus('permission'); return }
       root.current = handle; setPersistent(true)
       try { await handleStore(region, handle) } catch { setPersistent(false) }
       await scan(undefined, handle); return true
-    } catch (e) { if (!(e instanceof DOMException && e.name === 'AbortError')) setStatus('permission'); return true }
+    } catch (e) { if (!(e instanceof DOMException && e.name === 'AbortError')) setStatus('permission') }
   }, [region, scan])
   const authorize = useCallback(async () => {
-    try { const handle = root.current ?? await handleStore(region); if (!handle || await handle.requestPermission({ mode: 'read' }) !== 'granted') { setStatus('permission'); return }; root.current=handle; await scan(undefined,handle) } catch { setStatus('permission') }
+    try { const handle = root.current ?? await handleStore(region); if (!handle || await handle.requestPermission({ mode: 'read' }) !== 'granted') { setStatus('permission'); return false }; root.current=handle; await scan(undefined,handle); return true } catch { setStatus('permission'); return false }
   }, [region, scan])
   const fallback = useCallback((selected: FileList) => {
     cancel(); root.current=undefined; setPersistent(false)
-    const out=Array.from(selected).filter(f=>supported.test(f.name) && f.size<=50*1024*1024).slice(0,2000).map(file=>({path:file.webkitRelativePath.split('/').slice(1).join('/') || file.name,name:file.name,size:file.size,modified:file.lastModified,getFile:async()=>file}))
-    index.current=out;setFiles(out);setStatus(selected.length>2000?'limited':'')
+    const out:LocalFile[]=[];let visited=0,limited=false
+    for(const file of selected){
+      if(++visited>10000 || out.length>=2000){limited=true;break}
+      const parts=file.webkitRelativePath.split('/').slice(1)
+      if(parts.length>17){limited=true;continue}
+      if(supported.test(file.name) && file.size<=50*1024*1024)out.push({path:parts.join('/') || file.name,name:file.name,size:file.size,modified:file.lastModified,getFile:async()=>file})
+    }
+    index.current=out;setFiles(out);setStatus(limited?'limited':'')
   }, [cancel])
   const resolve = useCallback(async (path: string | undefined, signal: AbortSignal) => {
     let file: File
@@ -83,9 +90,12 @@ export function useLocalFolder(region: string) {
     } else {
       const items=index.current.length?index.current:await scan(signal)
       if (!items.length) throw new Error('localempty')
-      file=await items[Math.floor(Math.random()*items.length)].getFile()
+      const candidates=items.length>1?items.filter(f=>f.path!==lastRandom.current):items, selected=candidates[Math.floor(Math.random()*candidates.length)]
+      file=await selected.getFile();lastRandom.current=selected.path
     }
-    aborted(signal); await validateLocal(file); aborted(signal); return file
+    aborted(signal); await validateLocal(file); aborted(signal)
+    await withLocalBudget(signal, async()=>{const bitmap=await createImageBitmap(file);try{checkDimensions(bitmap)}finally{bitmap.close()}})
+    aborted(signal); return file
   }, [getRoot, scan])
   return { files, status, persistent, pick, authorize, fallback, browse, scan, cancel, resolve }
 }
@@ -97,25 +107,37 @@ export async function validateLocal(file: File) {
   if (/\.webp$/i.test(file.name) && text.includes('ANIM') || /\.png$/i.test(file.name) && text.includes('acTL') || /\.avif$/i.test(file.name) && text.slice(0,128).includes('avis')) throw new Error('format')
 }
 // A single decoder budget is shared by page thumbnails and selected-file metadata.
-let decodeTail: Promise<unknown> = Promise.resolve()
+let decoding=false
+const waiting: { start:()=>void; cancel:()=>void }[]=[]
+async function withLocalBudget<T>(signal:AbortSignal, run:()=>Promise<T>):Promise<T> {
+  aborted(signal)
+  if (decoding) await new Promise<void>((resolve,reject)=>{
+    if(waiting.length>=12){reject(new Error('busy'));return}
+    const entry={start:()=>{signal.removeEventListener('abort',entry.cancel);resolve()},cancel:()=>{const i=waiting.indexOf(entry);if(i>=0)waiting.splice(i,1);reject(signal.reason)}}
+    waiting.push(entry);signal.addEventListener('abort',entry.cancel,{once:true})
+  })
+  decoding=true
+  try{aborted(signal);return await run()}finally{const next=waiting.shift();if(next)next.start();else decoding=false}
+}
+function checkDimensions(bitmap:ImageBitmap){if(bitmap.width*bitmap.height>36000000 || bitmap.width>16384 || bitmap.height>16384)throw new Error('format')}
 export async function localThumbnail(entry: LocalFile, signal: AbortSignal) {
-  const task = decodeTail.catch(() => {}).then(async () => {
+  return withLocalBudget(signal,async () => {
     aborted(signal); const file=await entry.getFile(); await validateLocal(file); aborted(signal)
     const bitmap=await createImageBitmap(file)
     try {
-      aborted(signal); if (bitmap.width*bitmap.height>36000000 || bitmap.width>16384 || bitmap.height>16384) throw new Error('format')
+      aborted(signal); checkDimensions(bitmap)
       const canvas=document.createElement('canvas'), ratio=Math.min(1,480/bitmap.width,270/bitmap.height)
       canvas.width=Math.max(1,Math.round(bitmap.width*ratio));canvas.height=Math.max(1,Math.round(bitmap.height*ratio));canvas.getContext('2d')!.drawImage(bitmap,0,0,canvas.width,canvas.height)
       const blob=await new Promise<Blob>((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(new Error('decode')),'image/webp',.78)); aborted(signal)
       return { url:URL.createObjectURL(blob),width:bitmap.width,height:bitmap.height }
     } finally { bitmap.close() }
-  });decodeTail=task;return task
+  })
 }
 export async function localMetadata(entry: LocalFile, signal: AbortSignal) {
   const file=await entry.getFile();await validateLocal(file);aborted(signal)
   const { parse }=await import('exifr')
   const fields=['DateTimeOriginal','CreateDate','Make','Model','LensModel','FNumber','ISO','ExposureTime','Artist','Copyright']
   let exif: Record<string,unknown> = {}
-  try { exif=await parse(file,{pick:fields,gps:false,icc:false,xmp:false,iptc:false}) ?? {} } catch { /* Basic metadata remains available for unsupported formats. */ }
+  try { exif=await withLocalBudget(signal,async()=>await parse(file,{pick:fields,gps:false,icc:false,xmp:false,iptc:false}) ?? {}) } catch { /* Basic metadata remains available for unsupported formats. */ }
   aborted(signal);return Object.entries(exif).filter(([key,value])=>fields.includes(key) && value!==undefined).map(([key,value])=>[key,value instanceof Date?value.toLocaleString():String(value).slice(0,500)])
 }

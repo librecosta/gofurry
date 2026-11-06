@@ -52,8 +52,13 @@ func TestUnconfiguredCatalogNeverReadsStaticOrStorage(t *testing.T) {
 		res.Body.Close()
 	}
 	res, e = s.App.Test(httptest.NewRequest("GET", "/api/v1/start/backgrounds/random", nil))
-	if e != nil || res.StatusCode != 404 {
+	if e != nil || res.StatusCode != 503 {
 		t.Fatal("random route captured as UUID", e)
+	}
+	res.Body.Close()
+	res, e = s.App.Test(httptest.NewRequest("GET", "/api/v1/start/backgrounds/01900000-0000-7000-8000-000000000001", nil))
+	if e != nil || res.StatusCode != 503 {
+		t.Fatal("unconfigured database must not invalidate a saved fixed wallpaper", e)
 	}
 	res.Body.Close()
 }

@@ -37,6 +37,7 @@ test('library: real regional PostgreSQL/CDN, independent preview, pin/off persis
 })
 
 test('library: local directory fallback, selected metadata, fixed/random/off and no local upload', async ({ page }) => {
+  await page.addInitScript(()=>{const live=new Set<string>(),create=URL.createObjectURL.bind(URL),revoke=URL.revokeObjectURL.bind(URL);(window as unknown as {wallpaperURLs:Set<string>}).wallpaperURLs=live;URL.createObjectURL=b=>{const u=create(b);live.add(u);return u};URL.revokeObjectURL=u=>{live.delete(u);revoke(u)}})
   const requests: string[]=[];page.on('request',r=>{if(r.method()!=='GET')requests.push(r.url())})
   // Exercise the genuine File input fallback, not a fake image response.
   await page.addInitScript(()=>Object.defineProperty(window,'showDirectoryPicker',{value:undefined,configurable:true}))
@@ -53,8 +54,84 @@ test('library: local directory fallback, selected metadata, fixed/random/off and
   await page.getByRole('button',{name:'Unpin',exact:true}).click()
   await expect.poll(()=>page.evaluate(r=>JSON.parse(localStorage.getItem(`gf-wallpaper:${r}`)!).mode,region)).toBe('random')
   await page.getByRole('button',{name:'Turn off wallpaper'}).click()
-  await page.keyboard.press('Escape');await page.reload();await open(page)
+  await page.keyboard.press('Escape');await expect.poll(()=>page.evaluate(()=>(window as unknown as {wallpaperURLs:Set<string>}).wallpaperURLs.size)).toBe(0)
+  await page.reload();await open(page)
   await page.getByRole('tab',{name:'Local',exact:true}).click()
   await expect(page.getByText('No local images to browse.')).toBeVisible()
   expect(requests).toEqual([])
+})
+
+test('library: bounded pages, skeletons, debounce, stale requests, image failure and browser-only preview', async ({ page,request }) => {
+  const base=(await (await request.get(`${process.env.START_API_URL ?? 'http://127.0.0.1:17321'}/api/v1/start/backgrounds?page_size=9`)).json()).backgrounds[0]
+  const rows=Array.from({length:21},(_,i)=>({...base,id:`01a1ab75-f106-7088-b9a6-${String(i).padStart(12,'0')}`,title:`Wallpaper ${i+1}`}))
+  rows[9].preview={...base.preview,url:'https://wallpaper-test.invalid/missing.webp'}
+  await page.route('https://wallpaper-test.invalid/missing.webp',r=>r.abort())
+  const headers={'X-GoFurry-Region':region,'X-GoFurry-Content-Mode':'SFW'},calls:string[]=[]
+  await page.route('**/api/v1/start/backgrounds?**',async route=>{
+    const url=new URL(route.request().url()),p=Number(url.searchParams.get('page')??1),q=url.searchParams.get('q')??'';calls.push(url.search)
+    expect(url.searchParams.get('page_size')).toBe('9')
+    await new Promise(r=>setTimeout(r,q==='slow'?700:180))
+    try{await route.fulfill({json:{backgrounds:q?rows.filter(x=>x.title.includes(q)):rows.slice((p-1)*9,p*9),total:q?rows.filter(x=>x.title.includes(q)).length:21,page:p,page_size:9},headers})}catch{/* canceled request */}
+  })
+  await page.goto(path);await expect(page.locator('[data-start-hd]')).toHaveCSS('opacity','1');await open(page)
+  await expect(page.getByRole('button',{name:/^Preview Wallpaper /})).toHaveCount(9)
+  await page.getByRole('button',{name:'Next',exact:true}).click()
+  await expect(page.locator('[aria-busy=true]')).toBeVisible()
+  await expect(page.getByRole('button',{name:'Preview Wallpaper 10',exact:true})).toBeVisible()
+  await expect(page.getByRole('button',{name:'Preview Wallpaper 10',exact:true}).getByRole('status')).toBeVisible()
+  await page.getByRole('button',{name:'Next',exact:true}).click();await expect(page.getByRole('button',{name:/^Preview Wallpaper /})).toHaveCount(3)
+  const search=page.getByRole('textbox',{name:'Search Featured wallpapers'})
+  await search.fill('slow');await page.waitForTimeout(350);await search.fill('Wallpaper 2')
+  await expect(page.getByRole('button',{name:'Preview Wallpaper 2',exact:true})).toBeVisible();await page.waitForTimeout(800)
+  await expect(page.getByRole('button',{name:/^Preview Wallpaper /})).toHaveCount(3)
+  expect(calls.every(q=>q.includes('page_size=9'))).toBe(true)
+  await page.keyboard.press('Escape');await expect(page.getByRole('dialog')).toHaveCount(0)
+})
+
+test('library: fixed 503 is retained, only 404 resets, Local denial never falls back to CDN', async ({ browser,request })=>{
+  const base=(await (await request.get(`${process.env.START_API_URL ?? 'http://127.0.0.1:17321'}/api/v1/start/backgrounds`)).json()).backgrounds[0],headers={'X-GoFurry-Region':region,'X-GoFurry-Content-Mode':'SFW'}
+  for(const status of [503,404]){
+    const context=await browser.newContext(),page=await context.newPage();let random=0
+    await page.addInitScript(({region,id})=>localStorage.setItem(`gf-wallpaper:${region}`,JSON.stringify({version:1,source:'official',mode:'fixed',fixedId:id})),{region,id:base.id})
+    await page.route(`**/api/v1/start/backgrounds/${base.id}`,r=>r.fulfill({status,headers,json:{error:{code:status}}}))
+    await page.route('**/api/v1/start/backgrounds/random**',r=>{random++;return r.fulfill({headers,json:base})})
+    await page.goto(`http://127.0.0.1:17322${path}`)
+    if(status===404){await expect(page.locator('[data-start-hd]')).toHaveCSS('opacity','1');expect(random).toBe(1)}
+    else{await expect(page.getByRole('search')).toBeVisible();await open(page);await expect(page.getByText('Wallpaper service unavailable. Try again later.')).toBeVisible();expect(random).toBe(0)}
+    expect(await page.evaluate(r=>JSON.parse(localStorage.getItem(`gf-wallpaper:${r}`)!).mode,region)).toBe(status===404?'random':'fixed')
+    await context.close()
+  }
+  const context=await browser.newContext(),page=await context.newPage(),calls:string[]=[]
+  await page.addInitScript(r=>localStorage.setItem(`gf-wallpaper:${r}`,JSON.stringify({version:1,source:'local',mode:'fixed',fixedPath:'gone.jpg'})),region)
+  page.on('request',r=>{if(/backgrounds|\.(avif|webp)(\?|$)/.test(r.url()))calls.push(r.url())})
+  await page.goto(`http://127.0.0.1:17322${path}`);await page.waitForLoadState('networkidle');await open(page)
+  await expect(page.getByText('Choose or authorize a folder in Local.')).toBeVisible()
+  expect(calls).toEqual([]);expect(await page.evaluate(r=>JSON.parse(localStorage.getItem(`gf-wallpaper:${r}`)!).fixedPath,region)).toBe('gone.jpg')
+  await context.close()
+})
+
+test('library: corrupt preferences recover and never inherit the other deployment',async({browser,request})=>{
+  const base=(await(await request.get(`${process.env.START_API_URL??'http://127.0.0.1:17321'}/api/v1/start/backgrounds`)).json()).backgrounds[0]
+  for(const raw of ['{broken',JSON.stringify({version:2,source:'official',mode:'off'}),JSON.stringify({version:1,source:'official',mode:'fixed',fixedId:'-'.repeat(36)}),JSON.stringify({version:1,source:'local',mode:'fixed',fixedPath:'../private.jpg'})]){
+    const context=await browser.newContext(),page=await context.newPage();let count=0
+    await page.addInitScript(({region,raw})=>{localStorage.setItem(`gf-wallpaper:${region}`,raw);localStorage.setItem(`gf-wallpaper:${region==='CN'?'INTL':'CN'}`,JSON.stringify({version:1,source:'official',mode:'off'}))},{region,raw})
+    await page.route('**/api/v1/start/backgrounds/random**',route=>{count++;return route.fulfill({json:base,headers:{'X-GoFurry-Region':region,'X-GoFurry-Content-Mode':'SFW'}})})
+    await page.goto(`http://127.0.0.1:17322${path}`);await expect(page.locator('[data-start-hd]')).toHaveCSS('opacity','1');expect(count).toBe(1)
+    await context.close()
+  }
+})
+
+test('library: reselecting an inaccessible Local folder resumes its fixed path; cancel keeps the image',async({page})=>{
+  const calls:string[]=[]
+  await page.addInitScript(r=>{localStorage.setItem(`gf-wallpaper:${r}`,JSON.stringify({version:1,source:'local',mode:'fixed',fixedPath:'image.avif'}));Object.defineProperty(window,'showDirectoryPicker',{value:undefined,configurable:true})},region)
+  page.on('request',r=>{if(/backgrounds|https:.*\.(avif|webp)(\?|$)/.test(r.url()))calls.push(r.url())})
+  await page.goto(path);await open(page)
+  await expect(page.getByText('Choose or authorize a folder in Local.')).toBeVisible()
+  await page.locator('[data-local-folder]').setInputFiles(resolve('../../services/api/internal/wallpaper/testdata'))
+  await expect(page.locator('[data-start-background]')).toHaveAttribute('data-stage','image')
+  const before=await page.locator('[data-start-preview]').getAttribute('src')
+  await page.evaluate(()=>Object.defineProperty(window,'showDirectoryPicker',{configurable:true,value:async()=>{throw new DOMException('Canceled','AbortError')}}))
+  await page.getByRole('button',{name:'Choose folder',exact:true}).click();await page.waitForTimeout(550)
+  expect(await page.locator('[data-start-preview]').getAttribute('src')).toBe(before)
+  expect(calls).toEqual([])
 })

@@ -8,7 +8,7 @@ import { formatBytes, formatDate, LibraryImage } from './wallpaper-library'
 import styles from './wallpaper-library.module.scss'
 
 export function LocalPanel({ selected, select }: { selected: LocalFile | null; select: (file: LocalFile) => void }) {
-  const { local, preference, choose } = useWallpaper(), { locale } = usePreferences(), zh=locale==='zh'
+  const { local, preference, choose, shuffle } = useWallpaper(), { locale } = usePreferences(), zh=locale==='zh'
   const [query,setQuery]=useState(''),[term,setTerm]=useState(''),[page,setPage]=useState(1)
   const input=useRef<HTMLInputElement>(null)
   useEffect(()=>{void local.browse();return local.cancel},[local.browse,local.cancel])
@@ -16,11 +16,12 @@ export function LocalPanel({ selected, select }: { selected: LocalFile | null; s
   const filtered=local.files.filter(f=>f.path.toLocaleLowerCase().includes(term)), total=Math.max(1,Math.ceil(filtered.length/9)), currentPage=Math.min(page,total)
   const pinned=(file:LocalFile)=>preference?.source==='local' && preference.mode==='fixed' && preference.fixedPath===file.path
   const pin=(file:LocalFile)=>choose({version:1,source:'local',mode:pinned(file)?'random':'fixed',...(!pinned(file)?{fixedPath:file.path}:{})})
+  const resume=()=>{if(preference?.source==='local' && preference.mode!=='off')shuffle()}
   const messages:Record<string,string>={permission:zh?'请重新授权或选择文件夹。':'Authorize or choose a folder.',scanning:zh?'正在读取文件列表…':'Reading file list…',limited:zh?'已达到扫描上限（2000 张 / 10000 个条目 / 16 层），请选较小的文件夹。':'Scan limit reached (2000 images / 10000 entries / 16 levels). Choose a smaller folder.',scanfailed:zh?'读取文件夹失败，请重新选择。':'Folder could not be read. Choose it again.'}
   return <div className={styles.panel}>
-    <div className={styles.localTools}><input ref={el=>{input.current=el;el?.setAttribute('webkitdirectory','')}} data-local-folder type="file" multiple accept="image/jpeg,image/png,image/webp,image/avif" hidden onChange={e=>{if(e.target.files)local.fallback(e.target.files);e.target.value=''}} />
-      <button onClick={async()=>{if(!(await local.pick())){input.current!.setAttribute('webkitdirectory','');input.current!.click()}}}>{zh?'选择文件夹':'Choose folder'}</button>
-      <button onClick={()=>void local.authorize()}>{zh?'重新授权':'Authorize'}</button><button onClick={()=>void local.scan().catch(()=>{})}>{zh?'刷新列表':'Refresh files'}</button>
+    <div className={styles.localTools}><input ref={el=>{input.current=el;el?.setAttribute('webkitdirectory','')}} data-local-folder type="file" multiple accept="image/jpeg,image/png,image/webp,image/avif" hidden onChange={e=>{if(e.target.files){local.fallback(e.target.files);resume()};e.target.value=''}} />
+      <button onClick={async()=>{const picked=await local.pick();if(picked===false){input.current!.setAttribute('webkitdirectory','');input.current!.click()}else if(picked)resume()}}>{zh?'选择文件夹':'Choose folder'}</button>
+      <button onClick={async()=>{if(await local.authorize())resume()}}>{zh?'重新授权':'Authorize'}</button><button onClick={()=>void local.scan().catch(()=>{})}>{zh?'刷新列表':'Refresh files'}</button>
       {!local.persistent && <p>{zh?'兼容模式：刷新后可能需要重新选择文件夹。':'Compatibility mode: select the folder again after reloading.'}</p>}
       {local.status && <p role="status">{messages[local.status]}</p>}
       <input className={styles.search} aria-label={zh?'搜索本地壁纸':'Search Local wallpapers'} placeholder={zh?'搜索文件名或相对路径':'Search filename or relative path'} value={query} onChange={e=>setQuery(e.target.value)} maxLength={128} />

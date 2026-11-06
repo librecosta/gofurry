@@ -26,5 +26,7 @@
 .srOnly { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); }
 .localTools { display:flex; flex-wrap:wrap; gap:6px; align-items:center; p { margin:4px 0; width:100%; font-size:11px; opacity:.75; } input { flex-basis:100%; } }
 .metadataRow { display:contents; }
-@media(max-width:767px) { .dialog { width:calc(100vw - 16px); height:94dvh; padding:12px; } .workspace { display:flex; flex-direction:column; gap:12px; } .detail { max-height:30dvh; flex-shrink:0; padding-right:4px; .preview { width:min(100%,220px); float:left; margin:0 12px 10px 0; } } .browser { flex:1; } .grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; } }
+.preview img { position:absolute; inset:0; }
+.detail h3 { overflow-wrap:anywhere; }
+@media(max-width:767px) { .dialog { width:calc(100vw - 16px); height:94dvh; padding:12px; } .workspace { display:flex; flex-direction:column; gap:12px; } .detail { max-height:30dvh; flex-shrink:0; padding-right:4px; overflow-x:hidden; .preview { width:100%; max-width:220px; margin:0 auto 12px; } } .browser { flex:1; } .grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; } }
 @media(prefers-reduced-motion:reduce) { .dialog button { transition:none; } }

@@ -144,7 +144,8 @@ func (s *Service) PublicPage(ctx context.Context, page, size int, query string) 
 // Detail and random always read Published rows. A genuine miss is distinct from an outage.
 func (s *Service) PublicOne(ctx context.Context, id uuid.UUID, random bool) (PublicBackground, error) {
 	if !s.configured {
-		return PublicBackground{}, ErrNotFound
+		// Only an actual Published-row miss may invalidate a saved fixed selection.
+		return PublicBackground{}, ErrUnavailable
 	}
 	if s.pool == nil {
 		return PublicBackground{}, ErrUnavailable

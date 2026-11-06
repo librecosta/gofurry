@@ -16,12 +16,12 @@ import type { LocalFile } from './local-wallpapers'
 
 export function WallpaperLibrary({ open, close, finalFocus }: { open: boolean; close: () => void; finalFocus: RefObject<HTMLButtonElement | null> }) {
   const { locale } = usePreferences(), timing = useMotionTiming()
-  const title = locale === 'zh' ? '壁纸库' : 'Wallpaper library'
+  const heading = locale === 'zh' ? '壁纸库' : 'Wallpaper library'
   return <Dialog.Root open={open} onOpenChange={value => { if (!value) close() }}>
     <AnimatePresence>{open && <Dialog.Portal keepMounted>
       <Dialog.Backdrop className={settings.backdrop} render={<motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={timing} />} />
       <Dialog.Popup data-wallpaper-library className={styles.dialog} finalFocus={finalFocus} render={<motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }} transition={timing} />}>
-        <header className={styles.header}><Dialog.Title>{title}</Dialog.Title><Dialog.Close className={styles.iconButton} aria-label={locale === 'zh' ? '关闭壁纸库' : 'Close wallpaper library'}><XIcon size={20} /></Dialog.Close></header>
+        <header className={styles.header}><Dialog.Title>{heading}</Dialog.Title><Dialog.Close className={styles.iconButton} aria-label={locale === 'zh' ? '关闭壁纸库' : 'Close wallpaper library'}><XIcon size={20} /></Dialog.Close></header>
         <Dialog.Description className={styles.srOnly}>{locale === 'zh' ? '浏览不会改变背景。固定或选择随机模式后生效。' : 'Browsing only previews. Pin an image or choose a random mode to apply it.'}</Dialog.Description>
         <LibraryContent />
       </Dialog.Popup>
@@ -32,7 +32,7 @@ export function WallpaperLibrary({ open, close, finalFocus }: { open: boolean; c
 function LibraryContent() {
   const { locale, region } = usePreferences(), zh = locale === 'zh'
   const { preference, choose, shuffle, current, error } = useWallpaper()
-  const [tab, setTab] = useState('featured'), [query, setQuery] = useState(''), [debounced, setDebounced] = useState(''), [page, setPage] = useState(1)
+  const [tab, setTab] = useState(preference?.source === 'local' ? 'local' : 'featured'), [query, setQuery] = useState(''), [debounced, setDebounced] = useState(''), [page, setPage] = useState(1)
   const [result, setResult] = useState<WallpaperPage | null>(null), [status, setStatus] = useState(''), [selected, select] = useState<Wallpaper | null>(current), [hd, setHD] = useState(false)
   const [selectedLocal, selectLocal] = useState<LocalFile | null>(null)
   const pages = useRef(new Map<string, { value: WallpaperPage; at: number }>())
@@ -54,10 +54,12 @@ function LibraryContent() {
   const pinned = (item: Wallpaper) => preference?.source === 'official' && preference.mode === 'fixed' && preference.fixedId === item.id
   const pin = (item: Wallpaper) => choose({ version: 1, source: 'official', mode: pinned(item) ? 'random' : 'fixed', ...(!pinned(item) ? { fixedId: item.id } : {}) })
   const text = (cn: string, en: string) => zh ? cn : en
+  const localError = error === 'localempty' ? text('所选文件夹中没有可用的静态图片。', 'No supported static images in the folder.') : error === 'format' ? text('图片无法解码、为动态格式或超出安全尺寸。', 'Image cannot be decoded, is animated, or exceeds size limits.') : ''
+  const notice = error === 'removed' ? text('固定的精选壁纸已下架，已恢复精选随机。', 'Pinned wallpaper was removed. Featured random is restored.') : ''
   const messages: Record<string, string> = { empty: text('精选目录暂无已发布壁纸。', 'No published wallpapers.'), unavailable: text('壁纸服务暂不可用，请稍后重试。', 'Wallpaper service unavailable. Try again later.'), network: text('网络连接失败。', 'Network request failed.'), timeout: text('请求超时，请重试。', 'Request timed out.'), cdn: text('壁纸图片加载失败，保留可用画面。', 'Image failed; keeping the available background.'), permission: text('请在本地页重新选择或授权文件夹。', 'Choose or authorize a folder in Local.'), missing: text('本地文件不存在，请刷新文件列表。', 'Local file missing. Refresh the folder.') }
   return <div className={styles.workspace}>
     <section className={styles.detail} aria-label={text('壁纸预览', 'Wallpaper preview')}>
-      {selectedLocal ? <LocalDetail key={selectedLocal.path} file={selectedLocal} /> : <><div className={styles.preview}>{selected ? <LibraryImage key={`${selected.id}:${hd}`} src={hd ? selected.image.url : selected.preview.url} /> : <span>{text('选择图片预览', 'Select an image to preview')}</span>}</div>
+      {selectedLocal ? <LocalDetail key={selectedLocal.path} file={selectedLocal} /> : <><div className={styles.preview}>{selected ? <><LibraryImage key={selected.id} src={selected.preview.url} />{hd && <LibraryImage key={`hd:${selected.id}`} src={selected.image.url} />}</> : <span>{text('选择图片预览', 'Select an image to preview')}</span>}</div>
       {selected && <>
         <h3>{selected.title}</h3><p>{pinned(selected) ? text('已固定', 'Pinned') : text('仅预览', 'Preview only')}</p>
         <dl><dt>{text('分辨率', 'Resolution')}</dt><dd>{selected.image.width} × {selected.image.height}</dd><dt>{text('格式 / 大小', 'Format / Size')}</dt><dd>{selected.image.content_type?.replace('image/', '').toUpperCase()} · {formatBytes(selected.image.bytes)}</dd>
@@ -68,7 +70,7 @@ function LibraryContent() {
         <div className={styles.actions}><button onClick={() => pin(selected)}>{pinned(selected) ? text('取消固定', 'Unpin') : text('固定壁纸', 'Pin wallpaper')}</button><button onClick={() => setHD(true)} disabled={hd}>{text('查看高清', 'View HD')}</button></div>
       </>}</>}
       <div className={styles.actions}><button onClick={() => { choose({ version: 1, source: 'official', mode: 'random' }); shuffle() }}>{text('使用精选随机', 'Use Featured random')}</button><button onClick={() => choose({ version: 1, source: preference?.source ?? 'official', mode: 'off' })}>{text('关闭壁纸', 'Turn off wallpaper')}</button></div>
-      {error && <p role="status">{messages[error] ?? messages.unavailable}</p>}
+      {error && <p role="status">{notice || localError || messages[error] || messages.unavailable}</p>}
     </section>
     <Tabs.Root value={tab} onValueChange={value => setTab(String(value))} className={styles.browser}>
       <Tabs.List className={styles.tabs} aria-label={text('壁纸来源', 'Wallpaper source')}><Tabs.Tab value="featured">{text('精选', 'Featured')}</Tabs.Tab><Tabs.Tab value="local">{text('本地', 'Local')}</Tabs.Tab></Tabs.List>

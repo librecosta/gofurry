@@ -63,15 +63,17 @@ func TestC4PublicCatalog(t *testing.T) {
 		t.Fatal(err)
 	}
 	q := dbgen.New(tx)
-	var draft uuid.UUID
-	for i := 0; i < 22; i++ {
+	var unpublished []uuid.UUID
+	for i := 0; i < 23; i++ {
 		status := "published"
 		if i == 21 {
 			status = "draft"
+		} else if i == 22 {
+			status = "archived"
 		}
 		id := uuid.NewV7()
-		if status == "draft" {
-			draft = id
+		if status != "published" {
+			unpublished = append(unpublished, id)
 		}
 		_, err = q.CreateWallpaper(ctx, dbgen.CreateWallpaperParams{ID: id, Title: fmt.Sprintf("Title %02d", i), Credit: pgtype.Text{String: "Author Alpha", Valid: true}, Status: status, ImageKey: fmt.Sprint(i), ImageSha256: strings.Repeat("a", 64), ImageType: "image/avif", ImageBytes: 1, Width: 1920, Height: 1080, PreviewKey: "preview", PreviewSha256: strings.Repeat("b", 64), PreviewBytes: 1, PreviewWidth: 480, PreviewHeight: 270, SortOrder: int32(i)})
 		if err != nil {
@@ -95,12 +97,37 @@ func TestC4PublicCatalog(t *testing.T) {
 			seen[r.ID] = true
 		}
 	}
-	if _, e = q.PublicWallpaper(ctx, draft); databaseError(e) != ErrNotFound {
-		t.Fatal("draft leak", e)
+	for _, id := range unpublished {
+		if _, e = q.PublicWallpaper(ctx, id); databaseError(e) != ErrNotFound {
+			t.Fatal("unpublished detail leak", e)
+		}
 	}
 	rows, e := q.PublishedWallpapers(ctx, dbgen.PublishedWallpapersParams{Keyword: "%", PageLimit: 9})
 	if e != nil || len(rows) != 0 {
 		t.Fatal("wildcard interpreted", e)
 	}
 	t.Log("PostgreSQL LIMIT/OFFSET 9/9/3, literal title/credit search, stable distinct pages and Published-only detail passed; temporary rows rolled back")
+	if err = tx.Rollback(ctx); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 70; i++ {
+		if _, e := service.PublicPage(ctx, 1, 9, fmt.Sprintf("bounded-%d", i)); e != nil {
+			t.Fatal(e)
+		}
+	}
+	if len(service.cache) > 64 {
+		t.Fatal("unbounded catalog cache")
+	}
+	service.invalidate()
+	if len(service.cache) != 0 {
+		t.Fatal("invalidation retained pages")
+	}
+	if _, err = service.PublicPage(ctx, 1, 9, ""); err != nil {
+		t.Fatal(err)
+	}
+	pool.Close()
+	if _, err = service.PublicPage(ctx, 1, 9, ""); err != ErrUnavailable || len(service.cache) != 0 {
+		t.Fatal("cache masked database outage", err)
+	}
+	t.Log("64-key cap, publication invalidation path and real closed-pool outage passed")
 }
