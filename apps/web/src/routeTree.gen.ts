@@ -16,8 +16,10 @@ import { Route as ReadyzRouteImport } from './routes/readyz'
 import { Route as StatusRouteImport } from './routes/status'
 import { Route as StartStartRouteImport } from './routes/_start.start'
 import { Route as StartLanguageStartRouteImport } from './routes/_start.$language.start'
+import { Route as ApiV1StartBackgroundsRouteImport } from './routes/api.v1.start.backgrounds'
 import { Route as ApiV1StartCitiesRouteImport } from './routes/api.v1.start.cities'
 import { Route as ApiV1StartWeatherRouteImport } from './routes/api.v1.start.weather'
+import { Route as ApiV1StartBackgroundsIdRouteImport } from './routes/api.v1.start.backgrounds.$id'
 import { Route as ApiV1StartCitiesNearestRouteImport } from './routes/api.v1.start.cities.nearest'
 import { Route as ApiV1StartSearchSuggestionsRouteImport } from './routes/api.v1.start.search.suggestions'
 
@@ -55,6 +57,11 @@ const StartLanguageStartRoute = StartLanguageStartRouteImport.update({
   path: '/$language/start',
   getParentRoute: () => StartRoute,
 } as any)
+const ApiV1StartBackgroundsRoute = ApiV1StartBackgroundsRouteImport.update({
+  id: '/api/v1/start/backgrounds',
+  path: '/api/v1/start/backgrounds',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiV1StartCitiesRoute = ApiV1StartCitiesRouteImport.update({
   id: '/api/v1/start/cities',
   path: '/api/v1/start/cities',
@@ -64,6 +71,11 @@ const ApiV1StartWeatherRoute = ApiV1StartWeatherRouteImport.update({
   id: '/api/v1/start/weather',
   path: '/api/v1/start/weather',
   getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1StartBackgroundsIdRoute = ApiV1StartBackgroundsIdRouteImport.update({
+  id: '/$id',
+  path: '/$id',
+  getParentRoute: () => ApiV1StartBackgroundsRoute,
 } as any)
 const ApiV1StartCitiesNearestRoute = ApiV1StartCitiesNearestRouteImport.update({
   id: '/nearest',
@@ -84,8 +96,10 @@ export interface FileRoutesByFullPath {
   '/status': typeof StatusRoute
   '/start': typeof StartStartRoute
   '/$language/start': typeof StartLanguageStartRoute
+  '/api/v1/start/backgrounds': typeof ApiV1StartBackgroundsRouteWithChildren
   '/api/v1/start/cities': typeof ApiV1StartCitiesRouteWithChildren
   '/api/v1/start/weather': typeof ApiV1StartWeatherRoute
+  '/api/v1/start/backgrounds/$id': typeof ApiV1StartBackgroundsIdRoute
   '/api/v1/start/cities/nearest': typeof ApiV1StartCitiesNearestRoute
   '/api/v1/start/search/suggestions': typeof ApiV1StartSearchSuggestionsRoute
 }
@@ -96,8 +110,10 @@ export interface FileRoutesByTo {
   '/status': typeof StatusRoute
   '/start': typeof StartStartRoute
   '/$language/start': typeof StartLanguageStartRoute
+  '/api/v1/start/backgrounds': typeof ApiV1StartBackgroundsRouteWithChildren
   '/api/v1/start/cities': typeof ApiV1StartCitiesRouteWithChildren
   '/api/v1/start/weather': typeof ApiV1StartWeatherRoute
+  '/api/v1/start/backgrounds/$id': typeof ApiV1StartBackgroundsIdRoute
   '/api/v1/start/cities/nearest': typeof ApiV1StartCitiesNearestRoute
   '/api/v1/start/search/suggestions': typeof ApiV1StartSearchSuggestionsRoute
 }
@@ -110,8 +126,10 @@ export interface FileRoutesById {
   '/status': typeof StatusRoute
   '/_start/start': typeof StartStartRoute
   '/_start/$language/start': typeof StartLanguageStartRoute
+  '/api/v1/start/backgrounds': typeof ApiV1StartBackgroundsRouteWithChildren
   '/api/v1/start/cities': typeof ApiV1StartCitiesRouteWithChildren
   '/api/v1/start/weather': typeof ApiV1StartWeatherRoute
+  '/api/v1/start/backgrounds/$id': typeof ApiV1StartBackgroundsIdRoute
   '/api/v1/start/cities/nearest': typeof ApiV1StartCitiesNearestRoute
   '/api/v1/start/search/suggestions': typeof ApiV1StartSearchSuggestionsRoute
 }
@@ -124,8 +142,10 @@ export interface FileRouteTypes {
     | '/status'
     | '/start'
     | '/$language/start'
+    | '/api/v1/start/backgrounds'
     | '/api/v1/start/cities'
     | '/api/v1/start/weather'
+    | '/api/v1/start/backgrounds/$id'
     | '/api/v1/start/cities/nearest'
     | '/api/v1/start/search/suggestions'
   fileRoutesByTo: FileRoutesByTo
@@ -136,8 +156,10 @@ export interface FileRouteTypes {
     | '/status'
     | '/start'
     | '/$language/start'
+    | '/api/v1/start/backgrounds'
     | '/api/v1/start/cities'
     | '/api/v1/start/weather'
+    | '/api/v1/start/backgrounds/$id'
     | '/api/v1/start/cities/nearest'
     | '/api/v1/start/search/suggestions'
   id:
@@ -149,8 +171,10 @@ export interface FileRouteTypes {
     | '/status'
     | '/_start/start'
     | '/_start/$language/start'
+    | '/api/v1/start/backgrounds'
     | '/api/v1/start/cities'
     | '/api/v1/start/weather'
+    | '/api/v1/start/backgrounds/$id'
     | '/api/v1/start/cities/nearest'
     | '/api/v1/start/search/suggestions'
   fileRoutesById: FileRoutesById
@@ -161,6 +185,7 @@ export interface RootRouteChildren {
   LivezRoute: typeof LivezRoute
   ReadyzRoute: typeof ReadyzRoute
   StatusRoute: typeof StatusRoute
+  ApiV1StartBackgroundsRoute: typeof ApiV1StartBackgroundsRouteWithChildren
   ApiV1StartCitiesRoute: typeof ApiV1StartCitiesRouteWithChildren
   ApiV1StartWeatherRoute: typeof ApiV1StartWeatherRoute
   ApiV1StartSearchSuggestionsRoute: typeof ApiV1StartSearchSuggestionsRoute
@@ -217,6 +242,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof StartLanguageStartRouteImport
       parentRoute: typeof StartRoute
     }
+    '/api/v1/start/backgrounds': {
+      id: '/api/v1/start/backgrounds'
+      path: '/api/v1/start/backgrounds'
+      fullPath: '/api/v1/start/backgrounds'
+      preLoaderRoute: typeof ApiV1StartBackgroundsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/v1/start/cities': {
       id: '/api/v1/start/cities'
       path: '/api/v1/start/cities'
@@ -230,6 +262,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/api/v1/start/weather'
       preLoaderRoute: typeof ApiV1StartWeatherRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/start/backgrounds/$id': {
+      id: '/api/v1/start/backgrounds/$id'
+      path: '/$id'
+      fullPath: '/api/v1/start/backgrounds/$id'
+      preLoaderRoute: typeof ApiV1StartBackgroundsIdRouteImport
+      parentRoute: typeof ApiV1StartBackgroundsRoute
     }
     '/api/v1/start/cities/nearest': {
       id: '/api/v1/start/cities/nearest'
@@ -260,6 +299,19 @@ const StartRouteChildren: StartRouteChildren = {
 
 const StartRouteWithChildren = StartRoute._addFileChildren(StartRouteChildren)
 
+interface ApiV1StartBackgroundsRouteChildren {
+  ApiV1StartBackgroundsIdRoute: typeof ApiV1StartBackgroundsIdRoute
+}
+
+const ApiV1StartBackgroundsRouteChildren: ApiV1StartBackgroundsRouteChildren = {
+  ApiV1StartBackgroundsIdRoute: ApiV1StartBackgroundsIdRoute,
+}
+
+const ApiV1StartBackgroundsRouteWithChildren =
+  ApiV1StartBackgroundsRoute._addFileChildren(
+    ApiV1StartBackgroundsRouteChildren,
+  )
+
 interface ApiV1StartCitiesRouteChildren {
   ApiV1StartCitiesNearestRoute: typeof ApiV1StartCitiesNearestRoute
 }
@@ -277,6 +329,7 @@ const rootRouteChildren: RootRouteChildren = {
   LivezRoute: LivezRoute,
   ReadyzRoute: ReadyzRoute,
   StatusRoute: StatusRoute,
+  ApiV1StartBackgroundsRoute: ApiV1StartBackgroundsRouteWithChildren,
   ApiV1StartCitiesRoute: ApiV1StartCitiesRouteWithChildren,
   ApiV1StartWeatherRoute: ApiV1StartWeatherRoute,
   ApiV1StartSearchSuggestionsRoute: ApiV1StartSearchSuggestionsRoute,

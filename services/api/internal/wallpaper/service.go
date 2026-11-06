@@ -57,8 +57,7 @@ type Service struct {
 	uploads    chan struct{}
 	decodes    chan struct{}
 	cacheMu    sync.Mutex
-	cache      []PublicBackground
-	cacheAt    time.Time
+	cache      map[catalogKey]catalogEntry
 	generation uint64
 }
 

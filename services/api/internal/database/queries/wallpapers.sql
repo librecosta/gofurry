@@ -10,7 +10,14 @@ ORDER BY created_at DESC,id DESC LIMIT sqlc.arg(page_limit) OFFSET sqlc.arg(page
 -- name: WallpaperCount :one
 SELECT count(*) FROM start_wallpapers WHERE (sqlc.arg(status_filter)::text='' OR status=sqlc.arg(status_filter)) AND strpos(lower(title),sqlc.arg(keyword)::text)>0;
 -- name: PublishedWallpapers :many
-SELECT * FROM start_wallpapers WHERE status='published' ORDER BY sort_order,published_at DESC,id LIMIT 1001;
+SELECT * FROM start_wallpapers WHERE status='published' AND (strpos(lower(title),sqlc.arg(keyword)::text)>0 OR strpos(lower(coalesce(credit,'')),sqlc.arg(keyword)::text)>0)
+ORDER BY sort_order,published_at DESC,id LIMIT sqlc.arg(page_limit) OFFSET sqlc.arg(page_offset);
+-- name: PublishedWallpaperCount :one
+SELECT count(*) FROM start_wallpapers WHERE status='published' AND (strpos(lower(title),sqlc.arg(keyword)::text)>0 OR strpos(lower(coalesce(credit,'')),sqlc.arg(keyword)::text)>0);
+-- name: PublicWallpaper :one
+SELECT * FROM start_wallpapers WHERE status='published' AND id=$1;
+-- name: RandomWallpaper :one
+SELECT * FROM start_wallpapers WHERE status='published' AND (id<>sqlc.arg(excluded_id)::uuid OR NOT EXISTS (SELECT 1 FROM start_wallpapers WHERE status='published' AND id<>sqlc.arg(excluded_id)::uuid)) ORDER BY random() LIMIT 1;
 -- name: CreateWallpaper :one
 INSERT INTO start_wallpapers(id,title,status,image_key,image_sha256,image_type,image_bytes,width,height,preview_key,preview_sha256,preview_bytes,preview_width,preview_height,source_url,credit,sort_order,published_at)
 VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,CASE WHEN $3::text='published' THEN transaction_timestamp() ELSE NULL END) RETURNING *;

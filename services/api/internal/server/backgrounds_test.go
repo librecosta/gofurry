@@ -25,7 +25,7 @@ func TestUnconfiguredCatalogNeverReadsStaticOrStorage(t *testing.T) {
 	}
 	body, _ := io.ReadAll(res.Body)
 	res.Body.Close()
-	if res.StatusCode != 200 || strings.TrimSpace(string(body)) != `{"backgrounds":[]}` || calls.Load() != 0 {
+	if res.StatusCode != 200 || strings.TrimSpace(string(body)) != `{"backgrounds":[],"total":0,"page":1,"page_size":9}` || calls.Load() != 0 {
 		t.Fatalf("static/storage fallback: %d %s calls=%d", res.StatusCode, body, calls.Load())
 	}
 	if res.Header.Get("X-GoFurry-Region") != "CN" || res.Header.Get("X-GoFurry-Content-Mode") != "SFW" {
@@ -44,4 +44,16 @@ func TestUnconfiguredCatalogNeverReadsStaticOrStorage(t *testing.T) {
 	if s.Management != nil {
 		t.Fatal("unconfigured management enabled")
 	}
+	for _, path := range []string{"?page=0", "?page=1001", "?page_size=10", "?q=%00", "?page=abc", "/not-a-uuid"} {
+		res, err := s.App.Test(httptest.NewRequest("GET", "/api/v1/start/backgrounds"+path, nil))
+		if err != nil || res.StatusCode != 400 {
+			t.Fatal("unbounded public input", path, err, res.StatusCode)
+		}
+		res.Body.Close()
+	}
+	res, e = s.App.Test(httptest.NewRequest("GET", "/api/v1/start/backgrounds/random", nil))
+	if e != nil || res.StatusCode != 404 {
+		t.Fatal("random route captured as UUID", e)
+	}
+	res.Body.Close()
 }

@@ -244,12 +244,63 @@ func (q *Queries) LockWallpaper(ctx context.Context, id uuid.UUID) (StartWallpap
 	return i, err
 }
 
-const publishedWallpapers = `-- name: PublishedWallpapers :many
-SELECT id, title, status, image_key, image_sha256, image_type, image_bytes, width, height, preview_key, preview_sha256, preview_bytes, preview_width, preview_height, source_url, credit, sort_order, revision, created_at, updated_at, published_at FROM start_wallpapers WHERE status='published' ORDER BY sort_order,published_at DESC,id LIMIT 1001
+const publicWallpaper = `-- name: PublicWallpaper :one
+SELECT id, title, status, image_key, image_sha256, image_type, image_bytes, width, height, preview_key, preview_sha256, preview_bytes, preview_width, preview_height, source_url, credit, sort_order, revision, created_at, updated_at, published_at FROM start_wallpapers WHERE status='published' AND id=$1
 `
 
-func (q *Queries) PublishedWallpapers(ctx context.Context) ([]StartWallpaper, error) {
-	rows, err := q.db.Query(ctx, publishedWallpapers)
+func (q *Queries) PublicWallpaper(ctx context.Context, id uuid.UUID) (StartWallpaper, error) {
+	row := q.db.QueryRow(ctx, publicWallpaper, id)
+	var i StartWallpaper
+	err := row.Scan(
+		&i.ID,
+		&i.Title,
+		&i.Status,
+		&i.ImageKey,
+		&i.ImageSha256,
+		&i.ImageType,
+		&i.ImageBytes,
+		&i.Width,
+		&i.Height,
+		&i.PreviewKey,
+		&i.PreviewSha256,
+		&i.PreviewBytes,
+		&i.PreviewWidth,
+		&i.PreviewHeight,
+		&i.SourceUrl,
+		&i.Credit,
+		&i.SortOrder,
+		&i.Revision,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.PublishedAt,
+	)
+	return i, err
+}
+
+const publishedWallpaperCount = `-- name: PublishedWallpaperCount :one
+SELECT count(*) FROM start_wallpapers WHERE status='published' AND (strpos(lower(title),$1::text)>0 OR strpos(lower(coalesce(credit,'')),$1::text)>0)
+`
+
+func (q *Queries) PublishedWallpaperCount(ctx context.Context, keyword string) (int64, error) {
+	row := q.db.QueryRow(ctx, publishedWallpaperCount, keyword)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const publishedWallpapers = `-- name: PublishedWallpapers :many
+SELECT id, title, status, image_key, image_sha256, image_type, image_bytes, width, height, preview_key, preview_sha256, preview_bytes, preview_width, preview_height, source_url, credit, sort_order, revision, created_at, updated_at, published_at FROM start_wallpapers WHERE status='published' AND (strpos(lower(title),$1::text)>0 OR strpos(lower(coalesce(credit,'')),$1::text)>0)
+ORDER BY sort_order,published_at DESC,id LIMIT $3 OFFSET $2
+`
+
+type PublishedWallpapersParams struct {
+	Keyword    string `json:"keyword"`
+	PageOffset int32  `json:"page_offset"`
+	PageLimit  int32  `json:"page_limit"`
+}
+
+func (q *Queries) PublishedWallpapers(ctx context.Context, arg PublishedWallpapersParams) ([]StartWallpaper, error) {
+	rows, err := q.db.Query(ctx, publishedWallpapers, arg.Keyword, arg.PageOffset, arg.PageLimit)
 	if err != nil {
 		return nil, err
 	}
@@ -288,6 +339,39 @@ func (q *Queries) PublishedWallpapers(ctx context.Context) ([]StartWallpaper, er
 		return nil, err
 	}
 	return items, nil
+}
+
+const randomWallpaper = `-- name: RandomWallpaper :one
+SELECT id, title, status, image_key, image_sha256, image_type, image_bytes, width, height, preview_key, preview_sha256, preview_bytes, preview_width, preview_height, source_url, credit, sort_order, revision, created_at, updated_at, published_at FROM start_wallpapers WHERE status='published' AND (id<>$1::uuid OR NOT EXISTS (SELECT 1 FROM start_wallpapers WHERE status='published' AND id<>$1::uuid)) ORDER BY random() LIMIT 1
+`
+
+func (q *Queries) RandomWallpaper(ctx context.Context, excludedID uuid.UUID) (StartWallpaper, error) {
+	row := q.db.QueryRow(ctx, randomWallpaper, excludedID)
+	var i StartWallpaper
+	err := row.Scan(
+		&i.ID,
+		&i.Title,
+		&i.Status,
+		&i.ImageKey,
+		&i.ImageSha256,
+		&i.ImageType,
+		&i.ImageBytes,
+		&i.Width,
+		&i.Height,
+		&i.PreviewKey,
+		&i.PreviewSha256,
+		&i.PreviewBytes,
+		&i.PreviewWidth,
+		&i.PreviewHeight,
+		&i.SourceUrl,
+		&i.Credit,
+		&i.SortOrder,
+		&i.Revision,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.PublishedAt,
+	)
+	return i, err
 }
 
 const transitionWallpaper = `-- name: TransitionWallpaper :one
