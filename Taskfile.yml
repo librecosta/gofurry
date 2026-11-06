@@ -21,7 +21,19 @@ tasks:
   dev:api:
     dir: services/api
     cmds:
-      - go run ./cmd/api --config ../../config.yaml
+      - go run ./cmd/api --config "{{.CONFIG}}"
+  stop:
+    desc: Stop this checkout's local Web and API on ports 17320/17321
+    cmds:
+      - pnpm exec node scripts/stop-dev.mjs
+  stop:web:
+    desc: Stop this checkout's local Web on port 17320
+    cmds:
+      - pnpm exec node scripts/stop-dev.mjs web
+  stop:api:
+    desc: Stop this checkout's local API on port 17321
+    cmds:
+      - pnpm exec node scripts/stop-dev.mjs api
   cities:init:
     desc: Download a manual GeoNames snapshot and build the ignored weather city catalog (Python 3.10+)
     cmds:

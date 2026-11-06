@@ -13,6 +13,8 @@ task dev:api
 task dev:web
 ```
 
+Stop local services with `task stop`, or only one with `task stop:web` / `task stop:api`. These commands check process ownership in this checkout before stopping listeners on 17320/17321; already-free ports are harmless. PostgreSQL, Redis and containers are not stopped. Windows uses native process inspection; macOS/Linux need `lsof`. On Windows, stopping terminates the local process; use Ctrl+C in its original terminal when graceful shutdown is needed. `task dev:api CONFIG=<absolute YAML>` also supports an explicit alternate configuration.
+
 - Web: <http://127.0.0.1:17320>; development `/api/**` proxies through Nitro route rules to API port 17321. Production has no general automatic API proxy or cross-region fallback.
 - API: <http://127.0.0.1:17321/api/v1/status>. Both expose `/livez` and `/readyz`.
 - Standalone API: `bin/api --config config.yaml` (`bin/api.exe` on Windows). Probe: `bin/api healthcheck --config config.yaml`. The probe derives host/port from that YAML, including wildcard listeners.
