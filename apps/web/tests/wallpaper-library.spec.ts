@@ -171,6 +171,33 @@ test('library refinement: compact entry, text tabs, preview pin and source toolb
   await page.keyboard.press('Escape');await expect(page.getByRole('dialog')).toHaveCount(0);await expect(page.locator('[data-start-settings]')).toBeFocused()
 })
 
+test('library pin: hovering the image reveals a surface and the glyph fits inside its corner', async ({ page }, info) => {
+  await page.goto(path); await expect(page.locator('[data-start-hd]')).toHaveCSS('opacity','1'); await open(page)
+  const image=page.getByRole('button',{name:/^Preview /}).first(),card=image.locator('..'),pin=card.locator('button').last()
+  // Hover the image center, not the pin itself: the control must be discoverable.
+  await image.hover(); await expect(pin).toHaveCSS('opacity','1')
+  const surface=await pin.evaluate(el=>{const s=getComputedStyle(el,'::before');return {color:s.backgroundColor,opacity:s.opacity,clip:s.clipPath}})
+  expect(surface.color).not.toBe('rgba(0, 0, 0, 0)');expect(surface.opacity).toBe('1');expect(surface.clip).toContain('polygon')
+  await expect(pin).toHaveCSS('background-color','rgba(0, 0, 0, 0)')
+  const assertFits=async()=>{
+    const button=(await pin.boundingBox())!,glyph=(await pin.locator('svg').first().boundingBox())!
+    // Triangle is x>=y in button coordinates. Check the worst (bottom-left) corner.
+    expect(glyph.x-button.x).toBeGreaterThan(glyph.y+glyph.height-button.y+2)
+    expect(glyph.x+glyph.width).toBeLessThan(button.x+button.width-2)
+    expect(glyph.y).toBeGreaterThan(button.y+2)
+  }
+  await assertFits();await page.screenshot({path:info.outputPath('pin-hover.png')})
+  await pin.click();await expect(pin).toHaveAttribute('aria-pressed','true');await page.mouse.move(0,0)
+  await expect(pin).toHaveCSS('opacity','1');await assertFits()
+  await page.screenshot({path:info.outputPath('pin-fixed.png')})
+  await pin.click();await expect(pin).toHaveAttribute('aria-pressed','false');await page.mouse.move(0,0)
+  await pin.press('Shift+Tab');await page.keyboard.press('Tab');await expect(pin).toBeFocused()
+  await expect(pin).toHaveCSS('opacity','1');await expect(pin).toHaveCSS('outline-style','none')
+  expect(await pin.evaluate(el=>getComputedStyle(el,'::after').outlineStyle)).toBe('solid')
+  await page.emulateMedia({colorScheme:'dark'});await image.hover();await expect(pin).toHaveCSS('opacity','1')
+  await page.screenshot({path:info.outputPath('pin-dark.png')})
+})
+
 test('library refinement: tabs/search reuse bounded local previews and metadata changes atomically', async ({ page }, info) => {
   const folder=info.outputPath('folder');await mkdir(folder,{recursive:true})
   await Promise.all(Array.from({length:21},(_,i)=>copyFile(resolve('../../services/api/internal/wallpaper/testdata',i===1?'nonwide.webp':'preview.webp'),resolve(folder,String(i+1).padStart(2,'0')+(i===0?'-wide.webp':i===1?'-square.webp':'-sample.webp')))))

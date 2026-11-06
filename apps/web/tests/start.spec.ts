@@ -280,3 +280,43 @@ test('start: first and repeated popup frames have CSS, stable geometry and compl
     }
   }
 })
+
+test('start: cold menu fonts are fetched with SSR, not on first open', async ({ page, context, baseURL }, info) => {
+  test.setTimeout(45000)
+  await context.addCookies([{name:`gf-quick-access-${region}`,value:'1',url:baseURL!}])
+  const cdp=await context.newCDPSession(page)
+  await cdp.send('DOM.enable');await cdp.send('CSS.enable');await cdp.send('Network.enable')
+  await cdp.send('Network.setCacheDisabled',{cacheDisabled:true})
+  const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message))
+  const fonts=async(selector:string)=>{
+    const {root}=await cdp.send('DOM.getDocument'),{nodeId}=await cdp.send('DOM.querySelector',{nodeId:root.nodeId,selector})
+    return (await cdp.send('CSS.getPlatformFontsForNode',{nodeId})).fonts
+  }
+  const evidence=[]
+  for(const [path,locale] of [[chinesePath,'zh'],[englishPath,'en']] as const){
+    await page.goto(path);await page.waitForLoadState('networkidle');await page.evaluate(()=>document.fonts.ready)
+    await expect(page.locator('link[rel=preload][as=font]')).toHaveCount(locale==='zh'?2:0)
+    const lateFonts:string[]=[];const record=(r:import('@playwright/test').Request)=>{if(r.resourceType()==='font')lateFonts.push(r.url())}
+    page.on('request',record)
+    for(const [trigger,selector,text] of [
+      ['[data-start-logo]','[data-start-brand]','[data-start-brand] nav > :nth-child(2)'],
+      ['[data-start-actions] > button:last-child','[data-start-user-menu]','[data-start-user-menu] [role=menuitem]'],
+      ['[data-mobile-platform-trigger]','[data-search-panel=platforms]','[data-search-panel=platforms] button:nth-child(4)'],
+    ] as const){
+      for(let repeat=0;repeat<2;repeat++){
+        await page.locator(trigger).click()
+        const first=await fonts(text),initial=await page.locator(text).evaluate(el=>({font:getComputedStyle(el).font,width:el.getBoundingClientRect().width}))
+        expect(first.length).toBeGreaterThan(0);expect(first.every(f=>f.isCustomFont)).toBe(true)
+        await expect(page.locator(selector)).toHaveCSS('opacity','1')
+        expect(await fonts(text)).toEqual(first)
+        expect(await page.locator(text).evaluate(el=>({font:getComputedStyle(el).font,width:el.getBoundingClientRect().width}))).toEqual(initial)
+        evidence.push({locale,selector,repeat,fonts:first,style:initial})
+        if(!repeat)await page.screenshot({path:info.outputPath(`${locale}-${selector.includes('brand')?'brand':selector.includes('user')?'user':'platform'}.png`)})
+        await page.keyboard.press('Escape');await expect(page.locator(selector)).toHaveCount(0)
+      }
+    }
+    page.off('request',record);expect(lateFonts).toEqual([])
+  }
+  await info.attach('font-evidence',{body:JSON.stringify(evidence,null,2),contentType:'application/json'})
+  expect(errors).toEqual([])
+})

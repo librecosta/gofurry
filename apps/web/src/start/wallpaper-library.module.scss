@@ -67,9 +67,15 @@
 }
 .pinGlyph { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; }
 .cardPin {
-  opacity: 0;
-  &::before { content: ''; position: absolute; inset: 0; background: var(--overlay-surface-hover); clip-path: polygon(0 0, 100% 0, 100% 100%); opacity: 0; transition: opacity 340ms var(--overlay-easing); }
-  &[data-pinned=true] { opacity: 1; &::before { opacity: 1; } }
+  width: 52px; height: 52px; opacity: 0;
+  // The 17px glyph sits wholly above the diagonal, with room on every side.
+  .pinGlyph { inset: auto; top: 2px; right: 2px; width: 28px; height: 28px; }
+  &::before { content: ''; position: absolute; inset: 0; background: var(--overlay-surface-hover); clip-path: polygon(0 0, 100% 0, 100% 100%); transition: background-color 340ms var(--overlay-easing); }
+  // The corner is the only surface, including when the button itself is hovered.
+  &:hover:not(:disabled), &:active:not(:disabled), &:focus-visible { background: transparent; }
+  &:hover::before, &:focus-visible::before { background: var(--overlay-selected-surface); }
+  &:focus-visible::after { content: ''; position: absolute; top: 4px; right: 4px; width: 24px; height: 24px; border-radius: 3px; outline: 2px solid var(--overlay-focus); outline-offset: -1px; pointer-events: none; }
+  &[data-pinned=true] { opacity: 1; }
 }
 .previewPin { top: 8px; right: 8px; background: var(--overlay-surface); }
 .card:hover .cardPin, .card:focus-within .cardPin { opacity: 1; }
