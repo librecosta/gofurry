@@ -11,6 +11,8 @@ import { safeLink, wallpaperRequest, WallpaperError, type Wallpaper, type Wallpa
 import { useWallpaper } from './wallpaper-state'
 import styles from './wallpaper-library.module.scss'
 import settings from './settings.module.scss'
+import { LocalPanel, LocalDetail } from './local-wallpaper-panel'
+import type { LocalFile } from './local-wallpapers'
 
 export function WallpaperLibrary({ open, close, finalFocus }: { open: boolean; close: () => void; finalFocus: RefObject<HTMLButtonElement | null> }) {
   const { locale } = usePreferences(), timing = useMotionTiming()
@@ -32,6 +34,7 @@ function LibraryContent() {
   const { preference, choose, shuffle, current, error } = useWallpaper()
   const [tab, setTab] = useState('featured'), [query, setQuery] = useState(''), [debounced, setDebounced] = useState(''), [page, setPage] = useState(1)
   const [result, setResult] = useState<WallpaperPage | null>(null), [status, setStatus] = useState(''), [selected, select] = useState<Wallpaper | null>(current), [hd, setHD] = useState(false)
+  const [selectedLocal, selectLocal] = useState<LocalFile | null>(null)
   const pages = useRef(new Map<string, { value: WallpaperPage; at: number }>())
   useEffect(() => { const timer = setTimeout(() => { setDebounced(query); setPage(1) }, 300); return () => clearTimeout(timer) }, [query])
   useEffect(() => {
@@ -54,7 +57,7 @@ function LibraryContent() {
   const messages: Record<string, string> = { empty: text('精选目录暂无已发布壁纸。', 'No published wallpapers.'), unavailable: text('壁纸服务暂不可用，请稍后重试。', 'Wallpaper service unavailable. Try again later.'), network: text('网络连接失败。', 'Network request failed.'), timeout: text('请求超时，请重试。', 'Request timed out.'), cdn: text('壁纸图片加载失败，保留可用画面。', 'Image failed; keeping the available background.'), permission: text('请在本地页重新选择或授权文件夹。', 'Choose or authorize a folder in Local.'), missing: text('本地文件不存在，请刷新文件列表。', 'Local file missing. Refresh the folder.') }
   return <div className={styles.workspace}>
     <section className={styles.detail} aria-label={text('壁纸预览', 'Wallpaper preview')}>
-      <div className={styles.preview}>{selected ? <LibraryImage key={`${selected.id}:${hd}`} src={hd ? selected.image.url : selected.preview.url} /> : <span>{text('选择图片预览', 'Select an image to preview')}</span>}</div>
+      {selectedLocal ? <LocalDetail key={selectedLocal.path} file={selectedLocal} /> : <><div className={styles.preview}>{selected ? <LibraryImage key={`${selected.id}:${hd}`} src={hd ? selected.image.url : selected.preview.url} /> : <span>{text('选择图片预览', 'Select an image to preview')}</span>}</div>
       {selected && <>
         <h3>{selected.title}</h3><p>{pinned(selected) ? text('已固定', 'Pinned') : text('仅预览', 'Preview only')}</p>
         <dl><dt>{text('分辨率', 'Resolution')}</dt><dd>{selected.image.width} × {selected.image.height}</dd><dt>{text('格式 / 大小', 'Format / Size')}</dt><dd>{selected.image.content_type?.replace('image/', '').toUpperCase()} · {formatBytes(selected.image.bytes)}</dd>
@@ -63,7 +66,7 @@ function LibraryContent() {
         </dl>
         {safeLink(selected.source_url) && <a href={safeLink(selected.source_url)} target="_blank" rel="noopener noreferrer">{text('来源与声明', 'Source and declaration')}</a>}
         <div className={styles.actions}><button onClick={() => pin(selected)}>{pinned(selected) ? text('取消固定', 'Unpin') : text('固定壁纸', 'Pin wallpaper')}</button><button onClick={() => setHD(true)} disabled={hd}>{text('查看高清', 'View HD')}</button></div>
-      </>}
+      </>}</>}
       <div className={styles.actions}><button onClick={() => { choose({ version: 1, source: 'official', mode: 'random' }); shuffle() }}>{text('使用精选随机', 'Use Featured random')}</button><button onClick={() => choose({ version: 1, source: preference?.source ?? 'official', mode: 'off' })}>{text('关闭壁纸', 'Turn off wallpaper')}</button></div>
       {error && <p role="status">{messages[error] ?? messages.unavailable}</p>}
     </section>
@@ -73,14 +76,14 @@ function LibraryContent() {
         <input aria-label={text('搜索精选壁纸', 'Search Featured wallpapers')} placeholder={text('搜索标题或署名', 'Search title or credit')} value={query} maxLength={128} onChange={e => setQuery(e.target.value)} className={styles.search} />
         <div className={styles.grid} aria-busy={!result && !status}>
           {!result && !status ? Array.from({ length: 9 }, (_, i) => <div key={i} className={styles.skeleton} />) : result?.backgrounds.map(item => <div key={item.id} className={styles.card} data-selected={selected?.id === item.id}>
-            <button className={styles.cardImage} onClick={() => { select(item); setHD(false) }} aria-label={`${text('预览', 'Preview')} ${item.title}`}><LibraryImage src={item.preview.url} /><span className={styles.caption}>{item.title}</span></button>
+            <button className={styles.cardImage} onClick={() => { selectLocal(null); select(item); setHD(false) }} aria-label={`${text('预览', 'Preview')} ${item.title}`}><LibraryImage src={item.preview.url} /><span className={styles.caption}>{item.title}</span></button>
             <button className={styles.pin} data-pinned={pinned(item)} onClick={() => pin(item)} aria-label={`${pinned(item) ? text('取消固定', 'Unpin') : text('固定', 'Pin')} ${item.title}`} aria-pressed={pinned(item)}><PushPinIcon size={16} weight={pinned(item) ? 'fill' : 'regular'} /></button>
           </div>)}
           {status && <p role="status">{messages[status] ?? messages.unavailable}</p>}{result?.total === 0 && <p role="status">{messages.empty}</p>}
         </div>
         <footer className={styles.pagination}><button disabled={page <= 1} onClick={() => setPage(n => n - 1)}>{text('上一页', 'Previous')}</button><span>{page} / {Math.max(1, Math.min(1000, Math.ceil((result?.total ?? 0) / 9)))}</span><button disabled={!result || page * 9 >= result.total || page >= 1000} onClick={() => setPage(n => n + 1)}>{text('下一页', 'Next')}</button></footer>
       </Tabs.Panel>
-      <Tabs.Panel value="local" className={styles.panel}><p>{text('选择本地文件夹，仅在此设备上读取。', 'Choose a local folder. Files stay on this device.')}</p></Tabs.Panel>
+      <Tabs.Panel value="local" className={styles.panel}><LocalPanel selected={selectedLocal} select={selectLocal} /></Tabs.Panel>
     </Tabs.Root>
   </div>
 }
