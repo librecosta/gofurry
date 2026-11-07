@@ -19,7 +19,7 @@ import { CopyIcon } from '@phosphor-icons/react/dist/ssr/Copy'
 import { EnvelopeSimpleIcon } from '@phosphor-icons/react/dist/ssr/EnvelopeSimple'
 import { PaperPlaneTiltIcon } from '@phosphor-icons/react/dist/ssr/PaperPlaneTilt'
 import styles from './settings.module.scss'
-import { usePreferences, type ContentPreference, type Locale, type ThemePreference } from '../preferences'
+import { usePreferences, type ContentPreference, type Locale, type StartMaterial, type ThemePreference } from '../preferences'
 import chrome from './chrome.module.scss'
 import controls from './controls.module.scss'
 import { useStartMessages } from './messages'
@@ -31,7 +31,7 @@ import { useRailMessages } from './rail-messages'
 import { useWidgetRails } from './widget-rails-state'
 
 export function StartSettings({ open, setOpen }: { open: boolean; setOpen: (open: boolean) => void }) {
-  const { region, locale, themePreference, contentPreference, setLocale, setContentPreference, quickAccess, setQuickAccess, showFurrySearch, setShowFurrySearch, showHomepageEntry, setShowHomepageEntry } = usePreferences()
+  const { region, locale, themePreference, contentPreference, setLocale, setContentPreference, quickAccess, setQuickAccess, showFurrySearch, setShowFurrySearch, showHomepageEntry, setShowHomepageEntry, startMaterial, setStartMaterial } = usePreferences()
   const m = useStartMessages()
   const q = useQuickMessages()
   const rail = useRailMessages()
@@ -96,6 +96,13 @@ export function StartSettings({ open, setOpen }: { open: boolean; setOpen: (open
               </fieldset>}
             </Tabs.Panel>
             <Tabs.Panel value="advanced" keepMounted className={styles.panel}>
+              <fieldset className={styles.field}><legend className={styles.label}>{m.material.label}</legend>
+                <RadioGroup aria-label={m.material.label} value={startMaterial} onValueChange={(value: StartMaterial) => setStartMaterial(value)} className={cx(styles.track, styles.twoColumns)}>
+                  <motion.span aria-hidden="true" className={styles.selection} initial={false} animate={{ x: startMaterial === 'liquid' ? '100%' : '0%' }} transition={selectionTransition} />
+                  <Radio.Root value="frosted" className={cx(styles.radio, styles.segment)}>{m.material.frosted}</Radio.Root>
+                  <Radio.Root value="liquid" className={cx(styles.radio, styles.segment)}>{m.material.liquid}</Radio.Root>
+                </RadioGroup>
+              </fieldset>
               <label className={styles.quickSetting}>{m.showHomepageEntry}<Switch.Root checked={showHomepageEntry} onCheckedChange={setShowHomepageEntry} className={styles.switch}>
                 <Switch.Thumb className={styles.switchThumb} render={<motion.span initial={false} animate={{ x: showHomepageEntry ? 16 : 0 }} transition={selectionTransition} />} />
               </Switch.Root></label>

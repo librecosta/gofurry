@@ -11,6 +11,90 @@ async function settings(page: Page) { await page.locator('[data-start-settings]'
 
 test.use({ viewport: { width: 1440, height: 900 } })
 
+test('start material: default is lazy; four surfaces use SVG refraction and release it', async ({ page, context, baseURL }) => {
+  const cookie = `gf-start-material-${region}`
+  const other = region === 'CN' ? 'INTL' : 'CN'
+  await context.addCookies([
+    { name: cookie, value: 'unsupported', url: baseURL! },
+    { name: `gf-start-material-${other}`, value: 'liquid', url: baseURL! },
+    { name: `gf-quick-access-${region}`, value: '1', url: baseURL! },
+  ])
+  await page.addInitScript(region => localStorage.setItem(`gf-quick-access:${region}`, JSON.stringify({
+    version: 1, pinned: [{ id: 'example', name: 'Example', url: 'https://example.com/', order: 0 }], recent: [],
+  })), region)
+  await context.route(/https:\/\/(a\.favicon\.im\/example\.com|example\.com\/favicon\.ico)/, route => route.fulfill({ status: 404 }))
+  const liquidRequests: string[] = []
+  page.on('request', request => { if (/\/assets\/start-liquid-[^/]+\.(css|js)$/.test(request.url())) liquidRequests.push(request.url()) })
+  const errors: string[] = []
+  page.on('pageerror', error => errors.push(error.message))
+  const start = page.locator('[data-start-material]')
+  const surfaces = page.locator('[data-start-liquid]')
+  const filters = page.locator('filter[id^="liquid-glass-"]')
+  const ssr = await page.goto(englishPath)
+  expect(await ssr?.text()).toContain('data-start-material="frosted"')
+  await expect(page.locator('[data-quick-site]')).toHaveCount(1)
+  await expect(start).toHaveAttribute('data-start-material', 'frosted')
+  await expect(filters).toHaveCount(0)
+  expect(liquidRequests).toEqual([])
+  const categoryTint = await page.locator('[data-categories]').getByRole('button', { name: 'Search', exact: true })
+    .evaluate(node => getComputedStyle(node).backgroundColor)
+
+  await settings(page)
+  await page.getByRole('tab', { name: 'Advanced', exact: true }).click()
+  await page.getByRole('radio', { name: 'Liquid Glass', exact: true }).click()
+  await expect(surfaces).toHaveCount(4)
+  const active = await surfaces.evaluateAll(nodes => nodes.map(node => {
+    const css = getComputedStyle(node).backdropFilter
+    const filter = document.getElementById(css.match(/liquid-glass-\d+/)?.[0] ?? '')
+    return {
+      surface: node.getAttribute('data-start-liquid'), material: node.getAttribute('data-lg-material'),
+      refracts: Number(filter?.querySelector('feDisplacementMap')?.getAttribute('scale')) > 0,
+    }
+  }))
+  expect(active.sort((a, b) => a.surface!.localeCompare(b.surface!))).toEqual(
+    ['calculator', 'category', 'quick-icon', 'search'].map(surface => ({ surface, material: 'clear', refracts: true })),
+  )
+  await expect(page.locator('[data-start-liquid="category"]')).toHaveCSS('background-color', categoryTint)
+  expect(liquidRequests.some(url => url.endsWith('.js'))).toBe(true)
+  expect((await context.cookies()).find(item => item.name === cookie)?.value).toBe('liquid')
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+
+  await input(page).fill('狐狸 art')
+  await expect(input(page)).toHaveValue('狐狸 art')
+  const calculator = page.getByRole('button', { name: 'Calculator', exact: true })
+  await calculator.click()
+  const panel = page.getByRole('dialog', { name: 'Calculator', exact: true })
+  await expect(panel).toBeVisible()
+  await expect(panel.locator('[data-start-liquid]')).toHaveCount(0)
+  await page.keyboard.press('Escape')
+  await expect(calculator).toBeFocused()
+
+  const reloaded = await page.reload()
+  expect(await reloaded?.text()).toContain('data-start-material="liquid"')
+  await expect(surfaces).toHaveCount(4)
+  await settings(page)
+  await page.getByRole('tab', { name: 'Advanced', exact: true }).click()
+  await page.getByRole('radio', { name: 'Frosted Glass', exact: true }).click()
+  await expect(start).toHaveAttribute('data-start-material', 'frosted')
+  await expect(surfaces).toHaveCount(0)
+  await expect(filters).toHaveCount(0)
+  await expect(page.locator('[style*="--hyalite:"]')).toHaveCount(0)
+  expect(errors).toEqual([])
+})
+
+test('start material: the original blur remains when SVG backdrop is unavailable', async ({ page, context, baseURL }) => {
+  await context.addCookies([{ name: `gf-start-material-${region}`, value: 'liquid', url: baseURL! }])
+  await page.route(/\/assets\/start-liquid-[^/]+\.js$/, async route => {
+    await page.evaluate(() => document.documentElement.setAttribute('data-hyalite', 'off'))
+    await route.continue()
+  })
+  await english(page)
+  await expect(page.locator('[data-start-material]')).toHaveAttribute('data-start-material', 'liquid')
+  await expect(page.locator('[data-start-liquid], filter[id^="liquid-glass-"]')).toHaveCount(0)
+  await expect(page.locator('form').filter({ has: input(page) })).toHaveCSS('backdrop-filter', /^blur\(/)
+})
+
 for (const { locale, path, width, colorScheme, message, query } of [
   { locale: 'zh', path: chinesePath, width: 1280, colorScheme: 'light', message: '请输入搜索内容', query: '狐狸 绘画' },
   { locale: 'en', path: englishPath, width: 375, colorScheme: 'dark', message: 'Enter a search term', query: 'fox art' },

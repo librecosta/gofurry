@@ -8,6 +8,7 @@ import { CaretLeftIcon } from '@phosphor-icons/react/dist/ssr/CaretLeft'
 import { CaretRightIcon } from '@phosphor-icons/react/dist/ssr/CaretRight'
 import { XIcon } from '@phosphor-icons/react/dist/ssr/X'
 import { QuickAccess } from './quick-access'
+import { useStartSurface } from './start-material'
 import { usePreferences } from '../preferences'
 import styles from './search.module.scss'
 import { useStartMessages } from './messages'
@@ -234,6 +235,8 @@ export function SearchBox() {
     return <span>{phrase.slice(0, index)}<mark className={styles.highlight}>{phrase.slice(index, end)}</mark>{phrase.slice(end)}</span>
   }
   const defaultAction = 'https://www.bing.com/search'
+  const categoryGlass = useStartSurface('category')
+  const searchGlass = useStartSurface('search')
   return <div ref={shell} data-start-search data-quick-enabled={quickAccess} className={cx(styles.shell, quickAccess && styles.quickEnabled)}
     onBlur={(event) => {
       if (!event.currentTarget.contains(event.relatedTarget)) { cancelRequest(); closePanel() }
@@ -243,7 +246,9 @@ export function SearchBox() {
       <div role="group" aria-label={m.categories} aria-description={categoryEdges.left || categoryEdges.right ? m.moreCategories : undefined} data-categories onKeyDown={groupKeys}
         onFocusCapture={(event) => { if (event.target instanceof HTMLButtonElement) revealCategory(event.target) }} className={styles.categories}>
         {categories.filter(id => catalog.some(item => item.category === id)).map((id) => <button key={id} type="button" aria-pressed={category === id}
-          onClick={(event) => chooseCategory(id, event.currentTarget)} className={cx(styles.chip, styles.category, category === id && styles.selected)}>{m.category[id]}</button>)}
+          {...(id === 'search' ? categoryGlass.props : undefined)}
+          onClick={(event) => chooseCategory(id, event.currentTarget)} className={cx(styles.chip, styles.category, category === id && styles.selected, id === 'search' && categoryGlass.className)}>{m.category[id]}</button>)}
+        {categoryGlass.binding}
       </div>
     </div>
     {categoryEdges.left && <span aria-hidden="true" data-category-edge="left" className={cx(styles.edge, styles.edgeLeft)}><CaretLeftIcon size={12} /></span>}
@@ -252,7 +257,9 @@ export function SearchBox() {
     <div className={styles.anchor}>
     <form role="search" aria-label={m.search} method="get" action={defaultAction} target="_blank" rel="noopener noreferrer" acceptCharset="UTF-8"
       onSubmit={(event) => { event.preventDefault(); submit(panel === 'suggestions' && active >= 0 ? suggestions.items[active] : keyword) }}
-      className={cx(styles.search, !pointerFocus && styles.keyboardFocus)}>
+      className={cx(styles.search, !pointerFocus && styles.keyboardFocus, searchGlass.ready && styles.liquidSearch)}>
+      {searchGlass.enabled && <span aria-hidden="true" {...searchGlass.props} className={cx(styles.searchSurface, searchGlass.className)} />}
+      {searchGlass.binding}
       <motion.button ref={trigger} type="button" data-mobile-platform-trigger initial={false}
         animate={mobile === null || platformWidth === undefined ? undefined : { '--platform-size': `${quickAccess || mobile ? platformWidth : 0}px`, opacity: quickAccess || mobile ? 1 : 0 }} transition={tailTransition} aria-label={`${m.platforms}: ${target.name[locale]}`}
         aria-haspopup="listbox" aria-expanded={panel === 'platforms'} aria-controls={panel === 'platforms' ? panelId : undefined} disabled={available.length === 1}

@@ -1,0 +1,6 @@
+.surface[data-lg-material='clear'] {
+  // Chromium accepts SVG URLs on the standard property only. Keeping both
+  // spellings can leave just the prefixed declaration after CSS minification.
+  backdrop-filter: var(--hyalite, blur(12px));
+  box-shadow: var(--hyalite-edge, none);
+}

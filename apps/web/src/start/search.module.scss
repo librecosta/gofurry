@@ -143,6 +143,7 @@
 }
 
 .search {
+  --search-form-background: var(--search-input-background);
   position: relative;
   z-index: 1;
   display: flex;
@@ -152,7 +153,7 @@
   height: 48px;
   border-width: 0;
   border-radius: 12px;
-  background-color: var(--search-input-background);
+  background-color: var(--search-form-background);
   color: var(--search-input-text);
   box-shadow: none;
   backdrop-filter: blur(18px) saturate(1.08);
@@ -161,10 +162,31 @@
   transition-property: background-color, color;
   transition-duration: var(--search-motion);
   transition-timing-function: var(--search-easing);
-  &:has(input:enabled):active { background-color: var(--search-input-focus-background); }
-  &:has(input:focus) { background-color: var(--search-input-focus-background); }
+  &:has(input:enabled):active, &:has(input:focus) { --search-form-background: var(--search-input-focus-background); }
   @media (max-width: 639px) { backdrop-filter: blur(12px) saturate(1.04); }
   &:has(input:disabled) { opacity: 0.5; }
+}
+
+.search.liquidSearch {
+  background-color: transparent;
+  backdrop-filter: none;
+  transition-property: color;
+}
+
+.searchSurface {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+  visibility: hidden;
+
+  &[data-lg-material='clear'] {
+    visibility: visible;
+    background-color: var(--search-form-background);
+    transition: background-color var(--search-motion) var(--search-easing);
+    @media (prefers-reduced-motion: reduce) { transition: none; }
+  }
 }
 
 .keyboardFocus {

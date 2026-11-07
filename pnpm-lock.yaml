@@ -177,6 +177,9 @@ importers:
       '@fontsource-variable/noto-sans-sc':
         specifier: 5.3.1
         version: 5.3.1
+      '@librecosta/liquid-glass':
+        specifier: 0.1.1
+        version: 0.1.1(react@19.3.1)
       '@phosphor-icons/react':
         specifier: 2.1.10
         version: 2.1.10(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
@@ -362,6 +365,14 @@ packages:
 
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
+
+  '@librecosta/liquid-glass@0.1.1':
+    resolution: {integrity: sha512-belcpwYILUdIc7Q3f5bsND/K8wjl8iOtS7R4cS7WWdxsWdGXJxdbgvOEYAsjmXTadZ4jfssyE2/bryPYwc6FoA==}
+    peerDependencies:
+      react: ^19.0.0
+    peerDependenciesMeta:
+      react:
+        optional: true
 
   '@oozcitak/dom@2.0.2':
     resolution: {integrity: sha512-GjpKhkSYC3Mj4+lfwEyI1dqnsKTgwGy48ytZEhm4A/xnH/8z9M3ZVXKr/YGQi3uCLs1AEBS+x5T2JPiueEDW8w==}
@@ -1548,6 +1559,10 @@ snapshots:
     dependencies:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.6.0
+
+  '@librecosta/liquid-glass@0.1.1(react@19.3.1)':
+    optionalDependencies:
+      react: 19.3.1
 
   '@oozcitak/dom@2.0.2':
     dependencies:

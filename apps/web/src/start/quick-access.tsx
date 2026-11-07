@@ -16,11 +16,13 @@ import { useMotionTiming } from '../motion'
 import { cx } from '../styles/classes'
 import { useQuickAccess, siteKey, siteURL, visibleSites, type PinnedSite, type QuickSite } from './quick-access-data'
 import { useQuickMessages } from './quick-access-messages'
+import { useStartSurface } from './start-material'
 import settings from './settings.module.scss'
 import controls from './controls.module.scss'
 import styles from './quick-access.module.scss'
 
-function SiteIcon({ url }: { url: string }) {
+function SiteIcon({ url, representative = false }: { url: string; representative?: boolean }) {
+  const glass = useStartSurface('quick-icon', representative)
   const parsed = siteURL(url)!
   const hostname = parsed.hostname.replace(/\.$/, '')
   // Only public-looking DNS hostnames go to the third party. IP literals,
@@ -34,7 +36,8 @@ function SiteIcon({ url }: { url: string }) {
   const [attempt, setAttempt] = useState({ index: 0, loaded: false })
   const source = sources[attempt.index]
   const next = () => setAttempt(current => current.index === attempt.index ? { index: current.index + 1, loaded: false } : current)
-  return <span className={styles.icon} aria-hidden="true">
+  return <span {...glass.props} className={cx(styles.icon, glass.className)} aria-hidden="true">
+    {glass.binding}
     {!attempt.loaded && <GlobeIcon size={32} weight="light" />}
     {source && <img key={source} src={source} alt="" width={34} height={34} loading="lazy" decoding="async" referrerPolicy="no-referrer"
       style={{ visibility: attempt.loaded ? 'visible' : 'hidden' }} onLoad={event => {
@@ -52,7 +55,7 @@ export function QuickAccess() {
   const animation = { initial: { opacity: 0, y: 4 }, animate: { opacity: 1, y: 0 }, exit: { opacity: 0, y: 4 }, transition }
   return <>
     <motion.div data-quick-access className={styles.row} initial={false} animate={{ opacity: ready ? 1 : 0 }} transition={transition}>
-      <AnimatePresence initial={false}>{ready && visibleSites(data).map(site => <SiteEntry key={site.key} site={site} />)}</AnimatePresence>
+      <AnimatePresence initial={false}>{ready && visibleSites(data).map((site, index) => <SiteEntry key={site.key} site={site} representative={index === 0} />)}</AnimatePresence>
       <button ref={trigger} data-quick-manage type="button" aria-label={m.title} disabled={!ready} className={styles.tile} onClick={() => setManager(true)}><span className={styles.icon}><PlusIcon size={30} weight="light" aria-hidden="true" /></span></button>
     </motion.div>
     <Dialog.Root open={manager} onOpenChange={setManager}>
@@ -69,12 +72,12 @@ export function QuickAccess() {
   </>
 }
 
-function SiteEntry({ site }: { site: QuickSite }) {
+function SiteEntry({ site, representative }: { site: QuickSite; representative: boolean }) {
   const transition = useMotionTiming()
   const present = useIsPresent()
   return <motion.div data-quick-site data-site-key={site.key} data-pinned={!!site.pin} className={styles.entry} inert={!present} layout="position" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={transition}>
     <a href={site.url} target="_blank" rel="noopener noreferrer" data-quick-name={site.name} className={styles.tile}>
-      <SiteIcon key={site.url} url={site.url} /><span className={styles.name}>{site.name}</span>
+      <SiteIcon key={site.url} url={site.url} representative={present && representative} /><span className={styles.name}>{site.name}</span>
     </a>
   </motion.div>
 }

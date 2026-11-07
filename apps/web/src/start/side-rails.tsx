@@ -15,6 +15,7 @@ import controls from './controls.module.scss'
 import settings from './settings.module.scss'
 import { RailContent } from './rail-content'
 import { useRailMessages } from './rail-messages'
+import { useStartSurface } from './start-material'
 import styles from './side-rails.module.scss'
 import { getWidget } from './widget-catalog'
 import { useWidgetRails } from './widget-rails-state'
@@ -87,8 +88,10 @@ function RailPanel({ id, label, icon, side, active, change, children }: {
   const m = useRailMessages()
   const popup = useRef<HTMLDivElement>(null)
   const transition = useMotionTiming()
+  const glass = useStartSurface('calculator', id === 'calculator')
   return <Popover.Root open={active === id} onOpenChange={value => change(id, value)}>
-    <Popover.Trigger data-rail-trigger={id} className={cx(controls.glass, styles.trigger)} aria-label={label}>{icon}</Popover.Trigger>
+    <Popover.Trigger {...glass.props} data-rail-trigger={id} className={cx(controls.glass, styles.trigger, glass.className)} aria-label={label}>{icon}</Popover.Trigger>
+    {glass.binding}
     {(!active || active === id) && <AnimatePresence>{active === id && <Popover.Portal keepMounted>
       <Popover.Positioner side={side} align="start" sideOffset={8} collisionPadding={12} positionMethod="fixed" className={styles.positioner}>
         <Popover.Popup ref={popup} data-rail-panel={id} className={cx(chrome.menu, styles.popup)}
