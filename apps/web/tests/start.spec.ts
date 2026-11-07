@@ -181,6 +181,63 @@ test('start material: the original blur remains when SVG backdrop is unavailable
   await expect(page.locator('form').filter({ has: input(page) })).toHaveCSS('backdrop-filter', /^blur\(/)
 })
 
+test('start material: Transparent paints on SSR, keeps its scope and releases Liquid', async ({ page, context, baseURL }) => {
+  const cookie = `gf-start-material-${region}`
+  const other = region === 'CN' ? 'INTL' : 'CN'
+  await context.addCookies([
+    { name: cookie, value: 'transparent', url: baseURL! },
+    { name: `gf-start-material-${other}`, value: 'liquid', url: baseURL! },
+    { name: `gf-quick-access-${region}`, value: '1', url: baseURL! },
+  ])
+  const requests: string[] = []
+  const errors: string[] = []
+  page.on('request', request => { if (/\/assets\/start-liquid-[^/]+\.(css|js)$/.test(request.url())) requests.push(request.url()) })
+  page.on('pageerror', error => errors.push(error.message))
+  const transparent = page.locator('[data-start-transparent]:visible')
+  const residual = page.locator('[data-start-liquid], filter[id^="liquid-glass-"], [style*="--hyalite:"], [style*="--hyalite-edge:"]')
+  const search = page.getByRole('search')
+  const ssr = await page.goto(englishPath)
+  expect(await ssr?.text()).toContain('data-start-material="transparent"')
+  await expect(transparent).toHaveCount(11)
+  const applied = await transparent.evaluateAll(nodes => nodes.map(node => {
+    const css = getComputedStyle(node)
+    const paint = document.createElement('canvas').getContext('2d')!
+    paint.fillStyle = css.backgroundColor
+    paint.fillRect(0, 0, 1, 1)
+    return { target: node.getAttribute('data-start-transparent'), filter: css.backdropFilter, alpha: paint.getImageData(0, 0, 1, 1).data[3] }
+  }))
+  expect(applied.map(item => item.target).sort()).toEqual([
+    'category', 'category', 'category', 'category', 'category', 'quick-icon', 'search', 'tool', 'tool', 'tool', 'widget-manager',
+  ])
+  expect(applied.filter(item => item.filter !== 'none' || item.alpha === 0 || item.alpha === 255)).toEqual([])
+  await expect(residual).toHaveCount(0)
+  expect(requests).toEqual([])
+  const box = await search.boundingBox()
+  await input(page).fill('狐狸 art')
+  await settings(page)
+  await page.getByRole('tab', { name: 'Advanced', exact: true }).click()
+  const choice = page.getByRole('radio', { name: 'Transparent Glass', exact: true })
+  await expect(choice).toBeChecked()
+  await choice.focus()
+  await page.keyboard.press('ArrowLeft')
+  await expect(page.getByRole('radio', { name: 'Liquid Glass', exact: true })).toBeChecked()
+  await expect(page.locator('[data-start-liquid]')).toHaveCount(11)
+  await page.keyboard.press('ArrowRight')
+  await expect(choice).toBeChecked()
+  await expect(residual).toHaveCount(0)
+  await expect(page.getByRole('dialog').locator('[data-start-transparent]')).toHaveCount(0)
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  await expect(page.locator('[data-start-settings]')).toBeFocused()
+  expect(await search.boundingBox()).toEqual(box)
+  await expect(input(page)).toHaveValue('狐狸 art')
+  expect((await context.cookies()).find(item => item.name === cookie)?.value).toBe('transparent')
+  const reloaded = await page.reload()
+  expect(await reloaded?.text()).toContain('data-start-material="transparent"')
+  await expect(residual).toHaveCount(0)
+  expect(errors).toEqual([])
+})
+
 for (const { locale, path, width, colorScheme, message, query } of [
   { locale: 'zh', path: chinesePath, width: 1280, colorScheme: 'light', message: '请输入搜索内容', query: '狐狸 绘画' },
   { locale: 'en', path: englishPath, width: 375, colorScheme: 'dark', message: 'Enter a search term', query: 'fox art' },

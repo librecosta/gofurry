@@ -36,7 +36,7 @@ function SiteIcon({ url, present }: { url: string; present: boolean }) {
   const [attempt, setAttempt] = useState({ index: 0, loaded: false })
   const source = sources[attempt.index]
   const next = () => setAttempt(current => current.index === attempt.index ? { index: current.index + 1, loaded: false } : current)
-  return <span {...glass.props} className={cx(styles.icon, glass.className)} aria-hidden="true">
+  return <span {...glass.props} className={cx(styles.icon, glass.className)} data-quick-brand={attempt.loaded || undefined} aria-hidden="true">
     {glass.binding}
     {!attempt.loaded && <GlobeIcon size={32} weight="light" />}
     {source && <img key={source} src={source} alt="" width={34} height={34} loading="lazy" decoding="async" referrerPolicy="no-referrer"

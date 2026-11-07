@@ -17,6 +17,16 @@
 }
 
 .glass {
+  &[data-start-transparent] {
+    --overlay-surface: var(--transparent-glass-background);
+    --overlay-surface-hover: var(--transparent-glass-hover);
+    --overlay-selected-surface: var(--transparent-glass-selected);
+    --overlay-text: var(--transparent-glass-foreground);
+    --overlay-hover-text: var(--transparent-glass-foreground);
+    --overlay-selected-text: var(--transparent-glass-foreground);
+    --overlay-focus: var(--transparent-glass-foreground);
+  }
+
   border-width: 0;
   border-radius: var(--radius-small);
   font-family: inherit;

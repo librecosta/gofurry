@@ -48,6 +48,7 @@ const LiquidSurface = memo(function LiquidSurface(props: ComponentProps<Binding>
 export function useStartSurface(surface: Surface, eligible = true) {
   const { startMaterial } = usePreferences()
   const enabled = eligible && startMaterial === 'liquid'
+  const transparent = eligible && startMaterial === 'transparent'
   const [node, setNode] = useState<HTMLElement | null>(null)
   const [visibleNode, setVisibleNode] = useState<HTMLElement | null>(null)
   const [readyNode, setReadyNode] = useState<HTMLElement | null>(null)
@@ -66,12 +67,14 @@ export function useStartSurface(surface: Surface, eligible = true) {
   return {
     enabled,
     ready,
+    transparent,
     props: {
       ref: enabled ? setNode : undefined,
       'data-start-liquid': ready ? surface : undefined,
       'data-lg-material': ready ? 'clear' : undefined,
+      'data-start-transparent': transparent ? surface : undefined,
     },
-    className: ready ? `liquid-glass ${styles.surface}` : undefined,
+    className: ready ? `liquid-glass ${styles.surface}` : transparent ? styles.transparent : undefined,
     binding: visible && <LiquidSurface node={node} onReady={setReadyNode} />,
   }
 }

@@ -106,6 +106,10 @@
 }
 
 .category {
+  --search-chip-background: var(--search-category-background);
+  --search-chip-hover-background: var(--search-category-hover);
+  --search-selected-background: var(--search-category-selected);
+  --search-selected-hover-background: var(--search-category-selected-hover);
   flex-shrink: 0;
   padding-block: 6px;
   padding-inline: 12px;
@@ -113,6 +117,17 @@
   line-height: 1.42857;
   @media (max-width: 400px) { padding-inline: 8px; }
   @media (max-width: 400px) { font-size: 12px; }
+
+  &[data-start-transparent] {
+    --search-chip-background: var(--transparent-glass-background);
+    --search-chip-hover-background: var(--transparent-glass-hover);
+    --search-selected-background: var(--transparent-glass-selected);
+    --search-selected-hover-background: var(--transparent-glass-selected-hover);
+    --search-chip-text: var(--transparent-glass-foreground);
+    --search-chip-hover-text: var(--transparent-glass-foreground);
+    --search-selected-text: var(--transparent-glass-foreground);
+    --search-selected-hover-text: var(--transparent-glass-foreground);
+  }
 }
 
 .anchor {
@@ -171,6 +186,16 @@
   background-color: transparent;
   backdrop-filter: none;
   transition-property: color;
+}
+
+.search[data-start-transparent] {
+  --search-input-background: var(--transparent-glass-background);
+  --search-input-focus-background: var(--transparent-glass-hover);
+  --search-input-text: var(--transparent-glass-foreground);
+  --search-input-placeholder: var(--transparent-glass-muted);
+  --search-focus-ring: var(--transparent-glass-foreground);
+  --search-chip-hover-background: var(--transparent-glass-selected);
+  --search-selected-background: var(--transparent-glass-selected-hover);
 }
 
 .searchSurface {

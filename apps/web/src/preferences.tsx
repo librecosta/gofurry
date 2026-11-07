@@ -9,11 +9,11 @@ export type Locale = 'zh' | 'en'
 export type Theme = 'light' | 'dark'
 export type ThemePreference = Theme | 'system'
 export type ContentPreference = 'SFW' | 'NSFW'
-export type StartMaterial = 'frosted' | 'liquid'
+export type StartMaterial = 'frosted' | 'liquid' | 'transparent'
 export type Preferences = { region: Region; locale: Locale; theme: Theme; themePreference: ThemePreference; contentPreference: ContentPreference; quickAccess: boolean; showFurrySearch: boolean; showHomepageEntry: boolean; startMaterial: StartMaterial }
 
 function readStartMaterial(value: unknown): StartMaterial {
-  return value === 'liquid' ? 'liquid' : 'frosted'
+  return value === 'liquid' || value === 'transparent' ? value : 'frosted'
 }
 
 // Region belongs to the deployment; no request parameter or preference changes it.

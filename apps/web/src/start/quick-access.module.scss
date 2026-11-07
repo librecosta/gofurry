@@ -34,9 +34,9 @@
   text-decoration: none;
   cursor: pointer;
   outline: none;
-  &:hover:not(:disabled) .icon { background: color-mix(in srgb, var(--overlay-surface-hover) 75%, transparent); }
-  &:active:not(:disabled) .icon { background: var(--overlay-selected-surface); }
-  &:focus-visible .icon { outline-color: var(--logo-brand); }
+  &:hover:not(:disabled) .icon { background: var(--quick-icon-hover, color-mix(in srgb, var(--overlay-surface-hover) 75%, transparent)); }
+  &:active:not(:disabled) .icon { background: var(--quick-icon-active, var(--overlay-selected-surface)); }
+  &:focus-visible .icon { outline-color: var(--quick-icon-focus, var(--logo-brand)); }
   &:disabled { cursor: default; }
 }
 .icon {
@@ -45,8 +45,19 @@
   backdrop-filter: blur(8px); outline: 2px solid transparent; outline-offset: -2px;
   transition: background-color 300ms var(--overlay-easing);
   img { position: absolute; inset: 5px; object-fit: contain; }
+  &[data-start-transparent] {
+    background-color: var(--transparent-glass-background);
+    color: var(--transparent-glass-foreground);
+    --quick-icon-hover: var(--transparent-glass-hover);
+    --quick-icon-active: var(--transparent-glass-selected);
+    --quick-icon-focus: var(--transparent-glass-foreground);
+  }
+  &[data-start-transparent][data-quick-brand] {
+    background-color: var(--transparent-glass-brand-background, var(--transparent-glass-background));
+    --quick-icon-hover: color-mix(in srgb, var(--transparent-glass-brand-background, var(--transparent-glass-background)) 88%, var(--transparent-glass-muted));
+  }
 }
-.name { display: block; width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 11px; line-height: 1.4; text-align: center; }
+.name { display: block; width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 11px; font-weight: 600; line-height: 1.4; text-align: center; color: var(--quick-label-text); text-shadow: 0 0 2px var(--quick-label-shadow), 0 1px 2px var(--quick-label-shadow); }
 @media (max-width: 359px) { .entry, .tile { width: 54px; } }
 .manager.manager { width: min(520px, calc(100vw - 32px)); }
 .form { display: grid; grid-template-columns: minmax(100px, 1fr) minmax(150px, 1.5fr) 32px 32px; align-items: end; gap: 8px; margin-bottom: 16px;

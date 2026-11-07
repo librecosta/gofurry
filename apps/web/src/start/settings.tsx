@@ -30,6 +30,8 @@ import { CaretRightIcon } from '@phosphor-icons/react/dist/ssr/CaretRight'
 import { useRailMessages } from './rail-messages'
 import { useWidgetRails } from './widget-rails-state'
 
+const materials = ['frosted', 'liquid', 'transparent'] as const
+
 export function StartSettings({ open, setOpen }: { open: boolean; setOpen: (open: boolean) => void }) {
   const { region, locale, themePreference, contentPreference, setLocale, setContentPreference, quickAccess, setQuickAccess, showFurrySearch, setShowFurrySearch, showHomepageEntry, setShowHomepageEntry, startMaterial, setStartMaterial } = usePreferences()
   const m = useStartMessages()
@@ -97,10 +99,9 @@ export function StartSettings({ open, setOpen }: { open: boolean; setOpen: (open
             </Tabs.Panel>
             <Tabs.Panel value="advanced" keepMounted className={styles.panel}>
               <fieldset className={styles.field}><legend className={styles.label}>{m.material.label}</legend>
-                <RadioGroup aria-label={m.material.label} value={startMaterial} onValueChange={(value: StartMaterial) => setStartMaterial(value)} className={cx(styles.track, styles.twoColumns)}>
-                  <motion.span aria-hidden="true" className={styles.selection} initial={false} animate={{ x: startMaterial === 'liquid' ? '100%' : '0%' }} transition={selectionTransition} />
-                  <Radio.Root value="frosted" className={cx(styles.radio, styles.segment)}>{m.material.frosted}</Radio.Root>
-                  <Radio.Root value="liquid" className={cx(styles.radio, styles.segment)}>{m.material.liquid}</Radio.Root>
+                <RadioGroup aria-label={m.material.label} value={startMaterial} onValueChange={(value: StartMaterial) => setStartMaterial(value)} className={cx(styles.track, styles.threeColumns, styles.materialTrack)}>
+                  <motion.span aria-hidden="true" className={styles.selection} initial={false} animate={{ x: `${materials.indexOf(startMaterial) * 100}%` }} transition={selectionTransition} />
+                  {materials.map(value => <Radio.Root key={value} value={value} className={cx(styles.radio, styles.segment)}>{m.material[value]}</Radio.Root>)}
                 </RadioGroup>
               </fieldset>
               <label className={styles.quickSetting}>{m.showHomepageEntry}<Switch.Root checked={showHomepageEntry} onCheckedChange={setShowHomepageEntry} className={styles.switch}>

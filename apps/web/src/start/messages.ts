@@ -19,7 +19,7 @@ const messages = {
     feedback: { tab: '反馈', qq: 'QQ 交流群', telegram: 'Telegram 频道', email: '官方邮箱',
       copyGroup: '复制 QQ 交流群群号', copied: '已复制', failed: '复制失败' },
     showFurrySearch: '显示兽圈相关搜索选项',
-    material: { label: '视觉材质', frosted: '磨砂玻璃', liquid: '液态玻璃' },
+    material: { label: '视觉材质', frosted: '磨砂玻璃', liquid: '液态玻璃', transparent: '清透玻璃' },
     showHomepageEntry: '显示设为主页入口',
     homepagePrompt: {
       entry: '设为主页', title: '使用 GoFurry 浏览器扩展',
@@ -48,7 +48,7 @@ const messages = {
     feedback: { tab: 'Feedback', qq: 'QQ Group', telegram: 'Telegram Channel', email: 'Email',
       copyGroup: 'Copy QQ Group number', copied: 'Copied', failed: 'Copy failed' },
     showFurrySearch: 'Show furry search options',
-    material: { label: 'Visual material', frosted: 'Frosted Glass', liquid: 'Liquid Glass' },
+    material: { label: 'Visual material', frosted: 'Frosted Glass', liquid: 'Liquid Glass', transparent: 'Transparent Glass' },
     showHomepageEntry: 'Show Set as homepage shortcut',
     homepagePrompt: {
       entry: 'Set as homepage', title: 'Use the GoFurry browser extension',

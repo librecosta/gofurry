@@ -277,6 +277,17 @@
   &:active { transition-duration: 120ms; }
 }
 
+.materialTrack .segment {
+  height: auto;
+  min-height: 36px;
+  padding: 4px;
+  font-size: 13px;
+  line-height: 1.25;
+  text-align: center;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
 .footer {
   display: flex;
   align-items: flex-start;

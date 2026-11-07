@@ -254,7 +254,8 @@ export function SearchBox() {
     <div className={styles.anchor}>
     <form role="search" aria-label={m.search} method="get" action={defaultAction} target="_blank" rel="noopener noreferrer" acceptCharset="UTF-8"
       onSubmit={(event) => { event.preventDefault(); submit(panel === 'suggestions' && active >= 0 ? suggestions.items[active] : keyword) }}
-      className={cx(styles.search, !pointerFocus && styles.keyboardFocus, searchGlass.ready && styles.liquidSearch)}>
+      data-start-transparent={searchGlass.props['data-start-transparent']}
+      className={cx(styles.search, !pointerFocus && styles.keyboardFocus, searchGlass.ready && styles.liquidSearch, searchGlass.transparent && searchGlass.className)}>
       {searchGlass.enabled && <span aria-hidden="true" {...searchGlass.props} className={cx(styles.searchSurface, searchGlass.className)} />}
       {searchGlass.binding}
       <motion.button ref={trigger} type="button" data-mobile-platform-trigger initial={false}
