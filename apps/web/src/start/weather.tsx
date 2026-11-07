@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type Ref } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { Popover } from '@base-ui/react/popover'
 import { AnimatePresence, motion, useIsPresent } from 'motion/react'
 import { MapPinIcon } from '@phosphor-icons/react/dist/ssr/MapPin'
@@ -67,8 +67,8 @@ function useWeather() {
   return { data, cityId: cityId ?? null, selectCity }
 }
 
-export function StartWeather({ open, setOpen, skipExit, triggerRef }: {
-  open: boolean; setOpen: (open: boolean) => void; skipExit: boolean; triggerRef: Ref<HTMLButtonElement>
+export function StartWeather({ open, setOpen, skipExit }: {
+  open: boolean; setOpen: (open: boolean) => void; skipExit: boolean
 }) {
   const { locale } = usePreferences()
   const m = useStartMessages().weather
@@ -87,7 +87,7 @@ export function StartWeather({ open, setOpen, skipExit, triggerRef }: {
   const attributionLinks = [...new Set(data.attributions.map(safeAttributionURL).filter((url): url is string => !!url && url !== 'https://www.qweather.com/' && url !== 'https://developer.qweather.com/attribution.html'))]
   const attributionText = data.attributions.filter(text => !safeAttributionURL(text) && !['qweather', '和风天气', '和风天气 / qweather'].includes(text.trim().toLowerCase()))
   return <Popover.Root open={open} onOpenChange={value => { setOpen(value); if (value) { setSelecting(false); setViewHeight(undefined); restoreCityFocus.current = false } }}>
-    <Popover.Trigger ref={triggerRef} data-start-weather data-weather-state={data.state} aria-label={`${m.details}: ${label}`} className={cx(controls.header, styles.trigger)}>
+    <Popover.Trigger data-start-weather data-weather-state={data.state} aria-label={`${m.details}: ${label}`} className={cx(controls.header, styles.trigger)}>
       <span className={temperature ? styles.city : undefined}>{temperature ? city : m.title}</span>
       <WeatherIcon code={data.weather?.condition_code} />
       {temperature && <span className={styles.temperature}>{temperature}</span>}

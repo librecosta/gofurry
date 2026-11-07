@@ -23,13 +23,12 @@ import { HomepageGuide } from './homepage-guide'
 type HeaderPanel = 'homepage' | 'weather' | 'settings'
 
 export function StartHeader() {
-  const { locale, region, showHomepageEntry, setShowHomepageEntry } = usePreferences()
+  const { locale, region, showHomepageEntry } = usePreferences()
   const m = useStartMessages()
   const home = localizedPath('/', locale, region)
   const [brandOpen, setBrandOpen] = useState(false)
   const [userOpen, setUserOpen] = useState(false)
   const [panel, setPanel] = useState<HeaderPanel | null>(null)
-  const weatherTrigger = useRef<HTMLButtonElement>(null)
   const changePanel = (target: HeaderPanel, open: boolean) => setPanel(current => open ? target : current === target ? null : current)
   const brandPopup = useRef<HTMLDivElement>(null)
   const unavailableId = useId()
@@ -59,13 +58,8 @@ export function StartHeader() {
     </Popover.Root>
     <div data-start-actions className={styles.actions}>
       {showHomepageEntry && <HomepageGuide open={panel === 'homepage'} blocked={panel === 'weather' || panel === 'settings'}
-        setOpen={value => changePanel('homepage', value)}
-        hide={() => {
-          changePanel('homepage', false)
-          setShowHomepageEntry(false)
-          weatherTrigger.current?.focus({ preventScroll: true })
-        }} />}
-      <StartWeather open={panel === 'weather'} setOpen={value => changePanel('weather', value)} skipExit={panel === 'homepage'} triggerRef={weatherTrigger} />
+        setOpen={value => changePanel('homepage', value)} />}
+      <StartWeather open={panel === 'weather'} setOpen={value => changePanel('weather', value)} skipExit={panel === 'homepage'} />
       <StartSettings open={panel === 'settings'} setOpen={value => changePanel('settings', value)} />
       <Menu.Root open={userOpen} onOpenChange={setUserOpen} modal={false} highlightItemOnHover={false}>
         <Menu.Trigger aria-label={m.user} className={cx(controls.header, styles.action)}><UserCircleIcon size={21} aria-hidden="true" /></Menu.Trigger>

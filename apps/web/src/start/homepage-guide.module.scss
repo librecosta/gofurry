@@ -1,98 +1,49 @@
+.trigger {
+  width: auto;
+  padding-inline: 10px;
+  white-space: nowrap;
+}
+
 .trigger, .positioner {
   @media (max-width: 767px), (hover: none) and (pointer: coarse) { display: none; }
 }
 
 .positioner { z-index: 3; }
 
-.tooltip {
-  min-width: 0;
-  padding: 6px 10px;
-  white-space: nowrap;
-  font-size: 12px;
-}
-
 .popup {
   display: grid;
-  gap: 10px;
-  width: min(420px, calc(100vw - 32px));
-  max-height: var(--available-height, calc(100dvh - 80px));
+  gap: 6px;
+  width: 300px;
+  max-height: var(--available-height);
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 16px;
+  padding: 12px;
   font-size: 13px;
-  line-height: 1.5;
+  line-height: 1.45;
+
+  // Keep the search input below the prompt when their widths can overlap.
+  // The Start search group's vertical offset follows 27dvh on taller windows.
+  @media (max-width: 1199px) {
+    max-height: min(var(--available-height), max(72px, calc(27dvh - 88px)));
+  }
+  @media (max-width: 1199px) and (max-height: 420px) {
+    max-height: min(var(--available-height), 56px);
+  }
 }
 
-.title {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 600;
+.title, .description, .notice { margin: 0; }
+.title { font-size: 15px; font-weight: 600; }
+.notice { font-size: 12px; }
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 2px;
 }
 
-.guides { display: grid; gap: 8px; }
-.tabs, .browsers { display: flex; flex-wrap: wrap; gap: 4px; }
-
-.choice, .copy, .hide {
+.button {
   padding: 5px 9px;
-  background-color: transparent;
+  font: inherit;
   backdrop-filter: none;
-  font: inherit;
-}
-
-.choice:is([data-active], [data-checked]) {
-  background-color: var(--overlay-selected-surface);
-  color: var(--overlay-selected-text);
-}
-
-.panel {
-  min-height: 6em;
-  outline: none;
-  &:focus-visible { outline: 2px solid var(--overlay-focus); outline-offset: 2px; }
-  ol { padding-inline-start: 1.4em; }
-  ol, p { margin: 0; }
-  li + li { margin-top: 3px; }
-}
-
-.address {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: end;
-  gap: 2px 6px;
-}
-
-.addressLabel {
-  display: grid;
-  gap: 4px;
-  min-width: 0;
-}
-
-.url {
-  width: 100%;
-  height: 32px;
-  padding-inline: 8px;
-  border: 0;
-  border-radius: var(--radius-small);
-  background-color: var(--overlay-surface-hover);
-  color: inherit;
-  font: inherit;
-  &:focus-visible { outline: 2px solid var(--overlay-focus); outline-offset: -2px; }
-}
-
-.copy {
-  display: grid;
-  place-items: center;
-  width: 32px;
-  height: 32px;
-  padding: 0;
-}
-
-.feedback {
-  grid-column: 1 / -1;
-  min-height: 1.5em;
-  font-size: 12px;
-}
-
-.hide {
-  justify-self: start;
-  margin-inline-start: -9px;
 }
