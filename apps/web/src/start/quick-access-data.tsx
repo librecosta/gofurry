@@ -96,7 +96,7 @@ export function QuickAccessProvider({ children }: { children: ReactNode }) {
     const clicked = (event: MouseEvent) => {
       if (!event.isTrusted || event.defaultPrevented || (event.type === 'click' ? event.button !== 0 : event.button !== 1)) return
       const link = event.target instanceof Element ? event.target.closest<HTMLAnchorElement>('a[href]') : null
-      if (!link || link.hasAttribute('download')) return
+      if (!link || link.hasAttribute('download') || link.hasAttribute('data-quick-ignore')) return
       record(link.href, link.dataset.quickName ?? link.textContent?.trim() ?? '')
     }
     document.addEventListener('click', clicked, true); document.addEventListener('auxclick', clicked, true)

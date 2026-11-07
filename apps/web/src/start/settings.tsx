@@ -22,11 +22,15 @@ import { useThemeReveal } from './theme-reveal'
 import { WallpaperLibrary } from './wallpaper-library'
 import { useWallpaper } from './wallpaper-state'
 import { CaretRightIcon } from '@phosphor-icons/react/dist/ssr/CaretRight'
+import { useRailMessages } from './rail-messages'
+import { useWidgetRails } from './widget-rails-state'
 
 export function StartSettings({ open, setOpen }: { open: boolean; setOpen: (open: boolean) => void }) {
   const { region, locale, themePreference, contentPreference, setLocale, setContentPreference, quickAccess, setQuickAccess, showFurrySearch, setShowFurrySearch, showHomepageEntry, setShowHomepageEntry } = usePreferences()
   const m = useStartMessages()
   const q = useQuickMessages()
+  const rail = useRailMessages()
+  const { leftEnabled, rightEnabled, setEnabled } = useWidgetRails()
   const themes = useRef<HTMLDivElement>(null)
   const reveal = useThemeReveal()
   const [library, setLibrary] = useState(false)
@@ -89,6 +93,11 @@ export function StartSettings({ open, setOpen }: { open: boolean; setOpen: (open
               <label className={styles.quickSetting}>{m.showHomepageEntry}<Switch.Root checked={showHomepageEntry} onCheckedChange={setShowHomepageEntry} className={styles.switch}>
                 <Switch.Thumb className={styles.switchThumb} render={<motion.span initial={false} animate={{ x: showHomepageEntry ? 16 : 0 }} transition={selectionTransition} />} />
               </Switch.Root></label>
+              {([['leftEnabled', rail.showOfficial, leftEnabled], ['rightEnabled', rail.showWidgets, rightEnabled]] as const).map(([key, label, checked]) =>
+                <label key={key} className={styles.quickSetting}>{label}<Switch.Root checked={checked} onCheckedChange={value => setEnabled(key, value)} className={styles.switch}>
+                  <Switch.Thumb className={styles.switchThumb} render={<motion.span initial={false} animate={{ x: checked ? 16 : 0 }} transition={selectionTransition} />} />
+                </Switch.Root></label>
+              )}
             </Tabs.Panel>
           </div>
         </Tabs.Root></LayoutGroup>

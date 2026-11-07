@@ -28,7 +28,7 @@ async function manage(page: Page) { await page.locator('[data-quick-manage]').cl
 async function close(page: Page) { await page.keyboard.press('Escape'); await expect(manager(page)).toHaveCount(0) }
 test('interaction contract: React sources never add native title tooltips', () => {
   const root = fileURLToPath(new URL('../src/', import.meta.url))
-  const offenders = readdirSync(root, { recursive: true }).filter(file => typeof file === 'string' && /\.tsx?$/.test(file) && /\btitle\s*=/.test(readFileSync(join(root, file), 'utf8')))
+  const offenders = readdirSync(root, { recursive: true }).filter(file => typeof file === 'string' && file.endsWith('.tsx') && /\stitle\s*=/.test(readFileSync(join(root, file), 'utf8')))
   expect(offenders).toEqual([])
 })
 

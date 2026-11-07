@@ -1,0 +1,88 @@
+@use './rail-layout';
+
+.rail {
+  --rail-size: clamp(32px, calc((100dvh - 148px) / 8), 44px);
+  position: absolute;
+  inset-block: 76px 36px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: clamp(4px, 1dvh, 8px);
+  pointer-events: none;
+}
+
+.left { inset-inline-start: max(14px, env(safe-area-inset-left)); }
+.right { inset-inline-end: max(14px, env(safe-area-inset-right)); }
+
+.trigger {
+  display: grid;
+  place-items: center;
+  width: var(--rail-size);
+  height: var(--rail-size);
+  flex: none;
+  padding: 0;
+  pointer-events: auto;
+}
+
+.positioner { z-index: 4; }
+.popup {
+  width: min(312px, var(--available-width, calc(100vw - 24px)));
+  max-height: var(--available-height, calc(100dvh - 24px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 12px;
+}
+
+.title { margin: 0; font-size: 16px; font-weight: 600; }
+
+.manager {
+  display: flex;
+  flex-direction: column;
+  width: min(880px, calc(100vw - 24px));
+  height: min(620px, calc(100dvh - 24px));
+}
+
+.skeleton {
+  min-height: 144px;
+  border-radius: var(--radius-small);
+  background-color: var(--overlay-surface-hover);
+}
+
+.managerSkeleton {
+  width: min(100%, 176px);
+  margin-inline-start: 35%;
+}
+
+@include rail-layout.stacked {
+  .rails {
+    position: relative;
+    display: grid;
+    gap: 10px;
+    margin-block-start: 18px;
+  }
+
+  .rail {
+    --rail-size: 44px;
+    position: static;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    gap: 8px;
+  }
+
+  .widget:nth-child(n + 4) { display: none; }
+
+  // Floating positioning is only used for the desktop anchor.
+  .positioner {
+    inset: auto 8px max(8px, env(safe-area-inset-bottom)) !important;
+    transform: none !important;
+    pointer-events: none;
+  }
+
+  .popup {
+    width: min(100%, 380px);
+    max-height: 75dvh;
+    margin-inline: auto;
+    pointer-events: auto;
+    &[data-closed] { pointer-events: none; }
+  }
+}

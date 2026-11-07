@@ -4,13 +4,15 @@ import { StartBackground } from '../start-background'
 import { StartHeader, StartFooter } from './chrome'
 import { SearchBox } from './search-box'
 import { WallpaperProvider } from './wallpaper-state'
+import { WidgetRailsProvider } from './widget-rails-state'
+import { SideRails } from './side-rails'
 
 export function StartPage() {
-  return <WallpaperProvider><div data-start-page className={styles.viewport}>
+  return <WallpaperProvider><WidgetRailsProvider><div data-start-page className={styles.viewport}>
     <StartBackground />
     <StartHeader />
-    <main className={styles.page}><SearchBox /></main>
+    <main className={styles.page}><SearchBox /><SideRails /></main>
     <StartFooter />
     <Outlet />
-  </div></WallpaperProvider>
+  </div></WidgetRailsProvider></WallpaperProvider>
 }

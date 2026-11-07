@@ -11,8 +11,8 @@ button, select { font: inherit; }
   *, *::before, *::after { transition-duration: 0s !important; animation-duration: 0s !important; }
 }
 
-// Start alone owns one visible viewport. Other routes keep normal scrolling.
-html:has([data-start-page]) body { min-height: 0; height: 100dvh; }
+// Let Start's stacked layout grow with its contents.
+html:has([data-start-page]) body { min-height: 100dvh; }
 html:has([data-start-page]) [data-page-dots] { max-height: 100dvh; }
 
 // Keep the validated native circular theme snapshot, separate from Motion.
