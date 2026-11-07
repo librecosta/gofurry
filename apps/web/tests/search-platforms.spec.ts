@@ -34,11 +34,12 @@ test('catalog: every region/content/furry transition resolves a valid target, pr
   }
 })
 
-test('catalog: authoritative ten templates preserve only the required query parameters', () => {
+test('catalog: authoritative templates preserve only the required query parameters', () => {
   const expected = {
     sohu: 'https://search.sohu.com/?keyword={kw}', wilddream: 'https://www.wilddream.net/Art/index/index?keyword={kw}', linpx: 'https://linpx.ink/search?word={kw}',
     yiffparty: 'https://yiff-party.com/search/?q={kw}', epic: 'https://store.epicgames.com/browse?q={kw}', gog: 'https://www.gog.com/en/games?query={kw}',
     fanqie: 'https://fanqienovel.com/search/{kw}', qimao: 'https://www.qimao.com/search/index/?keyword={kw}', sfacg: 'https://s.sfacg.com/?Key={kw}&S=1&SS=0',
+    scribblehub: 'https://www.scribblehub.com/series-finder/?sf=1&sh={kw}',
   }
   for (const query of ['  兽人 小说  ', 'Fox & Dragon? #1/100% + $']) {
     for (const [id, template] of Object.entries(expected)) expect(searchURL(platforms.find(p => p.id === id)!, query, 'zh')).toBe(template.replace('{kw}', encodeURIComponent(query.trim())))

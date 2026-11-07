@@ -69,13 +69,14 @@ test('start: settings trap focus, retain their shell across language URLs and fu
   if (region === 'INTL') {
     await dialog.getByRole('radio', { name: 'NSFW', exact: true }).click()
     expect((await page.context().cookies()).find(c => c.name === 'gf-content-preference')?.value).toBe('NSFW')
-    await expect(dialog).toContainText('Backend content is currently SFW')
+    await expect(dialog).not.toContainText('Controls adult search links')
     await expect(page.locator('html')).toHaveAttribute('data-content-mode', 'SFW')
   }
   await dialog.getByRole('radio', { name: '简体中文', exact: true }).click()
   await expect(page).toHaveURL(chinesePath)
   await expect(page.locator('html')).toHaveAttribute('lang', 'zh')
   await expect(dialog).toBeVisible()
+  if (region === 'INTL') await expect(dialog).not.toContainText('控制成人搜索入口的显示')
   expect(await page.locator('[data-start-page]').evaluate((el, first) => el === first, shell)).toBe(true)
   await dialog.getByRole('radio', { name: 'English', exact: true }).click(); await expect(page).toHaveURL(englishPath)
   await page.keyboard.press('Escape'); await expect(dialog).toHaveAttribute('data-ending-style')

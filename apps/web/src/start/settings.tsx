@@ -84,7 +84,6 @@ export function StartSettings() {
                   <Radio.Root value="SFW" className={cx(styles.radio, styles.segment)}>SFW</Radio.Root>
                   <Radio.Root value="NSFW" className={cx(styles.radio, styles.segment)}>NSFW</Radio.Root>
                 </RadioGroup>
-                <p className={styles.hint}>{m.contentHint}</p>
               </fieldset>}
             </Tabs.Panel>
             <Tabs.Panel value="advanced" keepMounted className={styles.panel} />

@@ -59,7 +59,7 @@ export const platforms: readonly Platform[] = [
   platform('royalroad', 'novel', 'Royal Road', 'Royal Road', 'https://www.royalroad.com/fictions/search?title={kw}', intl),
   platform('ao3', 'novel', 'AO3', 'AO3', 'https://archiveofourown.org/works/search?work_search%5Bquery%5D={kw}', intl),
   platform('webnovel', 'novel', 'WebNovel', 'WebNovel', 'https://www.webnovel.com/search?keywords={kw}', intl),
-  platform('scribblehub', 'novel', 'Scribble Hub', 'Scribble Hub', 'https://www.scribblehub.com/?s={kw}&post_type=fictionposts', intl),
+  platform('scribblehub', 'novel', 'Scribble Hub', 'Scribble Hub', 'https://www.scribblehub.com/series-finder/?sf=1&sh={kw}', intl),
   platform('fanfiction', 'novel', 'FanFiction.net', 'FanFiction.net', 'https://www.fanfiction.net/search/?keywords={kw}&ready=1&type=story', intl),
   platform('qidian', 'novel', '起点中文网', 'Qidian', 'https://www.qidian.com/search?kw={kw}', cn),
   platform('fanqie', 'novel', '番茄小说', 'Fanqie Novel', 'https://fanqienovel.com/search/{kw}', cn),
