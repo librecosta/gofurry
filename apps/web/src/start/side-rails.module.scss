@@ -31,6 +31,9 @@
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 12px;
+  // Keep short popovers scrollable without a native gutter during the reveal.
+  scrollbar-width: none;
+  &::-webkit-scrollbar { display: none; }
 }
 
 .title { margin: 0; font-size: 16px; font-weight: 600; }
