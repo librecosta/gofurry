@@ -235,7 +235,6 @@ export function SearchBox() {
     return <span>{phrase.slice(0, index)}<mark className={styles.highlight}>{phrase.slice(index, end)}</mark>{phrase.slice(end)}</span>
   }
   const defaultAction = 'https://www.bing.com/search'
-  const categoryGlass = useStartSurface('category')
   const searchGlass = useStartSurface('search')
   return <div ref={shell} data-start-search data-quick-enabled={quickAccess} className={cx(styles.shell, quickAccess && styles.quickEnabled)}
     onBlur={(event) => {
@@ -245,10 +244,8 @@ export function SearchBox() {
     <div ref={categoryTrack} data-category-track onScroll={updateCategoryEdges} className={cx(styles.categoryTrack, categoryEdges.left && styles.fadeLeft, categoryEdges.right && styles.fadeRight, categoryEdges.left && categoryEdges.right && styles.fadeBoth)}>
       <div role="group" aria-label={m.categories} aria-description={categoryEdges.left || categoryEdges.right ? m.moreCategories : undefined} data-categories onKeyDown={groupKeys}
         onFocusCapture={(event) => { if (event.target instanceof HTMLButtonElement) revealCategory(event.target) }} className={styles.categories}>
-        {categories.filter(id => catalog.some(item => item.category === id)).map((id) => <button key={id} type="button" aria-pressed={category === id}
-          {...(id === 'search' ? categoryGlass.props : undefined)}
-          onClick={(event) => chooseCategory(id, event.currentTarget)} className={cx(styles.chip, styles.category, category === id && styles.selected, id === 'search' && categoryGlass.className)}>{m.category[id]}</button>)}
-        {categoryGlass.binding}
+        {categories.filter(id => catalog.some(item => item.category === id)).map(id => <SearchCategoryButton key={id}
+          label={m.category[id]} selected={category === id} onSelect={button => chooseCategory(id, button)} />)}
       </div>
     </div>
     {categoryEdges.left && <span aria-hidden="true" data-category-edge="left" className={cx(styles.edge, styles.edgeLeft)}><CaretLeftIcon size={12} /></span>}
@@ -343,6 +340,15 @@ function SearchTailView({ children, onMeasure }: { children: ReactNode; onMeasur
 
 // One physical panel is reused for both lists. Presence retains its last
 // content during exit, while inert prevents a closing list receiving clicks.
+function SearchCategoryButton({ label, selected, onSelect }: { label: string; selected: boolean; onSelect: (button: HTMLButtonElement) => void }) {
+  const glass = useStartSurface('category')
+  return <>
+    <button {...glass.props} type="button" aria-pressed={selected} onClick={event => onSelect(event.currentTarget)}
+      className={cx(styles.chip, styles.category, selected && styles.selected, glass.className)}>{label}</button>
+    {glass.binding}
+  </>
+}
+
 function SearchPanel({ ref, id, label, kind, onKeyDown, children }: { ref: Ref<HTMLDivElement>; id: string; label: string; kind: Exclude<Panel, null>; onKeyDown: KeyboardEventHandler<HTMLDivElement>; children: ReactNode }) {
   const present = useIsPresent()
   const transition = useMotionTiming()

@@ -35,6 +35,7 @@ export function SideRails() {
   const [active, setActive] = useState<string | null>(null)
   const change = (id: string, open: boolean) => setActive(current => open ? id : current === id ? null : current)
   const transition = useMotionTiming()
+  const managerGlass = useStartSurface('widget-manager')
 
   useEffect(() => {
     if (!active) return
@@ -65,7 +66,8 @@ export function SideRails() {
         </div>
       })}
       <Dialog.Root open={active === 'manager'} onOpenChange={value => change('manager', value)}>
-        <Dialog.Trigger data-widget-manager-trigger className={cx(controls.glass, styles.trigger)} aria-label={m.manage}><PlusIcon size={21} aria-hidden="true" /></Dialog.Trigger>
+        <Dialog.Trigger {...managerGlass.props} data-widget-manager-trigger className={cx(controls.glass, styles.trigger, managerGlass.className)} aria-label={m.manage}><PlusIcon size={21} aria-hidden="true" /></Dialog.Trigger>
+        {managerGlass.binding}
         <AnimatePresence>{active === 'manager' && <Dialog.Portal keepMounted>
           <Dialog.Backdrop className={settings.backdrop} render={<motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={transition} />} />
           <Dialog.Popup data-widget-manager className={cx(settings.popup, styles.manager)} render={<motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }} transition={transition} />}>
@@ -88,7 +90,7 @@ function RailPanel({ id, label, icon, side, active, change, children }: {
   const m = useRailMessages()
   const popup = useRef<HTMLDivElement>(null)
   const transition = useMotionTiming()
-  const glass = useStartSurface('calculator', id === 'calculator')
+  const glass = useStartSurface(side === 'right' ? 'tool' : 'widget')
   return <Popover.Root open={active === id} onOpenChange={value => change(id, value)}>
     <Popover.Trigger {...glass.props} data-rail-trigger={id} className={cx(controls.glass, styles.trigger, glass.className)} aria-label={label}>{icon}</Popover.Trigger>
     {glass.binding}

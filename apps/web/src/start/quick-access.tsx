@@ -21,8 +21,8 @@ import settings from './settings.module.scss'
 import controls from './controls.module.scss'
 import styles from './quick-access.module.scss'
 
-function SiteIcon({ url, representative = false }: { url: string; representative?: boolean }) {
-  const glass = useStartSurface('quick-icon', representative)
+function SiteIcon({ url, present }: { url: string; present: boolean }) {
+  const glass = useStartSurface('quick-icon', present)
   const parsed = siteURL(url)!
   const hostname = parsed.hostname.replace(/\.$/, '')
   // Only public-looking DNS hostnames go to the third party. IP literals,
@@ -51,12 +51,16 @@ export function QuickAccess() {
   const m = useQuickMessages()
   const [manager, setManager] = useState(false)
   const trigger = useRef<HTMLButtonElement>(null)
+  const glass = useStartSurface('quick-icon', ready)
   const transition = useMotionTiming()
   const animation = { initial: { opacity: 0, y: 4 }, animate: { opacity: 1, y: 0 }, exit: { opacity: 0, y: 4 }, transition }
   return <>
     <motion.div data-quick-access className={styles.row} initial={false} animate={{ opacity: ready ? 1 : 0 }} transition={transition}>
-      <AnimatePresence initial={false}>{ready && visibleSites(data).map((site, index) => <SiteEntry key={site.key} site={site} representative={index === 0} />)}</AnimatePresence>
-      <button ref={trigger} data-quick-manage type="button" aria-label={m.title} disabled={!ready} className={styles.tile} onClick={() => setManager(true)}><span className={styles.icon}><PlusIcon size={30} weight="light" aria-hidden="true" /></span></button>
+      <AnimatePresence initial={false}>{ready && visibleSites(data).map(site => <SiteEntry key={site.key} site={site} />)}</AnimatePresence>
+      <button ref={trigger} data-quick-manage type="button" aria-label={m.title} disabled={!ready} className={styles.tile} onClick={() => setManager(true)}>
+        <span {...glass.props} className={cx(styles.icon, glass.className)}><PlusIcon size={30} weight="light" aria-hidden="true" /></span>
+        {glass.binding}
+      </button>
     </motion.div>
     <Dialog.Root open={manager} onOpenChange={setManager}>
       <AnimatePresence>{manager && <Dialog.Portal keepMounted>
@@ -72,12 +76,12 @@ export function QuickAccess() {
   </>
 }
 
-function SiteEntry({ site, representative }: { site: QuickSite; representative: boolean }) {
+function SiteEntry({ site }: { site: QuickSite }) {
   const transition = useMotionTiming()
   const present = useIsPresent()
   return <motion.div data-quick-site data-site-key={site.key} data-pinned={!!site.pin} className={styles.entry} inert={!present} layout="position" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={transition}>
     <a href={site.url} target="_blank" rel="noopener noreferrer" data-quick-name={site.name} className={styles.tile}>
-      <SiteIcon key={site.url} url={site.url} representative={present && representative} /><span className={styles.name}>{site.name}</span>
+      <SiteIcon key={site.url} url={site.url} present={present} /><span className={styles.name}>{site.name}</span>
     </a>
   </motion.div>
 }

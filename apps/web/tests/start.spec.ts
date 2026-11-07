@@ -11,7 +11,7 @@ async function settings(page: Page) { await page.locator('[data-start-settings]'
 
 test.use({ viewport: { width: 1440, height: 900 } })
 
-test('start material: default is lazy; four surfaces use SVG refraction and release it', async ({ page, context, baseURL }) => {
+test('start material: default is lazy; visible surfaces use SVG refraction and release it', async ({ page, context, baseURL }) => {
   const cookie = `gf-start-material-${region}`
   const other = region === 'CN' ? 'INTL' : 'CN'
   await context.addCookies([
@@ -42,7 +42,7 @@ test('start material: default is lazy; four surfaces use SVG refraction and rele
   await settings(page)
   await page.getByRole('tab', { name: 'Advanced', exact: true }).click()
   await page.getByRole('radio', { name: 'Liquid Glass', exact: true }).click()
-  await expect(surfaces).toHaveCount(4)
+  await expect(surfaces).toHaveCount(12)
   const active = await surfaces.evaluateAll(nodes => nodes.map(node => {
     const css = getComputedStyle(node).backdropFilter
     const filter = document.getElementById(css.match(/liquid-glass-\d+/)?.[0] ?? '')
@@ -52,9 +52,10 @@ test('start material: default is lazy; four surfaces use SVG refraction and rele
     }
   }))
   expect(active.sort((a, b) => a.surface!.localeCompare(b.surface!))).toEqual(
-    ['calculator', 'category', 'quick-icon', 'search'].map(surface => ({ surface, material: 'clear', refracts: true })),
+    ['category', 'category', 'category', 'category', 'category', 'quick-icon', 'quick-icon',
+      'search', 'tool', 'tool', 'tool', 'widget-manager'].map(surface => ({ surface, material: 'clear', refracts: true })),
   )
-  await expect(page.locator('[data-start-liquid="category"]')).toHaveCSS('background-color', categoryTint)
+  await expect(page.locator('[data-start-liquid="category"][aria-pressed="true"]')).toHaveCSS('background-color', categoryTint)
   expect(liquidRequests.some(url => url.endsWith('.js'))).toBe(true)
   expect((await context.cookies()).find(item => item.name === cookie)?.value).toBe('liquid')
   await page.keyboard.press('Escape')
@@ -72,7 +73,7 @@ test('start material: default is lazy; four surfaces use SVG refraction and rele
 
   const reloaded = await page.reload()
   expect(await reloaded?.text()).toContain('data-start-material="liquid"')
-  await expect(surfaces).toHaveCount(4)
+  await expect(surfaces).toHaveCount(12)
   await settings(page)
   await page.getByRole('tab', { name: 'Advanced', exact: true }).click()
   await page.getByRole('radio', { name: 'Frosted Glass', exact: true }).click()
@@ -81,6 +82,91 @@ test('start material: default is lazy; four surfaces use SVG refraction and rele
   await expect(filters).toHaveCount(0)
   await expect(page.locator('[style*="--hyalite:"]')).toHaveCount(0)
   expect(errors).toEqual([])
+})
+
+test('start material: responsive shortcuts and keyed rail changes only bind visible surfaces', async ({ page, context, baseURL }) => {
+  await context.addCookies([
+    { name: `gf-start-material-${region}`, value: 'liquid', url: baseURL! },
+    { name: `gf-quick-access-${region}`, value: '1', url: baseURL! },
+  ])
+  await page.addInitScript(region => {
+    localStorage.setItem(`gf-quick-access:${region}`, JSON.stringify({
+      version: 1,
+      pinned: Array.from({ length: 9 }, (_, order) => ({ id: `pin-${order}`, name: `Pin ${order}`, url: `https://pin-${order}.example/`, order })),
+      recent: Array.from({ length: 3 }, (_, index) => ({ name: `Recent ${index}`, url: `https://recent-${index}.example/`, lastVisited: Date.now() - index, count: 1 })),
+    }))
+    localStorage.setItem(`gf-widget-rails:${region}`, JSON.stringify({
+      version: 1, leftEnabled: true, rightEnabled: true, widgets: ['ai-hub', 'asset-hub', 'game-data-hub'],
+    }))
+  }, region)
+  await context.route(/favicon\.im|\.example\/favicon\.ico/, route => route.fulfill({ status: 404 }))
+  await english(page)
+  const surfaces = page.locator('[data-start-liquid]')
+  const quick = page.locator('[data-start-liquid="quick-icon"]')
+  const hiddenQuick = page.locator('[data-quick-site]:not(:visible) [style*="--hyalite:"]')
+  await expect(surfaces).toHaveCount(24)
+  await expect(quick).toHaveCount(11)
+  await expect(hiddenQuick).toHaveCount(0)
+
+  await page.setViewportSize({ width: 375, height: 667 })
+  await expect(quick).toHaveCount(5)
+  await expect(surfaces).toHaveCount(18)
+  await expect(hiddenQuick).toHaveCount(0)
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await expect(surfaces).toHaveCount(24)
+
+  const recent = page.locator('[data-site-key="recent-0.example"] [data-start-liquid]')
+  await expect(recent).toHaveCount(1)
+  await page.locator('[data-quick-manage]').click()
+  const quickManager = page.locator('[data-quick-manager]')
+  await quickManager.getByLabel('Name', { exact: true }).fill('Added')
+  await quickManager.getByLabel('URL', { exact: true }).fill('https://added.example/')
+  await quickManager.getByRole('button', { name: 'Add site', exact: true }).click()
+  const addedSite = page.locator('[data-site-key="added.example"]')
+  await expect(addedSite.locator('[data-start-liquid]')).toHaveCount(1)
+  await expect(recent).toHaveCount(0)
+  await quickManager.getByRole('button', { name: 'Delete: Added', exact: true }).click()
+  await expect(addedSite.locator('[style*="--hyalite:"]')).toHaveCount(0)
+  await expect(recent).toHaveCount(1)
+  await page.keyboard.press('Escape')
+  await expect(quickManager).toHaveCount(0)
+
+  const asset = page.locator('[data-rail-trigger="asset-hub"]')
+  const original = await asset.elementHandle()
+  await page.locator('[data-widget-manager-trigger]').click()
+  const widgetManager = page.locator('[data-widget-manager]')
+  await widgetManager.getByRole('tab', { name: 'Added', exact: true }).click()
+  await widgetManager.getByRole('button', { name: 'Move up Asset Hub', exact: true }).click()
+  await expect(page.locator('[data-start-widgets] [data-rail-trigger]').first()).toHaveAttribute('data-rail-trigger', 'asset-hub')
+  expect(await asset.evaluate((element, previous) => element === previous, original)).toBe(true)
+  await widgetManager.getByRole('button', { name: 'Remove Asset Hub', exact: true }).click()
+  await expect(asset).toHaveCount(0)
+  await expect(surfaces).toHaveCount(23)
+  await widgetManager.getByRole('tab', { name: 'Library', exact: true }).click()
+  await widgetManager.getByRole('button', { name: 'Add Asset Hub', exact: true }).click()
+  await expect(asset).toHaveAttribute('data-start-liquid', 'widget')
+  await expect(widgetManager.locator('[data-start-liquid]')).toHaveCount(0)
+  await page.keyboard.press('Escape')
+  await expect(widgetManager).toHaveCount(0)
+
+  await settings(page)
+  await page.getByRole('tab', { name: 'Advanced', exact: true }).click()
+  const officialTools = page.getByRole('switch', { name: 'Show official tools' })
+  const widgetRail = page.getByRole('switch', { name: 'Show widget rail' })
+  await officialTools.click()
+  await expect(surfaces).toHaveCount(21)
+  await widgetRail.click()
+  await expect(surfaces).toHaveCount(17)
+  await officialTools.click()
+  await widgetRail.click()
+  await expect(surfaces).toHaveCount(24)
+  await page.getByRole('tab', { name: 'Basic', exact: true }).click()
+  const furrySearch = page.getByRole('switch', { name: 'Show furry search options' })
+  await furrySearch.click()
+  await expect(page.locator('[data-start-liquid="category"]')).toHaveCount(4)
+  await expect(surfaces).toHaveCount(23)
+  await furrySearch.click()
+  await expect(surfaces).toHaveCount(24)
 })
 
 test('start material: the original blur remains when SVG backdrop is unavailable', async ({ page, context, baseURL }) => {
