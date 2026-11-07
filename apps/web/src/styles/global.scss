@@ -11,9 +11,13 @@ button, select { font: inherit; }
   *, *::before, *::after { transition-duration: 0s !important; animation-duration: 0s !important; }
 }
 
-// Let Start's stacked layout grow with its contents.
-html:has([data-start-page]) body { min-height: 100dvh; }
-html:has([data-start-page]) [data-page-dots] { max-height: 100dvh; }
+// Hide only the Start document scrollbar; stacked content stays scrollable.
+html:has([data-start-page]) {
+  scrollbar-width: none;
+  &::-webkit-scrollbar { display: none; }
+  body { min-height: 100dvh; }
+  [data-page-dots] { max-height: 100dvh; }
+}
 
 // Keep the validated native circular theme snapshot, separate from Motion.
 html[data-gf-theme-reveal]::view-transition { pointer-events: none; }

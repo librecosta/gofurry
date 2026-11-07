@@ -35,8 +35,8 @@ export default function Calculator() {
       <input className={styles.input} value={expression} maxLength={expressionLimit} autoComplete="off" spellCheck={false}
         onChange={event => { setExpression(event.target.value); setResult(null) }} />
     </label>
-    <div className={styles.result}>
-      <output aria-label={m.result}>{result && 'error' in result ? m[result.error] : value}</output>
+    <div className={cx(styles.result, styles.calculatorResult)}>
+      <output aria-label={m.result}>{result && 'error' in result ? m[result.error] : value || <span aria-hidden="true">—</span>}</output>
       <CopyResult key={value} value={value} />
     </div>
     <div className={styles.keypad}>

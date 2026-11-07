@@ -1,5 +1,7 @@
 import { useState } from 'react'
+import { CheckIcon } from '@phosphor-icons/react/dist/ssr/Check'
 import { CopyIcon } from '@phosphor-icons/react/dist/ssr/Copy'
+import { WarningCircleIcon } from '@phosphor-icons/react/dist/ssr/WarningCircle'
 import { usePreferences } from '../../preferences'
 import { cx } from '../../styles/classes'
 import controls from '../controls.module.scss'
@@ -14,9 +16,10 @@ export function CopyResult({ value }: { value: string }) {
   async function copy() {
     try { await navigator.clipboard.writeText(value); setStatus('copied') } catch { setStatus('failed') }
   }
+  const Icon = status === 'copied' ? CheckIcon : status === 'failed' ? WarningCircleIcon : CopyIcon
   return <>
     <button type="button" aria-label={label} className={cx(controls.glass, styles.copy)} disabled={!value} onClick={() => void copy()}>
-      <CopyIcon size={17} aria-hidden="true" />
+      <Icon size={17} aria-hidden="true" />
     </button>
     <span role="status" className={styles.copyStatus}>{message}</span>
   </>

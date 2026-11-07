@@ -4,7 +4,7 @@ type Calculation = { value: number } | { error: ErrorCode }
 
 export function calculate(expression: string): Calculation {
   if (expression.length > expressionLimit) return { error: 'invalid' }
-  const source = expression.replaceAll('×', '*').replaceAll('÷', '/').replaceAll('−', '-')
+  const source = expression.replace(/[×xX]/g, '*').replaceAll('÷', '/').replaceAll('−', '-')
   const numeric = /(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?/iy
   let index = 0
 
