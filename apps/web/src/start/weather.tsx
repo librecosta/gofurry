@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type Ref } from 'react'
 import { Popover } from '@base-ui/react/popover'
 import { AnimatePresence, motion, useIsPresent } from 'motion/react'
 import { MapPinIcon } from '@phosphor-icons/react/dist/ssr/MapPin'
@@ -67,11 +67,12 @@ function useWeather() {
   return { data, cityId: cityId ?? null, selectCity }
 }
 
-export function StartWeather() {
+export function StartWeather({ open, setOpen, skipExit, triggerRef }: {
+  open: boolean; setOpen: (open: boolean) => void; skipExit: boolean; triggerRef: Ref<HTMLButtonElement>
+}) {
   const { locale } = usePreferences()
   const m = useStartMessages().weather
   const { data, cityId, selectCity } = useWeather()
-  const [open, setOpen] = useState(false)
   const [selecting, setSelecting] = useState(false)
   const [viewHeight, setViewHeight] = useState<number>()
   const cityButton = useRef<HTMLButtonElement>(null)
@@ -86,12 +87,12 @@ export function StartWeather() {
   const attributionLinks = [...new Set(data.attributions.map(safeAttributionURL).filter((url): url is string => !!url && url !== 'https://www.qweather.com/' && url !== 'https://developer.qweather.com/attribution.html'))]
   const attributionText = data.attributions.filter(text => !safeAttributionURL(text) && !['qweather', '和风天气', '和风天气 / qweather'].includes(text.trim().toLowerCase()))
   return <Popover.Root open={open} onOpenChange={value => { setOpen(value); if (value) { setSelecting(false); setViewHeight(undefined); restoreCityFocus.current = false } }}>
-    <Popover.Trigger data-start-weather data-weather-state={data.state} aria-label={`${m.details}: ${label}`} className={cx(controls.header, styles.trigger)}>
+    <Popover.Trigger ref={triggerRef} data-start-weather data-weather-state={data.state} aria-label={`${m.details}: ${label}`} className={cx(controls.header, styles.trigger)}>
       <span className={temperature ? styles.city : undefined}>{temperature ? city : m.title}</span>
       <WeatherIcon code={data.weather?.condition_code} />
       {temperature && <span className={styles.temperature}>{temperature}</span>}
     </Popover.Trigger>
-    <AnimatePresence>{open && <Popover.Portal keepMounted>
+    {!skipExit && <AnimatePresence>{open && <Popover.Portal keepMounted>
       <Popover.Positioner positionMethod="fixed" align="end" sideOffset={8} collisionPadding={16} className={styles.positioner}>
         <Popover.Popup data-start-weather-details className={styles.popup} render={<motion.div
           initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={transition}
@@ -118,7 +119,7 @@ export function StartWeather() {
           </AnimatePresence></motion.div>
         </Popover.Popup>
       </Popover.Positioner>
-    </Popover.Portal>}</AnimatePresence>
+    </Popover.Portal>}</AnimatePresence>}
   </Popover.Root>
 }
 

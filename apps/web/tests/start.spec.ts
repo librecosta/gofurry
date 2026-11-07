@@ -131,7 +131,7 @@ test('start: explicit language URLs own SSR metadata and ignore conflicting cook
     expect(response!.headers()['x-robots-tag']).toBe('noindex')
     await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', 'noindex')
     await expect(page).toHaveTitle(locale === 'en' ? 'GoFurry · Start' : 'GoFurry · 起始页')
-    await expect(page.locator('[data-start-actions] > *')).toHaveCount(3)
+    await expect(page.locator('[data-start-actions] > *')).toHaveCount(4)
     await expect(page.locator('[data-start-logo]')).toHaveCSS('background-color', 'rgb(215, 220, 226)')
     await expect(page.locator('[data-start-filing]')).toHaveCount(region === 'CN' ? 1 : 0)
     await expect(page.getByRole('search')).toHaveAttribute('action', 'https://www.bing.com/search')
@@ -227,7 +227,8 @@ test('start: settings text tabs move their underline without recentering; langua
   const underline = dialog.locator('[data-settings-tab-indicator]')
   const progress = await sampleMotion(underline)
   expect(progress.some(frame => frame.x > underlineStart + 0.1 && frame.x < progress.at(-1)!.x - 0.1)).toBe(true)
-  await expect(dialog.getByRole('tabpanel')).toBeEmpty(); expect(await dialog.boundingBox()).toEqual(initial)
+  await expect(dialog.getByRole('tabpanel').getByRole('switch', { name: 'Show Set as homepage shortcut' })).toBeChecked()
+  expect(await dialog.boundingBox()).toEqual(initial)
   await basic.click(); await expect(basic).toHaveAttribute('aria-selected', 'true')
   const language = dialog.getByRole('radiogroup', { name: 'Language', exact: true }), englishRadio = language.getByRole('radio', { name: 'English', exact: true })
   await expect(englishRadio).toBeChecked(); await englishRadio.hover()
@@ -325,7 +326,7 @@ test('start: all categories remain reachable at 320/375/390/768px with no docume
       await last.press('Home'); await expect(first).toBeFocused()
       const dimensions = await page.evaluate(() => ({ viewport: [innerWidth, innerHeight], root: [document.documentElement.scrollWidth, document.documentElement.scrollHeight], body: [document.body.scrollWidth, document.body.scrollHeight] }))
       expect(dimensions.root).toEqual(dimensions.viewport); expect(dimensions.body).toEqual(dimensions.viewport)
-      for (const element of await page.locator('[data-start-actions] > *').all()) await expect(element).toBeVisible()
+      for (const element of await page.locator('[data-start-actions] > :not([data-start-homepage])').all()) await expect(element).toBeVisible()
     }
   }
   // Stress the documented scroll fallback, rather than only fitting default text.

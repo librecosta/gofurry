@@ -23,13 +23,12 @@ import { WallpaperLibrary } from './wallpaper-library'
 import { useWallpaper } from './wallpaper-state'
 import { CaretRightIcon } from '@phosphor-icons/react/dist/ssr/CaretRight'
 
-export function StartSettings() {
-  const { region, locale, themePreference, contentPreference, setLocale, setContentPreference, quickAccess, setQuickAccess, showFurrySearch, setShowFurrySearch } = usePreferences()
+export function StartSettings({ open, setOpen }: { open: boolean; setOpen: (open: boolean) => void }) {
+  const { region, locale, themePreference, contentPreference, setLocale, setContentPreference, quickAccess, setQuickAccess, showFurrySearch, setShowFurrySearch, showHomepageEntry, setShowHomepageEntry } = usePreferences()
   const m = useStartMessages()
   const q = useQuickMessages()
   const themes = useRef<HTMLDivElement>(null)
   const reveal = useThemeReveal()
-  const [open, setOpen] = useState(false)
   const [library, setLibrary] = useState(false)
   const pendingLibrary = useRef(false), trigger = useRef<HTMLButtonElement>(null)
   const { preference } = useWallpaper()
@@ -86,7 +85,11 @@ export function StartSettings() {
                 </RadioGroup>
               </fieldset>}
             </Tabs.Panel>
-            <Tabs.Panel value="advanced" keepMounted className={styles.panel} />
+            <Tabs.Panel value="advanced" keepMounted className={styles.panel}>
+              <label className={styles.quickSetting}>{m.showHomepageEntry}<Switch.Root checked={showHomepageEntry} onCheckedChange={setShowHomepageEntry} className={styles.switch}>
+                <Switch.Thumb className={styles.switchThumb} render={<motion.span initial={false} animate={{ x: showHomepageEntry ? 16 : 0 }} transition={selectionTransition} />} />
+              </Switch.Root></label>
+            </Tabs.Panel>
           </div>
         </Tabs.Root></LayoutGroup>
         <footer className={styles.footer}><GithubLogoIcon size={17} aria-hidden="true" className={styles.githubIcon} /><p className={styles.caption}>{m.githubLead}<a href="https://github.com/gofurry" target="_blank" rel="noopener noreferrer" aria-label={m.github} className={styles.github}>GitHub</a>{m.githubStop}</p></footer>

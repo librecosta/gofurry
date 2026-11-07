@@ -1,0 +1,180 @@
+import { expect, test } from '@playwright/test'
+import { detectHomepageBrowser, homepageAddress } from '../src/start/homepage-guide-data'
+
+const region = process.env.WEB_REGION === 'INTL' ? 'INTL' : 'CN'
+const englishPath = region === 'CN' ? '/en/start' : '/start'
+const chinesePath = region === 'CN' ? '/start' : '/zh/start'
+const guide = '[data-start-homepage-guide]'
+const entry = '[data-start-homepage]'
+const cookie = `gf-homepage-entry-${region}`
+
+test('homepage addresses use the deployment region, locale and trusted origins', () => {
+  expect(homepageAddress('CN', 'zh', 'https://gofurry.cn')).toEqual({ url: 'https://gofurry.cn/start', local: false })
+  expect(homepageAddress('CN', 'en', 'https://gofurry.com')).toEqual({ url: 'https://gofurry.cn/en/start', local: false })
+  expect(homepageAddress('INTL', 'en', 'https://gofurry.com')).toEqual({ url: 'https://gofurry.com/start', local: false })
+  expect(homepageAddress('INTL', 'zh', 'https://127.0.0.1.example')).toEqual({ url: 'https://gofurry.com/zh/start', local: false })
+  expect(homepageAddress('CN', 'en', 'http://127.0.0.1:17320')).toEqual({ url: 'http://127.0.0.1:17320/en/start', local: true })
+  expect(homepageAddress('INTL', 'zh', 'http://127.0.0.1:17320/other?x=1#fragment').local).toBe(false)
+  expect(detectHomepageBrowser('Mozilla/5.0 Chrome/140.0 Safari/537.36 Edg/140.0')).toBe('Edge')
+  expect(detectHomepageBrowser('Mozilla/5.0 Chrome/140.0 Safari/537.36')).toBe('Chrome')
+  expect(detectHomepageBrowser('Mozilla/5.0 Gecko/20100101 Firefox/140.0')).toBe('Firefox')
+  expect(detectHomepageBrowser('Mozilla/5.0 (Macintosh) Version/26.0 Safari/605.1.15')).toBe('Safari')
+  expect(detectHomepageBrowser('Mozilla/5.0 Chrome/140.0 Safari/537.36 OPR/123')).toBe('other')
+  expect(detectHomepageBrowser('Mozilla/5.0 (iPhone) Version/26.0 Safari/605.1.15')).toBe('other')
+})
+
+test('homepage guide works with mouse and keyboard and switches header panels', async ({ page }) => {
+  await page.emulateMedia({ colorScheme: 'light' })
+  await page.goto(englishPath, { waitUntil: 'networkidle' })
+  const shortcut = page.getByRole('button', { name: 'Set as homepage' })
+  const panel = page.locator(guide)
+  const weather = page.locator('[data-start-weather]')
+  const settings = page.locator('[data-start-settings]')
+  await expect(page.locator('[data-start-actions] > button').nth(0)).toHaveAttribute('data-start-homepage')
+  await expect(page.locator('[data-start-actions] > button').nth(1)).toHaveAttribute('data-start-weather')
+  await expect(page.locator('[data-start-actions] > button').nth(2)).toHaveAttribute('data-start-settings')
+  await expect(page.locator('[data-start-actions] > button').nth(3)).toHaveAccessibleName('User menu')
+  await shortcut.hover()
+  await expect(page.getByRole('tooltip')).toHaveText('Set as homepage')
+  await shortcut.click()
+  await expect(panel).toBeVisible()
+  await expect(panel).toHaveCSS('background-color', 'rgba(245, 247, 250, 0.33)')
+  await expect(panel).toHaveCSS('width', '420px')
+  await expect(page.getByRole('tooltip')).toHaveCount(0)
+  await expect(panel.getByRole('radio', { name: 'Chrome' })).toBeChecked()
+  await expect(panel.getByRole('tabpanel')).toContainText('On startup')
+  await panel.getByRole('radio', { name: 'Edge' }).click()
+  await expect(panel.getByRole('tabpanel')).toContainText('When Edge starts')
+  await panel.getByRole('radio', { name: 'Firefox' }).click()
+  await expect(panel.getByRole('tabpanel')).toContainText('session restore')
+  await panel.getByRole('radio', { name: 'Firefox' }).press('ArrowRight')
+  await expect(panel.getByRole('radio', { name: 'Safari' })).toBeChecked()
+  await expect(panel.getByRole('tabpanel')).toContainText('New windows open with')
+  await panel.getByRole('tab', { name: 'Browser homepage' }).press('ArrowRight')
+  await expect(panel.getByRole('tabpanel')).toContainText('New tabs open with')
+  for (const browser of ['Edge', 'Chrome', 'Firefox']) {
+    await panel.getByRole('radio', { name: browser }).click()
+    await expect(panel.getByRole('tabpanel')).toContainText('requires a browser extension')
+  }
+  await page.keyboard.press('Escape')
+  await expect(panel).toHaveCount(0)
+  await expect(shortcut).toBeFocused()
+  await page.mouse.move(0, 100)
+  await page.keyboard.press('Shift+Tab')
+  await page.keyboard.press('Tab')
+  await expect(shortcut).toBeFocused()
+  await expect(page.getByRole('tooltip')).toHaveText('Set as homepage')
+  await shortcut.press('Enter')
+  await expect(panel.getByRole('tab', { name: 'Browser homepage' })).toBeFocused()
+  await weather.click()
+  await expect(page.locator('[data-start-weather-details]')).toBeVisible()
+  await expect(panel).toHaveCount(0)
+  await shortcut.click()
+  await expect(panel).toBeVisible()
+  await expect(page.locator('[data-start-weather-details]')).toHaveCount(0)
+  await settings.click()
+  await expect(page.locator('[data-start-preferences]')).toBeVisible()
+  await expect(panel).toHaveCount(0)
+  await page.keyboard.press('Escape')
+  await expect(page.locator('[data-start-preferences]')).toHaveCount(0)
+  await shortcut.click()
+  await page.locator('[data-start-logo]').click()
+  await expect(panel).toHaveCount(0)
+})
+
+test('homepage guide copies the current localized address and reports clipboard failure', async ({ page, context }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write'])
+  await page.emulateMedia({ colorScheme: 'dark', reducedMotion: 'reduce' })
+  await page.goto(englishPath + '?discard=1#discard', { waitUntil: 'networkidle' })
+  const shortcut = page.locator(entry), panel = page.locator(guide)
+  const origin = new URL(page.url()).origin
+  await shortcut.click()
+  await expect(panel).toHaveCSS('opacity', '1')
+  await expect(panel).toHaveCSS('background-color', 'rgba(27, 31, 38, 0.32)')
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
+  await expect(panel.getByRole('textbox', { name: 'Local development address' })).toHaveValue(origin + englishPath)
+  await panel.getByRole('button', { name: 'Copy address' }).click()
+  await expect(panel.getByRole('status')).toHaveText('Address copied.')
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(origin + englishPath)
+  await page.keyboard.press('Escape')
+  await page.locator('[data-start-settings]').click()
+  await page.getByRole('radio', { name: '简体中文', exact: true }).click()
+  await expect(page).toHaveURL(chinesePath)
+  await page.keyboard.press('Escape')
+  await shortcut.click()
+  await expect(panel.getByRole('textbox', { name: '本地开发地址' })).toHaveValue(origin + chinesePath)
+  await panel.getByRole('button', { name: '复制地址' }).click()
+  await expect(panel.getByRole('status')).toHaveText('地址已复制。')
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(origin + chinesePath)
+  await page.evaluate(() => Object.defineProperty(navigator.clipboard, 'writeText', {
+    value: () => Promise.reject(new DOMException('Denied', 'NotAllowedError')),
+  }))
+  await panel.getByRole('button', { name: '复制地址' }).click()
+  await expect(panel.getByRole('status')).toHaveText('复制失败，请手动复制地址。')
+})
+
+test('homepage shortcut hides in SSR, restores in settings and stays hidden on mobile', async ({ page, browser, context, baseURL }) => {
+  const errors: string[] = []
+  page.on('pageerror', error => errors.push(error.message))
+  page.on('console', message => { if (message.type() === 'error' && /hydrat|react error #(418|423)/i.test(message.text())) errors.push(message.text()) })
+  const other = region === 'CN' ? 'INTL' : 'CN'
+  await context.addCookies([{ name: `gf-homepage-entry-${other}`, value: '0', url: baseURL! }])
+  await page.goto(englishPath, { waitUntil: 'networkidle' })
+  await page.locator(entry).click()
+  await page.locator(guide).getByRole('button', { name: 'Hide this shortcut' }).click()
+  await expect(page.locator(entry)).toHaveCount(0)
+  await expect(page.locator('[data-start-weather]')).toBeFocused()
+  const saved = (await context.cookies()).find(item => item.name === cookie)!
+  expect(saved.value).toBe('0')
+  expect(saved.expires).toBeGreaterThan(Date.now() / 1000)
+  const ssr = await browser.newContext({ javaScriptEnabled: false })
+  try {
+    await ssr.addCookies([saved])
+    const document = await ssr.newPage()
+    await document.goto(baseURL + chinesePath)
+    await expect(document.locator(entry)).toHaveCount(0)
+  } finally { await ssr.close() }
+  await page.reload({ waitUntil: 'networkidle' })
+  await expect(page.locator(entry)).toHaveCount(0)
+  await page.locator('[data-start-settings]').click()
+  await page.getByRole('tab', { name: 'Advanced' }).click()
+  const toggle = page.getByRole('switch', { name: 'Show Set as homepage shortcut' })
+  await expect(toggle).not.toBeChecked()
+  await toggle.click()
+  await expect(toggle).toBeChecked()
+  await page.keyboard.press('Escape')
+  await page.reload({ waitUntil: 'networkidle' })
+  await expect(page.locator(entry)).toBeVisible()
+  await page.locator(entry).click()
+  await expect(page.locator(guide)).toBeVisible()
+  await page.setViewportSize({ width: 375, height: 667 })
+  await expect(page.locator(entry)).toBeHidden()
+  await expect(page.locator(guide)).toHaveCount(0)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(375)
+  expect(errors).toEqual([])
+})
+
+test('homepage shortcut stays hidden in a wide touch-only viewport', async ({ browser, baseURL }) => {
+  const context = await browser.newContext({ viewport: { width: 844, height: 390 }, isMobile: true, hasTouch: true })
+  try {
+    const page = await context.newPage()
+    await page.goto(baseURL + englishPath)
+    await expect(page.locator(entry)).toBeHidden()
+    await expect(page.locator('[data-start-weather]')).toBeVisible()
+  } finally { await context.close() }
+})
+
+test('an unrecognized browser sees manual instructions and can select a browser', async ({ browser, baseURL }) => {
+  const context = await browser.newContext({ userAgent: 'Mozilla/5.0 Chrome/140.0 Safari/537.36 OPR/123' })
+  try {
+    const page = await context.newPage()
+    await page.goto(baseURL + englishPath, { waitUntil: 'networkidle' })
+    await page.locator(entry).click()
+    const panel = page.locator(guide)
+    await expect(panel.getByRole('tabpanel')).toContainText('Look for Homepage or On startup')
+    await panel.getByRole('tab', { name: 'New tab' }).click()
+    await expect(panel.getByRole('tabpanel')).toContainText('Look for New tab')
+    await panel.getByRole('radio', { name: 'Safari' }).click()
+    await expect(panel.getByRole('tabpanel')).toContainText('New tabs open with')
+  } finally { await context.close() }
+})

@@ -1,0 +1,98 @@
+.trigger, .positioner {
+  @media (max-width: 767px), (hover: none) and (pointer: coarse) { display: none; }
+}
+
+.positioner { z-index: 3; }
+
+.tooltip {
+  min-width: 0;
+  padding: 6px 10px;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.popup {
+  display: grid;
+  gap: 10px;
+  width: min(420px, calc(100vw - 32px));
+  max-height: var(--available-height, calc(100dvh - 80px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 16px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.guides { display: grid; gap: 8px; }
+.tabs, .browsers { display: flex; flex-wrap: wrap; gap: 4px; }
+
+.choice, .copy, .hide {
+  padding: 5px 9px;
+  background-color: transparent;
+  backdrop-filter: none;
+  font: inherit;
+}
+
+.choice:is([data-active], [data-checked]) {
+  background-color: var(--overlay-selected-surface);
+  color: var(--overlay-selected-text);
+}
+
+.panel {
+  min-height: 6em;
+  outline: none;
+  &:focus-visible { outline: 2px solid var(--overlay-focus); outline-offset: 2px; }
+  ol { padding-inline-start: 1.4em; }
+  ol, p { margin: 0; }
+  li + li { margin-top: 3px; }
+}
+
+.address {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 2px 6px;
+}
+
+.addressLabel {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.url {
+  width: 100%;
+  height: 32px;
+  padding-inline: 8px;
+  border: 0;
+  border-radius: var(--radius-small);
+  background-color: var(--overlay-surface-hover);
+  color: inherit;
+  font: inherit;
+  &:focus-visible { outline: 2px solid var(--overlay-focus); outline-offset: -2px; }
+}
+
+.copy {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+}
+
+.feedback {
+  grid-column: 1 / -1;
+  min-height: 1.5em;
+  font-size: 12px;
+}
+
+.hide {
+  justify-self: start;
+  margin-inline-start: -9px;
+}
