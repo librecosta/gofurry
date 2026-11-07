@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from 'react'
+import { lazy, useEffect, useRef, useState, type ReactNode } from 'react'
 import { Dialog } from '@base-ui/react/dialog'
 import { Popover } from '@base-ui/react/popover'
 import { CalculatorIcon } from '@phosphor-icons/react/dist/ssr/Calculator'
@@ -13,9 +13,10 @@ import { cx } from '../styles/classes'
 import chrome from './chrome.module.scss'
 import controls from './controls.module.scss'
 import settings from './settings.module.scss'
+import { RailContent } from './rail-content'
 import { useRailMessages } from './rail-messages'
 import styles from './side-rails.module.scss'
-import { getWidget } from './widget-catalog'
+import { getWidget, widgetCatalog } from './widget-catalog'
 import { useWidgetRails } from './widget-rails-state'
 
 const tools = [
@@ -66,12 +67,12 @@ export function SideRails() {
         <Dialog.Trigger data-widget-manager-trigger className={cx(controls.glass, styles.trigger)} aria-label={m.manage}><PlusIcon size={21} aria-hidden="true" /></Dialog.Trigger>
         <AnimatePresence>{active === 'manager' && <Dialog.Portal keepMounted>
           <Dialog.Backdrop className={settings.backdrop} render={<motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={transition} />} />
-          <Dialog.Popup data-widget-manager className={cx(settings.popup, styles.manager)} render={<motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }} transition={transition} />}>
+          <Dialog.Popup data-widget-manager className={cx(settings.popup, styles.manager, widgetCatalog.length === 1 && styles.compactManager)} render={<motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }} transition={transition} />}>
             <div className={settings.heading}>
               <Dialog.Title className={settings.title}>{m.manage}</Dialog.Title>
               <Dialog.Close className={cx(controls.glass, settings.close)} aria-label={m.close}><XIcon size={18} aria-hidden="true" /></Dialog.Close>
             </div>
-            <Suspense fallback={<Loading manager />}><WidgetManager /></Suspense>
+            <RailContent><WidgetManager /></RailContent>
           </Dialog.Popup>
         </Dialog.Portal>}</AnimatePresence>
       </Dialog.Root>
@@ -97,14 +98,9 @@ function RailPanel({ id, label, icon, side, active, change, children }: {
             <Popover.Title className={styles.title}>{label}</Popover.Title>
             <Popover.Close className={cx(controls.glass, settings.close)} aria-label={m.close}><XIcon size={17} aria-hidden="true" /></Popover.Close>
           </div>
-          <Suspense fallback={<Loading />}>{children}</Suspense>
+          <RailContent>{children}</RailContent>
         </Popover.Popup>
       </Popover.Positioner>
     </Popover.Portal>}</AnimatePresence>}
   </Popover.Root>
-}
-
-function Loading({ manager = false }: { manager?: boolean }) {
-  const { loading } = useRailMessages()
-  return <div role="status" aria-label={loading} className={cx(styles.skeleton, manager && styles.managerSkeleton)} />
 }

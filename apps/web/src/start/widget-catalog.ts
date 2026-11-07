@@ -2,9 +2,12 @@ import { lazy } from 'react'
 import { SparkleIcon } from '@phosphor-icons/react/dist/ssr/Sparkle'
 import type { Locale } from '../preferences'
 
+type CategoryLabels = Record<Locale, string>
+type WidgetCategory = { label: CategoryLabels; children?: Record<string, CategoryLabels> }
+
 export const widgetCategories = {
-  navigation: { zh: '导航', en: 'Navigation' },
-} satisfies Record<string, Record<Locale, string>>
+  navigation: { label: { zh: '导航', en: 'Navigation' } },
+} satisfies Record<string, WidgetCategory>
 
 export const widgetCatalog = [{
   id: 'ai-hub',

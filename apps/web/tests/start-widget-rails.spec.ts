@@ -3,6 +3,7 @@ import { calculate, displayNumber } from '../src/start/tools/calculate'
 import { parseCandidates, parseInteger, randomDecimalRange, randomInteger } from '../src/start/tools/random-values'
 import { convertUnit, parseQuantity } from '../src/start/tools/unit-values'
 import { moveWidget, readWidgetOrder, sameWidgetSet, toggleWidgetInOrder } from '../src/start/widget-order'
+import { sampleMotion } from './motion'
 
 const region = process.env.WEB_REGION === 'INTL' ? 'INTL' : 'CN'
 const english = region === 'CN' ? '/en/start' : '/start'
@@ -102,21 +103,49 @@ test('desktop rails and manager keep search in place, manage AI Hub and synchron
   const card = dialog.locator('[data-widget-card="ai-hub"]')
   expect((await input.boundingBox())!.x).toBeLessThan((await card.boundingBox())!.x)
   await expect(dialog.locator('[data-widget-card]')).toHaveCount(1)
+  const categoryRail = dialog.getByRole('group', { name: 'Widget categories' })
+  const all = categoryRail.getByRole('button', { name: 'All widgets' })
+  const navigation = categoryRail.getByRole('button', { name: 'Navigation', exact: true })
+  const activeHook = categoryRail.locator('[data-widget-category-active]')
+  const previewHook = categoryRail.locator('[data-widget-category-preview]')
+  await expect(categoryRail.getByRole('button')).toHaveCount(2)
+  await expect(categoryRail.locator('line')).toHaveCSS('stroke-dasharray', '2px, 2px')
+  const initialHook = await activeHook.getAttribute('d')
+  await navigation.hover()
+  await expect(previewHook).toHaveCSS('opacity', '1')
+  expect(await activeHook.getAttribute('d')).toBe(initialHook)
+  await input.hover()
+  await expect(previewHook).toHaveCSS('opacity', '0')
+  await all.press('ArrowDown')
+  await expect(navigation).toBeFocused()
+  await expect(navigation).toHaveCSS('outline-style', 'solid')
+  await expect(previewHook).toHaveCSS('opacity', '1')
+  await expect(all).toHaveAttribute('aria-pressed', 'true')
   await input.fill('unmatched')
   await expect(dialog.getByText('No matching widgets.')).toBeVisible()
   await input.fill('aI hUb')
   await dialog.getByRole('tab', { name: 'Added' }).click()
   await expect(dialog.getByText('No widgets added yet.')).toBeVisible()
-  await dialog.getByRole('button', { name: 'Navigation', exact: true }).click()
+  await navigation.click()
+  await expect(navigation).toHaveAttribute('aria-pressed', 'true')
+  await expect.poll(() => activeHook.getAttribute('d')).not.toBe(initialHook)
   await expect(dialog.getByRole('tab', { name: 'Library' })).toHaveAttribute('aria-selected', 'true')
-  await card.getByRole('button', { name: 'Add AI Hub' }).click()
+  const add = card.getByRole('button', { name: 'Add AI Hub' })
+  const [cardBox, addBox] = await Promise.all([card.boundingBox(), add.boundingBox()])
+  expect(addBox!.x - cardBox!.x).toBeCloseTo(cardBox!.x + cardBox!.width - addBox!.x - addBox!.width, 0)
+  expect(addBox!.width).toBeGreaterThan(cardBox!.width * 0.8)
+  expect((await dialog.boundingBox())!.height).toBeLessThan(320)
+  await add.click()
   await expect(card.getByRole('img', { name: 'Added' })).toBeVisible()
   await expect(tab.locator(trigger('ai-hub'))).toBeVisible()
   await page.screenshot({ path: info.outputPath('desktop-widget-manager.png') })
   await dialog.getByRole('tab', { name: 'Added' }).click()
   await expect(dialog.getByRole('tabpanel')).toHaveCount(1)
-  await expect(dialog.getByRole('tabpanel').getByRole('button', { name: 'Remove AI Hub' })).toBeVisible()
-  await expect(dialog.getByRole('button', { name: 'Reorder AI Hub' })).toHaveCount(0)
+  const addedPanel = dialog.getByRole('tabpanel')
+  await expect(addedPanel.getByRole('button')).toHaveCount(1)
+  const remove = addedPanel.getByRole('button', { name: 'Remove AI Hub' })
+  await expect(remove).toBeVisible()
+  await expect(remove).toHaveText('')
   await page.keyboard.press('Escape')
   await expect(dialog).toHaveCount(0)
   await expect(page.locator(managerTrigger)).toBeFocused()
@@ -213,6 +242,13 @@ test('mobile rails stack below quick access and grow the whole page on short scr
   const search = (await dialog.getByRole('searchbox', { name: '搜索组件' }).boundingBox())!
   const tab = (await dialog.getByRole('tab', { name: '组件库' }).boundingBox())!
   expect(tab.y).toBeGreaterThan(search.y + search.height)
+  const bounds375 = (await dialog.boundingBox())!
+  expect(bounds375.x).toBeGreaterThanOrEqual(0)
+  expect(bounds375.x + bounds375.width).toBeLessThanOrEqual(375)
+  const activeHook = dialog.locator('[data-widget-category-active]')
+  const initialHook = await activeHook.getAttribute('d')
+  await dialog.getByRole('button', { name: '导航', exact: true }).click()
+  expect(await activeHook.getAttribute('d')).not.toBe(initialHook)
   await page.screenshot({ path: info.outputPath('mobile-widget-manager.png') })
 })
 
@@ -514,6 +550,13 @@ test('AI Hub loads on demand and uses ten direct official links without feeding 
   await hubTrigger.click()
   const hub = page.locator('[data-rail-panel="ai-hub"]')
   await expect(hub.getByRole('link')).toHaveCount(10)
+  const icons = hub.locator('img')
+  await expect(icons).toHaveCount(10)
+  await expect.poll(() => icons.evaluateAll(elements => elements.every(el => {
+    const image = el as HTMLImageElement
+    return image.complete && image.naturalWidth > 0 && (image.src.startsWith('data:image/webp;') || new URL(image.src).origin === location.origin)
+      && image.width === 24 && image.height === 24 && getComputedStyle(image).objectFit === 'contain'
+  }))).toBe(true)
   expect(assets.some(url => /\/ai-hub-/.test(url))).toBe(true)
   const bounds = (await hub.boundingBox())!
   expect(bounds.x + bounds.width).toBeLessThan((await hubTrigger.boundingBox())!.x)
@@ -527,6 +570,81 @@ test('AI Hub loads on demand and uses ten direct official links without feeding 
   expect(await opened.evaluate(() => [document.referrer, window.opener])).toEqual(['', null])
   expect(await page.evaluate(storageKey => localStorage.getItem(storageKey), `gf-quick-access:${region}`)).toBeNull()
   await opened.close()
+})
+
+test('cold tool and manager panels show compact loading, then reveal content without loading on reopen', async ({ page }) => {
+  test.setTimeout(60_000)
+  await page.setViewportSize({ width: 1280, height: 720 })
+  await page.addInitScript(storageKey => localStorage.setItem(storageKey, JSON.stringify({
+    version: 1, leftEnabled: true, rightEnabled: true, widgets: ['ai-hub'],
+  })), key)
+  await page.goto(english, { waitUntil: 'networkidle' })
+  for (const [module, id, title, content] of [
+    ['calculator', 'calculator', 'Calculator', 'input'],
+    ['random', 'random', 'Random tools', '[role=tablist]'],
+    ['units', 'units', 'Unit converter', '[role=combobox]'],
+    ['ai-hub', 'ai-hub', 'AI Hub', 'nav'],
+    ['widget-manager', 'manager', 'Manage widgets', '[role=tablist]'],
+  ] as const) {
+    if (id === 'manager') await page.emulateMedia({ reducedMotion: 'reduce' })
+    const moduleURL = new RegExp(`/assets/${module}-[^/]+\\.js$`)
+    let release = () => {}
+    const hold = new Promise<void>(resolve => { release = resolve })
+    let requests = 0
+    await page.route(moduleURL, async route => { requests++; await hold; await route.continue() })
+    const opener = page.locator(id === 'manager' ? managerTrigger : trigger(id))
+    const surface = page.locator(id === 'manager' ? manager : `[data-rail-panel="${id}"]`)
+    try {
+      await opener.click()
+      await expect(surface.getByRole('heading', { name: title })).toBeVisible()
+      const loading = surface.getByRole('status').filter({ hasText: 'Loading…' })
+      await expect(loading).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
+      expect((await loading.boundingBox())!.height).toBeLessThan(48)
+      expect((await surface.boundingBox())!.height).toBeLessThan(140)
+      expect(requests).toBe(1)
+      if (id === 'manager') await expect(loading.locator('span')).toHaveCSS('transform', 'none')
+      if (id === 'calculator') {
+        const [frames] = await Promise.all([sampleMotion(surface, 720), release()])
+        const [first, last] = [frames[0].h, frames.at(-1)!.h]
+        expect(frames.filter(frame => frame.h > first + 5 && frame.h < last - 5).length).toBeGreaterThan(1)
+      } else release()
+      await expect(surface.locator(content).first()).toBeVisible()
+      await expect(loading).toHaveCount(0)
+      await page.keyboard.press('Escape')
+      await expect(surface).toHaveCount(0)
+      await expect(opener).toBeFocused()
+      await opener.click()
+      await expect(surface.locator(content).first()).toBeVisible()
+      await expect(loading).toHaveCount(0)
+      expect(requests).toBe(1)
+      await page.keyboard.press('Escape')
+      await expect(surface).toHaveCount(0)
+    } finally {
+      release()
+      await page.unroute(moduleURL)
+    }
+  }
+})
+
+test('a rejected tool module shows a recovery action and can load after refresh', async ({ page }) => {
+  let blocked = true
+  let failures = 0
+  await page.route(/\/assets\/calculator-[^/]+\.js$/, route => {
+    if (!blocked) return route.continue()
+    failures++
+    return route.abort()
+  })
+  await page.goto(english, { waitUntil: 'networkidle' })
+  const calculator = page.locator(trigger('calculator'))
+  const surface = page.locator('[data-rail-panel="calculator"]')
+  await calculator.click()
+  await expect(surface.getByRole('alert')).toContainText('Could not load')
+  await expect(surface.getByRole('status')).toHaveCount(0)
+  expect(failures).toBeGreaterThan(0)
+  blocked = false
+  await Promise.all([page.waitForNavigation({ waitUntil: 'networkidle' }), surface.getByRole('button', { name: 'Refresh page' }).click()])
+  await calculator.click()
+  await expect(surface.getByRole('textbox', { name: 'Expression' })).toBeVisible()
 })
 
 test('invalid storage restores defaults and denied storage still supports widgets in memory', async ({ page, browser, baseURL }) => {

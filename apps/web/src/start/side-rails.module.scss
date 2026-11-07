@@ -36,22 +36,30 @@
 .title { margin: 0; font-size: 16px; font-weight: 600; }
 
 .manager {
-  display: flex;
-  flex-direction: column;
   width: min(880px, calc(100vw - 24px));
-  height: min(620px, calc(100dvh - 24px));
 }
+.compactManager { width: min(570px, calc(100vw - 24px)); }
 
-.skeleton {
-  min-height: 144px;
-  border-radius: var(--radius-small);
-  background-color: var(--overlay-surface-hover);
+.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 36px;
+  font-size: 12px;
+  color: color-mix(in srgb, var(--overlay-text) 80%, transparent);
 }
-
-.managerSkeleton {
-  width: min(100%, 176px);
-  margin-inline-start: 35%;
+.spinner { display: grid; place-items: center; }
+.loadError {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 13px;
+  p { margin: 0; }
 }
+.reload { padding: 5px 8px; }
 
 @include rail-layout.stacked {
   .rails {

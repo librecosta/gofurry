@@ -166,14 +166,7 @@
   font-size: 13px;
   text-decoration: none;
 }
-.mark {
-  display: grid;
-  place-items: center;
+.hubIcon {
   flex: none;
-  width: 26px;
-  height: 26px;
-  border-radius: 6px;
-  background-color: var(--overlay-surface-hover);
-  font-size: 10px;
-  font-weight: 700;
+  object-fit: contain;
 }
