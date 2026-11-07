@@ -36,7 +36,7 @@ export const platforms: readonly Platform[] = [
   platform('furaffinity', 'furry', 'FurAffinity', 'FurAffinity', 'https://www.furaffinity.net/search/?q={kw}'),
   platform('e621', 'furry', 'e621', 'e621', 'https://e621.net/posts?tags={kw}', intl, true),
   platform('yiffparty', 'furry', 'YiffParty', 'YiffParty', 'https://yiff-party.com/search/?q={kw}', intl, true),
-  platform('wilddream', 'furry', '野性疆界', 'WildDream', 'https://www.wilddream.net/Art/index/index?keyword={kw}'),
+  platform('wilddream', 'furry', 'WildDream', 'WildDream', 'https://www.wilddream.net/Art/index/index?keyword={kw}'),
   platform('furrynovel', 'furry', '兽人控小说站', 'FurryNovel', 'https://furrynovel.com/zh/search?keyword={kw}'),
   platform('linpx', 'furry', 'Linpx', 'Linpx', 'https://linpx.ink/search?word={kw}'),
 
@@ -66,7 +66,7 @@ export const platforms: readonly Platform[] = [
   platform('qimao', 'novel', '七猫小说', 'Qimao', 'https://www.qimao.com/search/index/?keyword={kw}', cn),
   { id: 'faloo', name: { zh: '飞卢小说', en: 'Faloo' }, category: 'novel', regions: cn,
     buildURL: keyword => `https://b.faloo.com/l/0/1.html?t=1&k=${encodeFalooKeyword(keyword)}` },
-  platform('sfacg', 'novel', '菠萝包轻小说', 'SFACG', 'https://s.sfacg.com/?Key={kw}&S=1&SS=0', cn),
+  platform('sfacg', 'novel', 'SF轻小说', 'SFACG', 'https://s.sfacg.com/?Key={kw}&S=1&SS=0', cn),
 ]
 
 export function regionalPlatforms(region: Region) {
