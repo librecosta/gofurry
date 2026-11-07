@@ -16,7 +16,7 @@ import settings from './settings.module.scss'
 import { RailContent } from './rail-content'
 import { useRailMessages } from './rail-messages'
 import styles from './side-rails.module.scss'
-import { getWidget, widgetCatalog } from './widget-catalog'
+import { getWidget } from './widget-catalog'
 import { useWidgetRails } from './widget-rails-state'
 
 const tools = [
@@ -67,7 +67,7 @@ export function SideRails() {
         <Dialog.Trigger data-widget-manager-trigger className={cx(controls.glass, styles.trigger)} aria-label={m.manage}><PlusIcon size={21} aria-hidden="true" /></Dialog.Trigger>
         <AnimatePresence>{active === 'manager' && <Dialog.Portal keepMounted>
           <Dialog.Backdrop className={settings.backdrop} render={<motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={transition} />} />
-          <Dialog.Popup data-widget-manager className={cx(settings.popup, styles.manager, widgetCatalog.length === 1 && styles.compactManager)} render={<motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }} transition={transition} />}>
+          <Dialog.Popup data-widget-manager className={cx(settings.popup, styles.manager)} render={<motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }} transition={transition} />}>
             <div className={settings.heading}>
               <Dialog.Title className={settings.title}>{m.manage}</Dialog.Title>
               <Dialog.Close className={cx(controls.glass, settings.close)} aria-label={m.close}><XIcon size={18} aria-hidden="true" /></Dialog.Close>

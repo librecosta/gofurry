@@ -102,7 +102,7 @@ test('desktop rails and manager keep search in place, manage AI Hub and synchron
   const input = dialog.getByRole('searchbox', { name: 'Search widgets' })
   const card = dialog.locator('[data-widget-card="ai-hub"]')
   expect((await input.boundingBox())!.x).toBeLessThan((await card.boundingBox())!.x)
-  await expect(dialog.locator('[data-widget-card]')).toHaveCount(1)
+  await expect(dialog.locator('[data-widget-card]')).toHaveCount(3)
   const categoryRail = dialog.getByRole('group', { name: 'Widget categories' })
   const all = categoryRail.getByRole('button', { name: 'All widgets' })
   const navigation = categoryRail.getByRole('button', { name: 'Navigation', exact: true })
@@ -572,11 +572,105 @@ test('AI Hub loads on demand and uses ten direct official links without feeding 
   await opened.close()
 })
 
+test('new navigation hubs preserve legacy installs, load local icons on demand and persist drag order', async ({ page, baseURL }, info) => {
+  test.setTimeout(60_000)
+  const hubs = [
+    ['asset-hub', 'Asset Hub', [
+      ['Pixabay', 'https://pixabay.com/'],
+      ['Pexels', 'https://www.pexels.com/'],
+      ['Poly Haven', 'https://polyhaven.com/'],
+      ['ambientCG', 'https://ambientcg.com/'],
+      ['Kenney', 'https://kenney.nl/assets'],
+      ['Quaternius', 'https://quaternius.com/'],
+      ['OpenGameArt', 'https://opengameart.org/'],
+      ['Freesound', 'https://freesound.org/'],
+    ]],
+    ['game-data-hub', 'Game Data Hub', [
+      ['Video Game Insights', 'https://app.sensortower.com/vgi'],
+      ['SteamDB', 'https://steamdb.info/'],
+      ['PlayTracker', 'https://playtracker.net/insight/'],
+      ['Gamalytic', 'https://gamalytic.com/'],
+      ['PCGamingWiki', 'https://www.pcgamingwiki.com/'],
+    ]],
+  ] as const
+  const requested: string[] = []
+  page.on('request', request => { requested.push(request.url()) })
+  const localIcons = () => requested.filter(request => {
+    const url = new URL(request)
+    return url.origin === baseURL && url.pathname.startsWith('/assets/') && url.pathname.endsWith('.webp')
+  })
+  await page.addInitScript(storageKey => {
+    if (!localStorage.getItem(storageKey)) localStorage.setItem(storageKey, JSON.stringify({
+      version: 1, leftEnabled: true, rightEnabled: true, widgets: ['ai-hub'],
+    }))
+  }, key)
+  await page.goto(english)
+  const order = () => page.locator(widgets).locator('[data-rail-trigger]').evaluateAll(buttons =>
+    buttons.map(button => button.getAttribute('data-rail-trigger')))
+  await expect.poll(order).toEqual(['ai-hub'])
+  await page.locator(managerTrigger).click()
+  const dialog = page.locator(manager)
+  await expect(dialog.locator('[data-widget-card] h3')).toHaveText(['AI Hub', ...hubs.map(([, title]) => title)])
+  for (const [, title] of hubs) await dialog.getByRole('button', { name: `Add ${title}` }).click()
+  const added = ['ai-hub', ...hubs.map(([id]) => id)]
+  await expect.poll(order).toEqual(added)
+  expect(requested.some(url => /\/(asset-hub|game-data-hub)-[^/]+\.js$/.test(url))).toBe(false)
+  expect(localIcons()).toEqual([])
+  await dialog.getByRole('tab', { name: 'Added' }).click()
+  const first = (await dialog.getByRole('button', { name: 'Reorder AI Hub' }).boundingBox())!
+  const last = (await dialog.getByRole('button', { name: 'Reorder Game Data Hub' }).boundingBox())!
+  await page.mouse.move(last.x + last.width / 2, last.y + last.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(first.x + first.width / 2, first.y + first.height / 2 - 8, { steps: 18 })
+  await page.mouse.up()
+  const reordered = ['game-data-hub', 'ai-hub', 'asset-hub']
+  await expect.poll(order).toEqual(reordered)
+  await page.reload()
+  await expect.poll(order).toEqual(reordered)
+  expect(localIcons()).toEqual([])
+
+  for (const [id, title, destinations] of hubs) {
+    await page.locator(trigger(id)).click()
+    const nav = page.getByRole('navigation', { name: title })
+    await expect(nav.getByRole('link')).toHaveText(destinations.map(([name]) => name))
+    expect(await nav.getByRole('link').evaluateAll(links => links.map(link =>
+      [link.getAttribute('href'), link.getAttribute('target'), link.getAttribute('rel'), link.hasAttribute('data-quick-ignore')])))
+      .toEqual(destinations.map(([, href]) => [href, '_blank', 'noopener noreferrer', true]))
+    await expect.poll(() => nav.locator('img').evaluateAll(images => images.filter(element => {
+      const image = element as HTMLImageElement
+      return image.complete && image.naturalWidth > 0 && new URL(image.src).origin === location.origin
+        && image.width === 24 && image.height === 24 && getComputedStyle(image).objectFit === 'contain'
+    }).length)).toBe(destinations.length)
+    const iconURLs = await nav.locator('img').evaluateAll(images => images.map(element => (element as HTMLImageElement).src))
+    for (const url of iconURLs) expect(requested.filter(request => request === url)).toHaveLength(1)
+    await page.keyboard.press('Escape')
+    await expect(nav).toHaveCount(0)
+  }
+  expect(requested.some(url => /(^|\.)favicon\.im$/.test(new URL(url).hostname))).toBe(false)
+
+  await page.emulateMedia({ colorScheme: 'dark' })
+  await page.setViewportSize({ width: 375, height: 667 })
+  await page.goto(chinese)
+  await expect.poll(order).toEqual(reordered)
+  await page.locator(trigger('game-data-hub')).click()
+  await expect(page.getByRole('navigation', { name: 'Game Data Hub' }).getByRole('link')).toHaveCount(5)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(375)
+  await page.screenshot({ path: info.outputPath('mobile-game-data-hub.png') })
+  await page.keyboard.press('Escape')
+  await page.locator(managerTrigger).click()
+  await dialog.getByRole('tab', { name: '已添加' }).click()
+  for (const id of reordered) {
+    const name = id === 'ai-hub' ? 'AI Hub' : hubs.find(([hub]) => hub === id)![1]
+    await dialog.getByRole('button', { name: `移除 ${name}` }).click()
+    await expect(page.locator(trigger(id))).toHaveCount(0)
+  }
+})
+
 test('cold tool and manager panels show compact loading, then reveal content without loading on reopen', async ({ page }) => {
   test.setTimeout(60_000)
   await page.setViewportSize({ width: 1280, height: 720 })
   await page.addInitScript(storageKey => localStorage.setItem(storageKey, JSON.stringify({
-    version: 1, leftEnabled: true, rightEnabled: true, widgets: ['ai-hub'],
+    version: 1, leftEnabled: true, rightEnabled: true, widgets: ['ai-hub', 'asset-hub', 'game-data-hub'],
   })), key)
   await page.goto(english, { waitUntil: 'networkidle' })
   for (const [module, id, title, content] of [
@@ -584,6 +678,8 @@ test('cold tool and manager panels show compact loading, then reveal content wit
     ['random', 'random', 'Random tools', '[role=tablist]'],
     ['units', 'units', 'Unit converter', '[role=combobox]'],
     ['ai-hub', 'ai-hub', 'AI Hub', 'nav'],
+    ['asset-hub', 'asset-hub', 'Asset Hub', 'nav'],
+    ['game-data-hub', 'game-data-hub', 'Game Data Hub', 'nav'],
     ['widget-manager', 'manager', 'Manage widgets', '[role=tablist]'],
   ] as const) {
     if (id === 'manager') await page.emulateMedia({ reducedMotion: 'reduce' })
