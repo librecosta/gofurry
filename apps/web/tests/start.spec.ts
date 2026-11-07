@@ -217,18 +217,40 @@ test('start: appearance retains the native circular reveal centered on the selec
   expect(await page.evaluate(() => (window as unknown as { reveal: unknown[] }).reveal.length)).toBe(1)
 })
 
-test('start: settings text tabs move their underline without recentering; language radios stay unfilled', async ({ page }) => {
+test('start: settings text tabs move their underline and resize around the viewport center', async ({ page }) => {
   await english(page); await settings(page)
   const dialog = page.locator('[data-start-preferences]'), initial = (await dialog.boundingBox())!
   const basic = dialog.getByRole('tab', { name: 'Basic', exact: true }), advanced = dialog.getByRole('tab', { name: 'Advanced', exact: true })
   const underlineStart = (await dialog.locator('[data-settings-tab-indicator]').boundingBox())!.x
-  await basic.focus(); await basic.press('ArrowRight'); await expect(advanced).toBeFocused(); await expect(advanced).toHaveAttribute('aria-selected', 'true')
+  await basic.focus()
+  const resizing = sampleMotion(dialog)
+  await basic.press('ArrowRight'); await expect(advanced).toBeFocused(); await expect(advanced).toHaveAttribute('aria-selected', 'true')
   await expect(advanced).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)'); await expect(advanced).toHaveCSS('outline-style', 'solid')
   const underline = dialog.locator('[data-settings-tab-indicator]')
   const progress = await sampleMotion(underline)
   expect(progress.some(frame => frame.x > underlineStart + 0.1 && frame.x < progress.at(-1)!.x - 0.1)).toBe(true)
   await expect(dialog.getByRole('tabpanel').getByRole('switch', { name: 'Show Set as homepage shortcut' })).toBeChecked()
-  expect(await dialog.boundingBox()).toEqual(initial)
+  const advancedBounds = (await dialog.boundingBox())!
+  const activePanel = dialog.getByRole('tabpanel')
+  const advancedHeight = (await activePanel.boundingBox())!.height
+  expect(advancedBounds.height).toBeLessThan(initial.height)
+  const frames = await resizing
+  expect(frames.filter(frame => frame.h < initial.height - 1 && frame.h > advancedBounds.height + 1).length).toBeGreaterThan(1)
+  expect(frames.every(frame => Math.abs(frame.y + frame.h / 2 - (initial.y + initial.height / 2)) < 1)).toBe(true)
+  const hiddenPanel = dialog.locator('[role=tabpanel][inert]')
+  await expect(hiddenPanel).toHaveCSS('display', 'none')
+  expect(await hiddenPanel.evaluate(panel => {
+    const focused = document.activeElement
+    panel.querySelector('button')?.focus()
+    return document.activeElement === focused
+  })).toBe(true)
+
+  await advanced.press('ArrowRight')
+  await expect(dialog.getByRole('tab', { name: 'Feedback' })).toBeFocused()
+  await expect(activePanel).toContainText('1074661551')
+  const feedbackFrames = await sampleMotion(dialog)
+  const feedbackHeight = (await activePanel.boundingBox())!.height
+  expect(feedbackFrames.at(-1)!.h).toBeCloseTo(advancedBounds.height - advancedHeight + feedbackHeight, 0)
   await basic.click(); await expect(basic).toHaveAttribute('aria-selected', 'true')
   const language = dialog.getByRole('radiogroup', { name: 'Language', exact: true }), englishRadio = language.getByRole('radio', { name: 'English', exact: true })
   await expect(englishRadio).toBeChecked(); await englishRadio.hover()
@@ -246,6 +268,59 @@ test('start: settings text tabs move their underline without recentering; langua
   await dialog.getByRole('radio', { name: 'English', exact: true }).click(); await expect(footer).toHaveText('Made with care. Open source on GitHub.')
   await expect(footer.getByRole('link')).toHaveAttribute('href', 'https://github.com/gofurry'); await expect(footer.getByRole('link')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
   await page.emulateMedia({ reducedMotion: 'reduce' }); await expect(underline).toHaveCSS('transition-duration', '0s')
+})
+
+test('start: settings feedback follows deployment in both languages and copies the QQ number', async ({ page, context }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write'])
+  await context.route('https://t.me/GoFurryOfficial', route => route.fulfill({ body: 'Telegram destination' }))
+  await page.emulateMedia({ colorScheme: 'light' })
+  await page.goto(englishPath)
+  await settings(page)
+  const dialog = page.locator('[data-start-preferences]')
+  await dialog.getByRole('tab', { name: 'Feedback' }).click()
+  const panel = dialog.getByRole('tabpanel')
+  const qq = panel.getByRole('button', { name: /Copy QQ Group number/ })
+  await expect(qq).toContainText('QQ Group')
+  await qq.press('Enter')
+  await expect(panel.getByRole('status')).toHaveText('Copied')
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('1074661551')
+  await page.evaluate(() => {
+    navigator.clipboard.writeText = async () => { throw new Error('Permission denied') }
+  })
+  await qq.click()
+  await expect(panel.getByRole('status')).toHaveText('Copy failed')
+  const telegram = panel.getByRole('link', { name: /Telegram Channel/ })
+  if (region === 'INTL') {
+    await expect(telegram).toHaveAttribute('href', 'https://t.me/GoFurryOfficial')
+    await expect(telegram).toHaveAttribute('rel', 'noopener noreferrer')
+    const [opened] = await Promise.all([page.waitForEvent('popup'), telegram.click()])
+    await expect(opened).toHaveURL('https://t.me/GoFurryOfficial')
+    await opened.close()
+  } else await expect(telegram).toHaveCount(0)
+  await expect(panel.getByRole('link', { name: /^Email/ })).toHaveAttribute('href', 'mailto:contact@librecosta.com')
+
+  await dialog.getByRole('tab', { name: 'Basic' }).click()
+  await dialog.getByRole('radio', { name: '简体中文', exact: true }).click()
+  await expect(page).toHaveURL(chinesePath)
+  await page.emulateMedia({ colorScheme: 'dark', reducedMotion: 'reduce' })
+  await page.setViewportSize({ width: 375, height: 260 })
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
+  const basicBounds = (await dialog.boundingBox())!
+  expect(basicBounds.y).toBeGreaterThanOrEqual(15)
+  expect(basicBounds.y + basicBounds.height).toBeLessThanOrEqual(245)
+  const footer = dialog.locator('footer')
+  await footer.getByRole('link').focus()
+  await expect.poll(() => dialog.evaluate(el => el.scrollTop)).toBeGreaterThan(0)
+  await dialog.getByRole('tab', { name: '反馈' }).click()
+  await expect(panel.getByRole('button', { name: /复制 QQ 交流群群号/ })).toContainText('QQ 交流群')
+  await expect(panel.getByRole('link', { name: /Telegram 频道/ })).toHaveCount(region === 'INTL' ? 1 : 0)
+  await expect(panel.getByRole('link', { name: /^官方邮箱/ })).toHaveAttribute('href', 'mailto:contact@librecosta.com')
+  const mobileBounds = (await dialog.boundingBox())!
+  expect(mobileBounds.y).toBeGreaterThanOrEqual(15)
+  expect(mobileBounds.y + mobileBounds.height).toBeLessThanOrEqual(245)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(375)
+  await page.keyboard.press('Escape')
+  await expect(page.locator('[data-start-settings]')).toBeFocused()
 })
 
 test('start: settings segments slide, retain flat theme-aware surfaces and preserve preferences', async ({ page }) => {

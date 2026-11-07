@@ -121,20 +121,55 @@
   pointer-events: none;
 }
 
-.panels {
-  display: grid;
+.panelViewport {
+  overflow: clip;
+  overflow-clip-margin: 6px;
 }
 
+.panels { display: flow-root; }
+
 .panel {
-  grid-area: 1 / 1;
-  display: block;
-  visibility: visible;
+  display: flow-root;
   outline-style: none;
   outline-width: 2px;
   outline-offset: 4px;
   outline-color: var(--overlay-focus);
-  &:is([hidden], [inert]) { visibility: hidden; }
+  &:is([hidden], [inert]) { display: none; }
   &:focus-visible { outline-style: solid; }
+}
+
+.feedback {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 14px;
+}
+
+.contact {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 8px;
+  background-color: transparent;
+  backdrop-filter: none;
+  text-align: start;
+  text-decoration: none;
+  font-size: 13px;
+  > svg { flex: none; }
+}
+
+.contactDetails {
+  display: grid;
+  min-width: 0;
+  span { font-size: 12px; opacity: 0.78; overflow-wrap: anywhere; }
+}
+
+.contactAction {
+  display: grid;
+  place-items: center;
+  min-width: 16px;
+  margin-inline-start: auto;
+  font-size: 12px;
+  white-space: nowrap;
 }
 
 .field {

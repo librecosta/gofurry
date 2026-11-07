@@ -1,5 +1,5 @@
 import { cx } from '../styles/classes'
-import { useId, useRef, useState } from 'react'
+import { useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { AnimatePresence, LayoutGroup, motion } from 'motion/react'
 import { useMotionTiming } from '../motion'
 import { Dialog } from '@base-ui/react/dialog'
@@ -14,8 +14,13 @@ import { MonitorIcon } from '@phosphor-icons/react/dist/ssr/Monitor'
 import { SunIcon } from '@phosphor-icons/react/dist/ssr/Sun'
 import { MoonIcon } from '@phosphor-icons/react/dist/ssr/Moon'
 import { XIcon } from '@phosphor-icons/react/dist/ssr/X'
+import { ChatsCircleIcon } from '@phosphor-icons/react/dist/ssr/ChatsCircle'
+import { CopyIcon } from '@phosphor-icons/react/dist/ssr/Copy'
+import { EnvelopeSimpleIcon } from '@phosphor-icons/react/dist/ssr/EnvelopeSimple'
+import { PaperPlaneTiltIcon } from '@phosphor-icons/react/dist/ssr/PaperPlaneTilt'
 import styles from './settings.module.scss'
 import { usePreferences, type ContentPreference, type Locale, type ThemePreference } from '../preferences'
+import chrome from './chrome.module.scss'
 import controls from './controls.module.scss'
 import { useStartMessages } from './messages'
 import { useThemeReveal } from './theme-reveal'
@@ -54,8 +59,9 @@ export function StartSettings({ open, setOpen }: { open: boolean; setOpen: (open
           <Tabs.List aria-label={m.settings} activateOnFocus className={styles.tabs}>
             <Tabs.Tab value="basic" className={styles.tab}>{m.basic}{tab === 'basic' && <motion.span layoutId="tab" data-settings-tab-indicator className={styles.tabIndicator} transition={selectionTransition} />}</Tabs.Tab>
             <Tabs.Tab value="advanced" className={styles.tab}>{m.advanced}{tab === 'advanced' && <motion.span layoutId="tab" data-settings-tab-indicator className={styles.tabIndicator} transition={selectionTransition} />}</Tabs.Tab>
+            <Tabs.Tab value="feedback" className={styles.tab}>{m.feedback.tab}{tab === 'feedback' && <motion.span layoutId="tab" data-settings-tab-indicator className={styles.tabIndicator} transition={selectionTransition} />}</Tabs.Tab>
           </Tabs.List>
-          <div className={styles.panels}>
+          <SettingsPanels>
             <Tabs.Panel value="basic" keepMounted className={styles.panel}>
               <fieldset className={styles.field}><legend className={styles.label}>{m.languageSetting}</legend>
                 <RadioGroup aria-label={m.languageSetting} value={locale} onValueChange={(value: Locale) => setLocale(value)} className={styles.languages}>
@@ -99,10 +105,68 @@ export function StartSettings({ open, setOpen }: { open: boolean; setOpen: (open
                 </Switch.Root></label>
               )}
             </Tabs.Panel>
-          </div>
+            <Tabs.Panel value="feedback" className={styles.panel}><SettingsFeedback /></Tabs.Panel>
+          </SettingsPanels>
         </Tabs.Root></LayoutGroup>
         <footer className={styles.footer}><GithubLogoIcon size={17} aria-hidden="true" className={styles.githubIcon} /><p className={styles.caption}>{m.githubLead}<a href="https://github.com/gofurry" target="_blank" rel="noopener noreferrer" aria-label={m.github} className={styles.github}>GitHub</a>{m.githubStop}</p></footer>
       </Dialog.Popup>
     </Dialog.Portal>}</AnimatePresence>
   </Dialog.Root><WallpaperLibrary open={library} close={() => setLibrary(false)} finalFocus={trigger} /></>
+}
+
+function SettingsPanels({ children }: { children: ReactNode }) {
+  const content = useRef<HTMLDivElement>(null)
+  const [height, setHeight] = useState<number>()
+  const transition = useMotionTiming(0.28)
+
+  useLayoutEffect(() => {
+    const panels = content.current!
+    const measure = () => setHeight(panels.getBoundingClientRect().height)
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(panels)
+    return () => observer.disconnect()
+  }, [])
+
+  return <motion.div className={styles.panelViewport} initial={false} animate={{ height: height ?? 'auto' }} transition={transition}>
+    <div ref={content} className={styles.panels}>{children}</div>
+  </motion.div>
+}
+
+const qqGroup = '1074661551'
+const email = 'contact@librecosta.com'
+const telegram = 't.me/GoFurryOfficial'
+
+function SettingsFeedback() {
+  const { region } = usePreferences()
+  const { feedback: m } = useStartMessages()
+  const [copyStatus, setCopyStatus] = useState<'copied' | 'failed'>()
+  const status = copyStatus ? m[copyStatus] : ''
+  const contact = cx(controls.glass, styles.contact)
+
+  async function copyGroup() {
+    try {
+      await navigator.clipboard.writeText(qqGroup)
+      setCopyStatus('copied')
+    } catch {
+      setCopyStatus('failed')
+    }
+  }
+
+  return <div className={styles.feedback}>
+    <button type="button" className={contact} aria-label={`${m.copyGroup} ${qqGroup}`} onClick={() => void copyGroup()}>
+      <ChatsCircleIcon size={18} aria-hidden="true" />
+      <span className={styles.contactDetails}>{m.qq}<span>{qqGroup}</span></span>
+      <span className={styles.contactAction} aria-hidden="true">{status || <CopyIcon size={16} />}</span>
+    </button>
+    <span role="status" className={chrome.srOnly}>{status}</span>
+    {region === 'INTL' && <a className={contact} href={`https://${telegram}`} target="_blank" rel="noopener noreferrer" data-quick-ignore>
+      <PaperPlaneTiltIcon size={18} aria-hidden="true" />
+      <span className={styles.contactDetails}>{m.telegram}<span>{telegram}</span></span>
+    </a>}
+    <a className={contact} href={`mailto:${email}`}>
+      <EnvelopeSimpleIcon size={18} aria-hidden="true" />
+      <span className={styles.contactDetails}>{m.email}<span>{email}</span></span>
+    </a>
+  </div>
 }

@@ -16,6 +16,8 @@ const messages = {
     close: '关闭设置', clear: '清空搜索', navigation: '站内导航', home: '首页', sites: '导航', games: '游戏',
     languageSetting: '语言', appearance: '外观', system: '跟随系统', light: '浅色', dark: '深色',
     basic: '基础', advanced: '高级', githubLead: '用心打造，开源于 ', githubStop: '。',
+    feedback: { tab: '反馈', qq: 'QQ 交流群', telegram: 'Telegram 频道', email: '官方邮箱',
+      copyGroup: '复制 QQ 交流群群号', copied: '已复制', failed: '复制失败' },
     showFurrySearch: '显示兽圈相关搜索选项',
     showHomepageEntry: '显示设为主页入口',
     homepagePrompt: {
@@ -42,6 +44,8 @@ const messages = {
     close: 'Close settings', clear: 'Clear search', navigation: 'Site navigation', home: 'Home', sites: 'Sites', games: 'Games',
     languageSetting: 'Language', appearance: 'Appearance', system: 'System', light: 'Light', dark: 'Dark',
     basic: 'Basic', advanced: 'Advanced', githubLead: 'Made with care. Open source on ', githubStop: '.',
+    feedback: { tab: 'Feedback', qq: 'QQ Group', telegram: 'Telegram Channel', email: 'Email',
+      copyGroup: 'Copy QQ Group number', copied: 'Copied', failed: 'Copy failed' },
     showFurrySearch: 'Show furry search options',
     showHomepageEntry: 'Show Set as homepage shortcut',
     homepagePrompt: {
