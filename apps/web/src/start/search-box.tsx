@@ -18,6 +18,7 @@ type Suggestions = { query: string; items: string[] }
 
 export function SearchBox() {
   const hoverTransition = useMotionTiming(0.3)
+  const validationTransition = useMotionTiming(0.18)
   const { region, locale, quickAccess, contentPreference, showFurrySearch } = usePreferences()
   const m = useStartMessages()
   const [mobile, setMobile] = useState<boolean | null>(null)
@@ -28,6 +29,7 @@ export function SearchBox() {
   const tailTransition = useMotionTiming()
   const [selection, setSelection] = useState<{ category: Category; id: string }>({ category: 'search', id: 'bing' })
   const [keyword, setKeyword] = useState('')
+  const [emptySearch, setEmptySearch] = useState(false)
   const [panel, setPanel] = useState<Panel>(null)
   const [suggestions, setSuggestions] = useState<Suggestions>({ query: '', items: [] })
   const [active, setActive] = useState(-1)
@@ -47,6 +49,7 @@ export function SearchBox() {
   const skipFocusRequest = useRef(false)
   const [categoryEdges, setCategoryEdges] = useState({ left: false, right: false })
   const panelId = useId()
+  const validationId = useId()
   const catalog = useMemo(() => availablePlatforms(region, contentPreference, showFurrySearch), [region, contentPreference, showFurrySearch])
   // Resolve synchronously: no render or submit can use a hidden/missing target.
   const { category, target, choices: available } = resolveSelection(catalog, selection.category, selection.id)
@@ -195,8 +198,18 @@ export function SearchBox() {
       buttons[event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1 : (index + step + buttons.length) % buttons.length]?.focus({ preventScroll: true })
     }
   }
+  function reportEmptySearch() {
+    cancelRequest(); closePanel()
+    setEmptySearch(true)
+    input.current?.focus({ preventScroll: true })
+  }
   function submit(value: string) {
-    if (composing.current || !value.trim()) return
+    if (composing.current) return
+    if (!value.trim()) {
+      reportEmptySearch()
+      return
+    }
+    setEmptySearch(false)
     cancelRequest(); closePanel()
     window.open(searchURL(target, value, locale), '_blank', 'noopener,noreferrer')
   }
@@ -205,7 +218,7 @@ export function SearchBox() {
       if (event.key === 'Enter') event.preventDefault()
       return
     }
-    if (event.key === 'Escape') { event.preventDefault(); cancelRequest(); closePanel() }
+    if (event.key === 'Escape') { event.preventDefault(); setEmptySearch(false); cancelRequest(); closePanel() }
     if (panel !== 'suggestions' || !suggestions.items.length) return
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault()
@@ -254,26 +267,38 @@ export function SearchBox() {
         }}
         className={styles.mobileTrigger}><span className={styles.inlinePlatform}><span ref={platformName} className={styles.truncate}>{target.name[locale]}</span><CaretDownIcon size={12} aria-hidden="true" className={styles.caret} /></span></motion.button>
       <input ref={input} type="search" name="q" role={category === 'search' ? 'combobox' : undefined} aria-label={m.search} placeholder={m.search} required pattern={String.raw`.*\S.*`}
+        aria-invalid={emptySearch || undefined} aria-describedby={emptySearch ? validationId : undefined}
         aria-autocomplete={category === 'search' ? 'list' : undefined} aria-expanded={category === 'search' ? panel === 'suggestions' : undefined}
         aria-controls={panel === 'suggestions' ? panelId : undefined} aria-activedescendant={panel === 'suggestions' && active >= 0 ? `${panelId}-${active}` : undefined}
         value={keyword} autoComplete="off" autoCapitalize="off" spellCheck={false} enterKeyHint="search"
-        onChange={(event) => { setKeyword(event.target.value); schedule(event.target.value) }} onKeyDown={inputKeys}
-        onCompositionStart={() => { composing.current = true; cancelRequest(); closePanel() }}
+        onInvalid={(event) => {
+          // Cancel the native bubble only once this handler is attached.
+          event.preventDefault()
+          if (!composing.current) reportEmptySearch()
+        }}
+        onChange={(event) => { setEmptySearch(false); setKeyword(event.target.value); schedule(event.target.value) }} onKeyDown={inputKeys}
+        onCompositionStart={() => { composing.current = true; setEmptySearch(false); cancelRequest(); closePanel() }}
         onCompositionEnd={(event) => { composing.current = false; setKeyword(event.currentTarget.value); schedule(event.currentTarget.value) }}
         onFocus={() => { if (panelRef.current === 'platforms') closePanel(); if (!skipFocusRequest.current) schedule(keyword) }}
         onPointerDown={() => setPointerFocus(true)} onBlur={(event) => {
-          setPointerFocus(false); cancelRequest()
+          setEmptySearch(false); setPointerFocus(false); cancelRequest()
           if (panelRef.current === 'suggestions' && !popup.current?.contains(event.relatedTarget)) closePanel()
         }}
         className={cx(styles.input, !!keyword && styles.inputWithClear)} />
       {!!keyword && <motion.button type="button" aria-label={m.clear} data-search-clear initial={false} animate={{ opacity: 0.72 }} whileHover={{ opacity: 0.96 }} whileTap={{ opacity: 1 }} transition={hoverTransition}
         onPointerDown={(event) => event.preventDefault()} onClick={() => {
-          cancelRequest(); closePanel(); composing.current = false; setKeyword('')
+          cancelRequest(); closePanel(); composing.current = false; setEmptySearch(false); setKeyword('')
           skipFocusRequest.current = true; input.current?.focus({ preventScroll: true }); skipFocusRequest.current = false
         }} className={cx(styles.submit, styles.clear)}><XIcon size={18} aria-hidden="true" /></motion.button>}
       <motion.button type="submit" aria-label={m.submit} className={styles.submit} initial={false} animate={{ opacity: 0.72 }} whileHover={{ opacity: 0.96 }} whileTap={{ opacity: 1 }} transition={hoverTransition}><MagnifyingGlassIcon size={20} weight="bold" aria-hidden="true" /></motion.button>
       <input type="hidden" name="adlt" value="strict" />
     </form>
+      <div id={validationId} role="status" className={styles.validation}>
+        <AnimatePresence>{emptySearch && <motion.span className={styles.validationMessage}
+          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={validationTransition}>
+          {m.emptySearch}
+        </motion.span>}</AnimatePresence>
+      </div>
       <AnimatePresence>{panel && <SearchPanel key="search-panel" ref={popup} id={panelId} label={panel === 'platforms' ? m.platforms : m.suggestions} kind={panel}
         onKeyDown={(event) => {
           if (event.key === 'Escape') { event.preventDefault(); cancelRequest(); closePanel(); (panel === 'platforms' ? trigger : input).current?.focus({ preventScroll: true }) }

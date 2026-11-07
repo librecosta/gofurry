@@ -5,6 +5,7 @@ const messages = {
     language: '切换为 English', themeLight: '切换为浅色主题', themeDark: '切换为深色主题',
     github: '打开 GoFurry GitHub（新标签页）', brand: 'GoFurry 品牌入口', user: '用户菜单', login: '登录', settings: '设置', unavailable: '暂不可用',
     categories: '搜索分类', platforms: '搜索平台', search: '搜索站点或内容…', submit: '搜索（新标签页）',
+    emptySearch: '请输入搜索内容',
     suggestions: '搜索建议',
     weather: {
       title: '天气', details: '天气详情', unavailable: '天气暂不可用', stale: '缓存天气，暂未获取到更新数据。', fetched: '数据获取于', weatherSource: '天气数据：', locationSource: 'IP 定位：', provider: '和风天气 / QWeather',
@@ -24,6 +25,7 @@ const messages = {
     language: 'Switch to 中文', themeLight: 'Switch to light theme', themeDark: 'Switch to dark theme',
     github: 'Open GoFurry GitHub (new tab)', brand: 'GoFurry brand', user: 'User menu', login: 'Sign in', settings: 'Settings', unavailable: 'Not available yet',
     categories: 'Search categories', platforms: 'Search platform', search: 'Search sites or content…', submit: 'Search (new tab)',
+    emptySearch: 'Enter a search term',
     suggestions: 'Search suggestions',
     weather: {
       title: 'Weather', details: 'Weather details', unavailable: 'Weather unavailable', stale: 'Cached weather; updated data is not available yet.', fetched: 'Fetched', weatherSource: 'Weather:', locationSource: 'IP location:', provider: 'QWeather',

@@ -11,6 +11,113 @@ async function settings(page: Page) { await page.locator('[data-start-settings]'
 
 test.use({ viewport: { width: 1440, height: 900 } })
 
+for (const { locale, path, width, colorScheme, message, query } of [
+  { locale: 'zh', path: chinesePath, width: 1280, colorScheme: 'light', message: '请输入搜索内容', query: '狐狸 绘画' },
+  { locale: 'en', path: englishPath, width: 375, colorScheme: 'dark', message: 'Enter a search term', query: 'fox art' },
+] as const) {
+  test(`start: empty search feedback in ${locale} at ${width}px`, async ({ page, context }) => {
+    await page.setViewportSize({ width, height: 720 })
+    await page.emulateMedia({ colorScheme, reducedMotion: width === 375 ? 'reduce' : 'no-preference' })
+    await context.route('https://www.bing.com/search?**', route => route.fulfill({ body: 'Search destination' }))
+    await page.route('**/api/v1/start/search/suggestions?*', route => route.fulfill({
+      headers: { 'X-GoFurry-Region': region, 'X-GoFurry-Content-Mode': 'SFW' },
+      json: { suggestions: [] },
+    }))
+    const errors: string[] = []
+    page.on('pageerror', error => errors.push(error.message))
+    page.on('console', message => {
+      if (message.type() === 'error' && /hydrat|react error #(418|423)/i.test(message.text())) errors.push(message.text())
+    })
+    await page.goto(path, { waitUntil: 'networkidle' })
+    await page.evaluate(() => document.fonts.ready.then(() => true))
+    await expect(page.locator('html')).toHaveAttribute('data-theme', colorScheme)
+
+    const form = page.getByRole('search'), field = input(page)
+    const status = page.locator('[data-start-search]').getByRole('status')
+    const button = form.locator('button[type="submit"]')
+    const categories = page.locator('[data-categories]')
+    const platforms = width === 375 ? page.locator('[data-mobile-platform-trigger]') : page.locator('[data-desktop-platforms]')
+    const initialForm = await form.boundingBox()
+    const initialPlatforms = await platforms.boundingBox()
+    await field.evaluate(element => {
+      element.addEventListener('invalid', event => {
+        // Check the final event state after React has handled it.
+        setTimeout(() => element.dataset.nativeValidationCanceled = String(event.defaultPrevented), 0)
+      })
+    })
+    const expectHint = async () => {
+      await expect(status).toHaveText(message)
+      await expect(field).toBeFocused()
+      await expect(field).toHaveAttribute('aria-invalid', 'true')
+      await expect(field).toHaveAccessibleDescription(message)
+      await expect(field).toHaveAttribute('data-native-validation-canceled', 'true')
+      await field.evaluate(element => { delete element.dataset.nativeValidationCanceled })
+    }
+
+    await expect(status).toBeEmpty()
+    await field.press('Enter')
+    await expectHint()
+    const hintBox = (await status.boundingBox())!
+    const categoryBox = (await categories.boundingBox())!
+    expect(hintBox.y).toBeGreaterThanOrEqual(categoryBox.y + categoryBox.height)
+    expect(hintBox.y + hintBox.height).toBeLessThanOrEqual(initialPlatforms!.y)
+    expect(await form.boundingBox()).toEqual(initialForm)
+    expect(await platforms.boundingBox()).toEqual(initialPlatforms)
+    await field.press('Escape')
+    await expect(status).toBeEmpty()
+    await expect(field).not.toHaveAttribute('aria-invalid')
+
+    await button.click()
+    await expectHint()
+    await categories.getByRole('button').first().focus()
+    await expect(status).toBeEmpty()
+    await field.fill(' \u3000 ')
+    await field.press('Enter')
+    await expectHint()
+    expect(context.pages()).toHaveLength(1)
+
+    await field.fill(`  ${query}  `)
+    await expect(status).toBeEmpty()
+    const [destination] = await Promise.all([context.waitForEvent('page'), field.press('Enter')])
+    await expect(destination).toHaveURL(/^https:\/\/www\.bing\.com\/search\?/)
+    expect(new URL(destination.url()).searchParams.get('q')).toBe(query)
+    expect(errors).toEqual([])
+  })
+}
+
+test('start: search without JavaScript rejects blanks and submits the native GET form', async ({ browser, baseURL }) => {
+  const context = await browser.newContext({ javaScriptEnabled: false, baseURL })
+  const requests: string[] = []
+  try {
+    await context.route('https://www.bing.com/search?**', route => {
+      requests.push(route.request().method())
+      return route.fulfill({ body: 'Search destination' })
+    })
+    const page = await context.newPage()
+    await page.goto(englishPath)
+    const form = page.getByRole('search'), field = input(page)
+    await expect(form).not.toHaveAttribute('novalidate')
+    await expect(field).toHaveAttribute('required')
+    await field.press('Enter')
+    await expect(field).toBeFocused()
+    expect(await field.evaluate((element: HTMLInputElement) => element.validity.valueMissing)).toBe(true)
+    await field.fill(' \u3000 ')
+    await form.locator('button[type="submit"]').click()
+    expect(await field.evaluate((element: HTMLInputElement) => element.validity.patternMismatch)).toBe(true)
+    expect(context.pages()).toHaveLength(1)
+    expect(requests).toEqual([])
+    await expect(page.locator('[data-start-search]').getByRole('status')).toBeEmpty()
+
+    await field.fill('fox art')
+    const [destination] = await Promise.all([context.waitForEvent('page'), field.press('Enter')])
+    await expect(destination).toHaveURL(/^https:\/\/www\.bing\.com\/search\?/)
+    expect(new URL(destination.url()).searchParams.get('q')).toBe('fox art')
+    expect(requests).toEqual(['GET'])
+  } finally {
+    await context.close()
+  }
+})
+
 test('start: explicit language URLs own SSR metadata and ignore conflicting cookies', async ({ browser }) => {
   for (const [path, locale] of [[englishPath, 'en'], [chinesePath, 'zh']]) {
     const context = await browser.newContext({ javaScriptEnabled: false, locale: locale === 'en' ? 'zh-CN' : 'en-US' })
