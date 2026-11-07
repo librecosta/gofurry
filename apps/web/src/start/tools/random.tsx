@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Checkbox } from '@base-ui/react/checkbox'
+import { Slider } from '@base-ui/react/slider'
 import { Tabs } from '@base-ui/react/tabs'
 import { ArrowsClockwiseIcon } from '@phosphor-icons/react/dist/ssr/ArrowsClockwise'
 import { CheckIcon } from '@phosphor-icons/react/dist/ssr/Check'
@@ -26,7 +27,7 @@ const labels = {
     minimum: '最小值', maximum: '最大值', places: '小数位数',
     count: '骰子数量', faces: '骰子面数', candidates: '候选项（每行一项）',
     run: '生成', rerun: '重新生成', total: '合计', result: '结果',
-    invalidLength: '密码长度必须是 1 至 50 的整数。', invalidGroups: '请至少选择一类字符。',
+    invalidGroups: '请至少选择一类字符。',
     invalidBounds: '请输入 −10 亿至 10 亿之间的数字。', invalidPlaces: '小数位数必须是 0 至 6 的整数。',
     invalidRange: '此范围内没有符合所选精度的数字，请检查上下限和小数位数。',
     invalidDice: '请输入 1 至 20 颗骰子、每颗 2 至 1000 面。',
@@ -38,7 +39,7 @@ const labels = {
     minimum: 'Minimum', maximum: 'Maximum', places: 'Decimal places',
     count: 'Dice count', faces: 'Sides per die', candidates: 'Candidates (one per line)',
     run: 'Generate', rerun: 'Regenerate', total: 'Total', result: 'Result',
-    invalidLength: 'Enter a password length from 1 to 50.', invalidGroups: 'Select at least one character type.',
+    invalidGroups: 'Select at least one character type.',
     invalidBounds: 'Use numbers from −1 billion to 1 billion.', invalidPlaces: 'Enter 0 to 6 decimal places.',
     invalidRange: 'No number fits this range and precision. Check the bounds and decimal places.',
     invalidDice: 'Enter 1 to 20 dice with 2 to 1,000 sides each.',
@@ -50,7 +51,7 @@ export default function RandomTools() {
   const { locale } = usePreferences()
   const m = labels[locale]
   const [mode, setMode] = useState<Mode>('password')
-  const [length, setLength] = useState('16')
+  const [length, setLength] = useState(16)
   const [enabled, setEnabled] = useState({ letters: true, digits: true, symbols: false })
   const [minimum, setMinimum] = useState('1')
   const [maximum, setMaximum] = useState('100')
@@ -68,11 +69,9 @@ export default function RandomTools() {
     const fail = (error: string) => setResult({ error })
     switch (mode) {
       case 'password': {
-        const size = parseInteger(length, 1, maxPasswordLength)
         const alphabet = charTypes.filter(type => enabled[type]).map(type => passwordGroups[type]).join('')
-        if (size === null) return fail(m.invalidLength)
         if (!alphabet) return fail(m.invalidGroups)
-        return succeed(randomPassword(size, alphabet))
+        return succeed(randomPassword(length, alphabet))
       }
       case 'number': {
         const number = randomDecimalRange(minimum, maximum, parseInteger(places, 0, maxDecimalPlaces) ?? NaN)
@@ -108,7 +107,19 @@ export default function RandomTools() {
         {modes.map(id => <Tabs.Tab key={id} value={id} className={styles.tab}>{m[id]}</Tabs.Tab>)}
       </Tabs.List>
       <Tabs.Panel value="password" className={styles.form}>
-        {numberField(m.length, length, setLength)}
+        <Slider.Root min={1} max={maxPasswordLength} step={1} value={length}
+          onValueChange={next => { setLength(next); setResult(null) }}>
+          <div className={styles.lengthCaption}>
+            <Slider.Label>{m.length}</Slider.Label>
+            <span aria-hidden="true">{length}</span>
+          </div>
+          <Slider.Control className={styles.lengthControl}>
+            <Slider.Track className={styles.lengthTrack}>
+              <Slider.Indicator className={styles.lengthFill} />
+              <Slider.Thumb className={styles.lengthThumb} />
+            </Slider.Track>
+          </Slider.Control>
+        </Slider.Root>
         <fieldset className={styles.characters}>
           <legend>{m.characters}</legend>
           <div className={styles.characterOptions}>

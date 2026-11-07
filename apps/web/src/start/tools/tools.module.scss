@@ -60,6 +60,28 @@
   &:active:not([data-active]) { background-color: var(--overlay-selected-surface); }
   &:focus-visible { outline: 2px solid var(--overlay-focus); outline-offset: -2px; }
 }
+.lengthCaption { display: flex; justify-content: space-between; font-size: 12px; font-variant-numeric: tabular-nums; }
+.lengthControl {
+  display: grid;
+  align-items: center;
+  min-height: 32px;
+  padding-inline: 6px;
+  cursor: pointer;
+  touch-action: none;
+  &[data-disabled] { cursor: not-allowed; opacity: 0.55; }
+}
+.lengthTrack, .lengthFill { height: 3px; border-radius: 2px; }
+.lengthTrack { background: color-mix(in srgb, var(--overlay-text) 22%, transparent); }
+.lengthFill { background: color-mix(in srgb, var(--overlay-text) 48%, transparent); }
+.lengthThumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--overlay-text) 76%, transparent);
+  transition: background-color var(--overlay-motion) var(--overlay-easing);
+  .lengthControl:hover &, &[data-dragging] { background-color: var(--overlay-text); }
+  &:has(input:focus-visible) { outline: 2px solid var(--overlay-focus); outline-offset: 3px; }
+}
 .characters { margin: 0; padding: 0; min-width: 0; border: 0; font-size: 12px; }
 .characterOptions { display: flex; justify-content: space-between; gap: 4px; margin-block-start: 4px; }
 .characterOption { display: inline-flex; align-items: center; gap: 4px; min-height: 32px; cursor: pointer; white-space: nowrap; }
