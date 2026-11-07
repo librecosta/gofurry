@@ -17,18 +17,10 @@
   max-height: var(--available-height);
   overflow-y: auto;
   overscroll-behavior: contain;
+  scrollbar-width: none;
   padding: 12px;
   font-size: 13px;
   line-height: 1.45;
-
-  // Keep the search input below the prompt when their widths can overlap.
-  // The Start search group's vertical offset follows 27dvh on taller windows.
-  @media (max-width: 1199px) {
-    max-height: min(var(--available-height), max(72px, calc(27dvh - 88px)));
-  }
-  @media (max-width: 1199px) and (max-height: 420px) {
-    max-height: min(var(--available-height), 56px);
-  }
 }
 
 .title, .description, .notice { margin: 0; }

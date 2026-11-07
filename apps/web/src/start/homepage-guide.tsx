@@ -36,7 +36,7 @@ export function HomepageGuide({ open, blocked, setOpen }: {
   return <Popover.Root open={open} onOpenChange={setOpen}>
     <Popover.Trigger data-start-homepage className={cx(controls.header, chrome.action, styles.trigger)}>{m.entry}</Popover.Trigger>
     {!blocked && <AnimatePresence>{open && <Popover.Portal keepMounted>
-      <Popover.Positioner positionMethod="fixed" side="bottom" align="start" alignOffset={({ anchor }) => anchor.width / 2}
+      <Popover.Positioner positionMethod="fixed" side="bottom" align="center"
         sideOffset={6} collisionPadding={16} collisionAvoidance={{ side: 'none', align: 'shift', fallbackAxisSide: 'none' }} className={styles.positioner}>
         <Popover.Popup ref={popup} data-start-homepage-guide className={cx(chrome.menu, styles.popup)}
           initialFocus={type => type === 'keyboard' ? true : popup.current}

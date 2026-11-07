@@ -11,21 +11,20 @@ for (const variant of [
   {
     path: chinesePath, scheme: 'light', entry: '设为主页', title: '使用 GoFurry 浏览器扩展',
     description: '安装适用于 Microsoft Edge 或 Google Chrome 的浏览器扩展，即可将 GoFurry 设为新标签页。',
-    notice: '扩展暂未发布', download: '前往下载', close: '关闭', surface: 'rgba(245, 247, 250, 0.33)',
+    notice: '扩展暂未发布', download: '前往下载', close: '关闭', surface: 'rgba(245, 247, 250, 0.33)', width: 960, height: 600,
   },
   {
     path: englishPath, scheme: 'dark', entry: 'Set as homepage', title: 'Use the GoFurry browser extension',
     description: 'Install the browser extension for Microsoft Edge or Google Chrome to make GoFurry your new tab page.',
-    notice: 'Extension not yet released', download: 'Download', close: 'Close', surface: 'rgba(27, 31, 38, 0.32)',
+    notice: 'Extension not yet released', download: 'Download', close: 'Close', surface: 'rgba(27, 31, 38, 0.32)', width: 1280, height: 720,
   },
 ] as const) {
   test(`homepage extension prompt shows localized copy and actions in ${variant.scheme}`, async ({ page, context }) => {
-    await page.setViewportSize({ width: 1280, height: 720 })
+    await page.setViewportSize({ width: variant.width, height: variant.height })
     await page.emulateMedia({ colorScheme: variant.scheme, reducedMotion: variant.scheme === 'dark' ? 'reduce' : 'no-preference' })
     await page.goto(variant.path, { waitUntil: 'networkidle' })
     const shortcut = page.getByRole('button', { name: variant.entry, exact: true })
     const weather = page.locator('[data-start-weather]')
-    const search = page.getByRole('search')
     await expect(page.locator('[data-start-actions] > button').nth(0)).toHaveText(variant.entry)
     await expect(page.locator('[data-start-actions] > button').nth(1)).toHaveAttribute('data-start-weather')
     await expect(shortcut.locator('svg')).toHaveCount(0)
@@ -45,27 +44,28 @@ for (const variant of [
     await expect(panel).toHaveCSS('background-color', variant.surface)
     await expect(panel).toHaveCSS('width', '300px')
     const position = (await panel.boundingBox())!
-    const input = (await search.boundingBox())!
     expect(position.y - (trigger.y + trigger.height)).toBe(6)
-    expect(position.x).toBeLessThan(trigger.x + trigger.width)
-    expect(position.x + position.width).toBeGreaterThan(trigger.x)
-    expect(position.x >= input.x + input.width || position.y + position.height <= input.y).toBe(true)
+    expect(Math.abs(position.x + position.width / 2 - (trigger.x + trigger.width / 2))).toBeLessThan(1)
+    expect(await panel.evaluate(element => element.scrollHeight)).toBe(await panel.evaluate(element => element.clientHeight))
 
     const download = panel.getByRole('button', { name: variant.download })
+    const close = panel.getByRole('button', { name: variant.close, exact: true })
     await expect(panel.getByRole('button')).toHaveCount(2)
     await expect(panel.getByRole('link')).toHaveCount(0)
     await expect(download).toBeDisabled()
+    await expect(download).toBeInViewport({ ratio: 1 })
+    await expect(close).toBeInViewport({ ratio: 1 })
     await download.dispatchEvent('click')
     await expect(page).toHaveURL(variant.path)
     expect(context.pages()).toHaveLength(1)
-    await panel.getByRole('button', { name: variant.close, exact: true }).click()
+    await close.click()
     await expect(shortcut).toHaveAttribute('aria-expanded', 'false')
     await expect(page.locator(guide)).toHaveCount(0)
     await expect(shortcut).toBeFocused()
   })
 }
 
-test('homepage prompt restores keyboard focus and does not block search or other header panels', async ({ page }) => {
+test('homepage prompt restores keyboard focus and dismisses on outside search and header interactions', async ({ page }) => {
   await page.setViewportSize({ width: 960, height: 600 })
   await page.goto(englishPath, { waitUntil: 'networkidle' })
   const shortcut = page.locator(entry)
@@ -78,10 +78,7 @@ test('homepage prompt restores keyboard focus and does not block search or other
   await expect(shortcut).toBeFocused()
 
   await shortcut.click()
-  const promptBounds = (await panel.boundingBox())!
-  const inputBounds = (await page.getByRole('search').boundingBox())!
-  expect(promptBounds.y + promptBounds.height).toBeLessThan(inputBounds.y)
-  await search.click()
+  await search.click({ position: { x: 12, y: 15 } })
   await expect(panel).toHaveCount(0)
   await expect(search).toBeFocused()
   await search.fill('fox')
