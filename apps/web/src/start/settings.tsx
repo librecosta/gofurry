@@ -42,6 +42,7 @@ export function StartSettings({ open, setOpen }: { open: boolean; setOpen: (open
   const reveal = useThemeReveal()
   const [library, setLibrary] = useState(false)
   const pendingLibrary = useRef(false), trigger = useRef<HTMLButtonElement>(null)
+  const closeButton = useRef<HTMLButtonElement>(null)
   const { preference } = useWallpaper()
   const [tab, setTab] = useState('basic')
   const layoutId = useId()
@@ -52,10 +53,10 @@ export function StartSettings({ open, setOpen }: { open: boolean; setOpen: (open
     <Dialog.Trigger ref={trigger} aria-label={m.settings} data-start-settings className={cx(controls.header, styles.trigger)}><GearSixIcon size={21} aria-hidden="true" /></Dialog.Trigger>
     <AnimatePresence onExitComplete={() => { if (pendingLibrary.current) { pendingLibrary.current = false; setLibrary(true) } }}>{open && <Dialog.Portal keepMounted>
       <Dialog.Backdrop className={styles.backdrop} render={<motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={transition} />} />
-      <Dialog.Popup data-start-preferences className={styles.popup} render={<motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }} transition={transition} />}>
+      <Dialog.Popup data-start-preferences className={styles.popup} initialFocus={closeButton} finalFocus={trigger} render={<motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }} transition={transition} />}>
         <div className={styles.heading}>
           <Dialog.Title className={styles.title}>{m.settings}</Dialog.Title>
-          <Dialog.Close aria-label={m.close} className={cx(controls.glass, styles.close)}><XIcon size={18} aria-hidden="true" /></Dialog.Close>
+          <Dialog.Close ref={closeButton} aria-label={m.close} className={cx(controls.glass, styles.close)}><XIcon size={18} aria-hidden="true" /></Dialog.Close>
         </div>
         <LayoutGroup id={layoutId}><Tabs.Root value={tab} onValueChange={(value) => setTab(String(value))}>
           <Tabs.List aria-label={m.settings} activateOnFocus className={styles.tabs}>

@@ -406,6 +406,7 @@ test('start: settings trap focus, retain their shell across language URLs and fu
   const dialog = page.locator('[data-start-preferences]')
   await expect(dialog).toHaveCSS('border-top-width', '0px'); await expect(dialog).toHaveCSS('box-shadow', 'none')
   await expect(dialog).toHaveCSS('transition-duration', '0s') // Motion owns opacity/transform.
+  await expect(dialog.getByRole('button', { name: 'Close settings' })).toBeFocused()
   for (let i = 0; i < 12; i++) { await page.keyboard.press('Tab'); expect(await dialog.evaluate(el => el.contains(document.activeElement))).toBe(true) }
   await expect(dialog.getByRole('link', { name: /GitHub/ })).toHaveAttribute('href', 'https://github.com/gofurry')
   await expect(dialog.getByRole('radio', { name: 'NSFW', exact: true })).toHaveCount(region === 'CN' ? 0 : 1)
