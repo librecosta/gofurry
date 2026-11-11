@@ -35,7 +35,7 @@ export async function loadYearbook(params: Params, pathname: string, region: Reg
 
 export function yearbookHeaders(data?: Page): Record<string, string> {
   return data?.state === 'published' && data.canonical
-    ? { 'Cache-Control': 'public, max-age=60' }
+    ? { 'Cache-Control': 'public, max-age=0, must-revalidate' }
     : { 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex' }
 }
 

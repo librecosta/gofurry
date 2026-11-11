@@ -16,7 +16,8 @@ type Summary struct {
 
 type SiteDetail struct {
 	Summary
-	Addresses []Address `json:"addresses"`
+	Addresses           []Address `json:"addresses"`
+	InteractionEligible bool      `json:"-"`
 }
 
 type GameDetail struct {
@@ -51,7 +52,7 @@ func (s *Service) PublishedSite(ctx context.Context, publicID string) (SiteDetai
 		return SiteDetail{}, classify(err)
 	}
 	base, err := summary(row.PublicID, row.Slug, row.Localizations)
-	out := SiteDetail{Summary: base}
+	out := SiteDetail{Summary: base, InteractionEligible: row.InteractionEligible}
 	if err != nil || json.Unmarshal(row.Addresses, &out.Addresses) != nil {
 		return SiteDetail{}, ErrUnavailable
 	}

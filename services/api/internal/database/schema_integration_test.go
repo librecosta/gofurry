@@ -70,11 +70,11 @@ func TestExplicitMigrationOnly(t *testing.T) {
 		t.Fatal(e)
 	}
 	defer func() {
-		if _, e := pool.Exec(context.Background(), "DROP TABLE site_yearbooks,site_yearbook_revisions,site_monthly_coverage,collection_sources,collection_bindings,collection_plans,collection_plan_bindings,collection_consumer,collection_gaps,collection_current,site_evidence_changes,site_daily_coverage,game_evidence_news,game_evidence_players,game_sources,game_localizations,games,site_addresses,site_localizations,sites,wallpaper_audit_logs,start_wallpapers,goose_db_version; DROP FUNCTION preserve_catalog_identity()"); e != nil {
+		if _, e := pool.Exec(context.Background(), "DROP VIEW site_public_navigation,site_public_history; DROP TABLE site_navigation_reviews,site_navigation_features,site_interaction_days,site_navigation_heat_state,site_navigation_heat,site_yearbooks,site_yearbook_revisions,site_monthly_coverage,collection_sources,collection_bindings,collection_plans,collection_plan_bindings,collection_consumer,collection_gaps,collection_current,site_evidence_changes,site_daily_coverage,game_evidence_news,game_evidence_players,game_sources,game_localizations,games,site_addresses,site_localizations,sites,wallpaper_audit_logs,start_wallpapers,goose_db_version; DROP FUNCTION preserve_catalog_identity(),navigation_distinct_codes(text[])"); e != nil {
 			t.Error("isolated test cleanup failed")
 		}
 	}()
-	if count() != 23 {
+	if count() != 30 {
 		t.Fatal("wrong migrated schema count")
 	}
 }

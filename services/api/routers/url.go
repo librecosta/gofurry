@@ -8,11 +8,12 @@ import (
 	"github.com/librecosta/gofurry/services/api/internal/catalog"
 	"github.com/librecosta/gofurry/services/api/internal/handlers"
 	"github.com/librecosta/gofurry/services/api/internal/middleware"
+	"github.com/librecosta/gofurry/services/api/internal/navigation"
 	"github.com/librecosta/gofurry/services/api/internal/yearbook"
 	"github.com/redis/go-redis/v9"
 )
 
-func registerURLs(v1 fiber.Router, backgrounds, suggestions, location, weather, cities, nearestCity fiber.Handler, shared *redis.Client, region string, directory *catalog.Service, yearbooks *yearbook.Service) {
+func registerURLs(v1 fiber.Router, backgrounds, suggestions, location, weather, cities, nearestCity fiber.Handler, shared *redis.Client, region string, directory *catalog.Service, yearbooks *yearbook.Service, discovery *navigation.Service, interactions fiber.Handler, interactionsEnabled bool) {
 	v1.Get("/status", handlers.Status)
 	v1.Get("/sites/:publicID/yearbooks", handlers.Yearbooks(yearbooks))
 	v1.Get("/sites/:publicID/yearbooks/:year", handlers.Yearbook(yearbooks))
@@ -26,15 +27,23 @@ func registerURLs(v1 fiber.Router, backgrounds, suggestions, location, weather, 
 			},
 		})
 	}
+	// Redis enforces the shared per-IP and global interaction budgets. The
+	// local prefilter is global only and does not persist client identifiers.
+	v1.Post("/sites/:publicID/interactions", limited(900, func(fiber.Ctx) string { return "site-interaction" }), interactions)
 	for _, route := range []struct {
 		path         string
 		page, detail fiber.Handler
 	}{
-		{"sites", handlers.CatalogPage(directory.SitePage), handlers.CatalogDetail(directory.PublishedSite)},
-		{"games", handlers.CatalogPage(directory.GamePage), handlers.CatalogDetail(directory.PublishedGame)},
+		{"sites", handlers.CatalogPage(directory.SitePage, true), handlers.SiteDetail(directory, interactionsEnabled)},
+		{"games", handlers.CatalogPage(directory.GamePage, false), handlers.CatalogDetail(directory.PublishedGame)},
 	} {
 		group := v1.Group("/"+route.path, limited(600, func(fiber.Ctx) string { return route.path }),
 			limited(120, func(c fiber.Ctx) string { return c.IP() }), middleware.RedisLimit(shared, region, route.path, 600, 120))
+		if route.path == "sites" {
+			group.Get("/discovery", handlers.NavigationHome(discovery))
+			group.Get("/directory", handlers.NavigationDirectory(discovery, region))
+			group.Get("/:publicID/stats", handlers.NavigationStats(discovery))
+		}
 		group.Get("/", route.page)
 		group.Get("/:publicID", route.detail)
 	}

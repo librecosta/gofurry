@@ -16,7 +16,17 @@ func CatalogDetail[T any](read func(context.Context, string) (T, error)) fiber.H
 	}
 }
 
-func CatalogPage(read func(context.Context, string, int32) (catalog.Page, error)) fiber.Handler {
+func SiteDetail(service *catalog.Service, interactionsEnabled bool) fiber.Handler {
+	return func(c fiber.Ctx) error {
+		result, err := service.PublishedSite(c.Context(), c.Params("publicID"))
+		if err == nil && interactionsEnabled && result.InteractionEligible {
+			c.Set("X-GoFurry-Interactions", "enabled")
+		}
+		return navigationResponse(c, result, err)
+	}
+}
+
+func CatalogPage(read func(context.Context, string, int32) (catalog.Page, error), sensitive bool) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		limit := int64(20)
 		var after string
@@ -44,6 +54,9 @@ func CatalogPage(read func(context.Context, string, int32) (catalog.Page, error)
 			return catalogResponse(c, nil, catalog.ErrInvalid)
 		}
 		result, err := read(c.Context(), after, int32(limit))
+		if sensitive {
+			return navigationResponse(c, result, err)
+		}
 		return catalogResponse(c, result, err)
 	}
 }

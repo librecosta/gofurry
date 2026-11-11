@@ -32,5 +32,5 @@ func yearbookResponse(c fiber.Ctx, result any, err error) error {
 	if errors.Is(err, yearbook.ErrMissing) {
 		err = catalog.ErrNotFound
 	}
-	return catalogResponse(c, result, err)
+	return navigationResponse(c, result, err)
 }

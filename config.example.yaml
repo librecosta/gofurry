@@ -73,6 +73,13 @@ database: null
 yearbook:
   enabled: false
 
+# Heat uses the migrated regional PostgreSQL database. Events are disabled
+# unless a private 32-byte base64url key, the exact origin and Redis are set.
+navigation:
+  heat_enabled: false
+  # interaction_origin: https://<regional-web-origin>
+  # interaction_hmac_key: <private-unpadded-base64url>
+
 # Disabled unless complete. Generate 32 crypto/rand bytes as unpadded base64url.
 # Token goes only in private YAML. Storage and database are required.
 # Admin must use the same region/environment. New uploads: 16:9 AVIF + WebP.

@@ -129,7 +129,7 @@ func assess(ctx context.Context, q *dbgen.Queries, site dbgen.Site, year int32, 
 	if year > eligibleThrough(now) {
 		result.Reasons = append(result.Reasons, "grace_period_open")
 	}
-	if site.Status != catalog.Published || len(result.Document.Names) == 0 {
+	if site.Status != catalog.Published || !catalog.SiteHistoryAllowed(site) || len(result.Document.Names) == 0 {
 		result.Reasons = append(result.Reasons, "site_not_published")
 	}
 	if coverage.Days < minDays {
@@ -201,7 +201,7 @@ func (s *Service) generate(ctx context.Context, id string, year int32, apply, au
 			if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 				return err
 			}
-			if automatic && (site.Status != catalog.Published || head.PublishedRevision.Valid || head.Status == "hidden") {
+			if automatic && (site.Status != catalog.Published || !catalog.SiteHistoryAllowed(site) || head.PublishedRevision.Valid || head.Status == "hidden") {
 				return nil
 			}
 			var raw []byte
@@ -286,7 +286,7 @@ func (s *Service) Publish(ctx context.Context, id string, year, revision int32, 
 		if err != nil {
 			return err
 		}
-		if site.Status != catalog.Published || head.LatestRevision != revision {
+		if site.Status != catalog.Published || !catalog.SiteHistoryAllowed(site) || head.LatestRevision != revision {
 			return ErrConflict
 		}
 		if head.Status == "published" && head.PublishedRevision.Int32 == revision && head.PublishedDigest.String == digest {
@@ -356,7 +356,7 @@ func (s *Service) Years(ctx context.Context, id string) ([]int32, error) {
 		return years, known(err)
 	}
 	site, err := q.FindYearbookSite(ctx, id)
-	if err == nil && site.Status != catalog.Published {
+	if err == nil && (site.Status != catalog.Published || !catalog.SiteHistoryAllowed(site)) {
 		err = ErrMissing
 	}
 	return years, known(err)

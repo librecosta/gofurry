@@ -224,7 +224,7 @@ func (q *Queries) CompactSiteCoverage(ctx context.Context, arg CompactSiteCovera
 }
 
 const findYearbookSite = `-- name: FindYearbookSite :one
-SELECT id, public_id, slug, status, revision, created_at, updated_at, published_at, archived_at FROM sites WHERE public_id=$1
+SELECT id, public_id, slug, status, revision, created_at, updated_at, published_at, archived_at, first_published_at, content_rating, legacy_detail, primary_category, secondary_categories, navigation_tags, supported_languages FROM sites WHERE public_id=$1
 `
 
 func (q *Queries) FindYearbookSite(ctx context.Context, publicID string) (Site, error) {
@@ -240,6 +240,13 @@ func (q *Queries) FindYearbookSite(ctx context.Context, publicID string) (Site, 
 		&i.UpdatedAt,
 		&i.PublishedAt,
 		&i.ArchivedAt,
+		&i.FirstPublishedAt,
+		&i.ContentRating,
+		&i.LegacyDetail,
+		&i.PrimaryCategory,
+		&i.SecondaryCategories,
+		&i.NavigationTags,
+		&i.SupportedLanguages,
 	)
 	return i, err
 }
@@ -263,7 +270,7 @@ func (q *Queries) HideYearbook(ctx context.Context, arg HideYearbookParams) (int
 }
 
 const lockYearbookSite = `-- name: LockYearbookSite :one
-SELECT id, public_id, slug, status, revision, created_at, updated_at, published_at, archived_at FROM sites WHERE public_id=$1 FOR UPDATE
+SELECT id, public_id, slug, status, revision, created_at, updated_at, published_at, archived_at, first_published_at, content_rating, legacy_detail, primary_category, secondary_categories, navigation_tags, supported_languages FROM sites WHERE public_id=$1 FOR UPDATE
 `
 
 func (q *Queries) LockYearbookSite(ctx context.Context, publicID string) (Site, error) {
@@ -279,6 +286,13 @@ func (q *Queries) LockYearbookSite(ctx context.Context, publicID string) (Site, 
 		&i.UpdatedAt,
 		&i.PublishedAt,
 		&i.ArchivedAt,
+		&i.FirstPublishedAt,
+		&i.ContentRating,
+		&i.LegacyDetail,
+		&i.PrimaryCategory,
+		&i.SecondaryCategories,
+		&i.NavigationTags,
+		&i.SupportedLanguages,
 	)
 	return i, err
 }
@@ -320,10 +334,10 @@ SELECT y.public_id,coalesce(s.slug,y.stored_slug)::text AS slug,y.year,r.revisio
  coalesce(s.status='published',false)::boolean AS site_available,
  coalesce((SELECT jsonb_agg(jsonb_build_object('locale',l.locale,'name',l.name) ORDER BY l.locale)
   FROM site_localizations l WHERE l.site_id=s.id),'[]'::jsonb)::jsonb AS current_names
-FROM site_yearbooks y LEFT JOIN sites s ON s.id=y.site_id AND s.public_id=y.public_id
+FROM site_yearbooks y JOIN site_public_history s ON s.id=y.site_id AND s.public_id=y.public_id
 JOIN site_yearbook_revisions r ON r.site_id=y.site_id AND r.year=y.year AND r.revision=y.published_revision AND r.digest=y.published_digest
 WHERE y.public_id=$1 AND y.year=$2 AND y.status='published'
- AND y.year<=$3 AND (s.id IS NULL OR s.status IN ('published','archived'))
+ AND y.year<=$3
 `
 
 type PublishedYearbookParams struct {
@@ -362,10 +376,9 @@ func (q *Queries) PublishedYearbook(ctx context.Context, arg PublishedYearbookPa
 }
 
 const publishedYearbookList = `-- name: PublishedYearbookList :many
-SELECT y.year FROM site_yearbooks y LEFT JOIN sites s ON s.id=y.site_id AND s.public_id=y.public_id
+SELECT y.year FROM site_yearbooks y JOIN site_public_history s ON s.id=y.site_id AND s.public_id=y.public_id
 JOIN site_yearbook_revisions r ON r.site_id=y.site_id AND r.year=y.year AND r.revision=y.published_revision AND r.digest=y.published_digest
 WHERE y.public_id=$1 AND y.status='published' AND y.year<=$2
- AND (s.id IS NULL OR s.status IN ('published','archived'))
 ORDER BY y.year DESC LIMIT 64
 `
 
@@ -440,7 +453,7 @@ WITH recorded AS (
  AND m.month<make_date($5::integer+1,1,1)
 )
 SELECT s.public_id,r.year FROM recorded r
-JOIN sites s ON s.id=r.site_id AND s.status='published'
+JOIN site_public_history s ON s.id=r.site_id AND s.status='published'
 LEFT JOIN site_yearbooks y ON y.site_id=r.site_id AND y.year=r.year
 WHERE NOT $1::boolean OR (y.published_revision IS NULL AND y.status IS DISTINCT FROM 'hidden'
  AND (y.checked_at IS NULL OR y.checked_at<$2::timestamptz))

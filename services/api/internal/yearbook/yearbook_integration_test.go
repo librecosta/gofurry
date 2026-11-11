@@ -372,6 +372,7 @@ func checkOtherEvidence(t *testing.T, pool *pgxpool.Pool, svc *Service) {
 	ctx := t.Context()
 	start := moment("2024-02-02T23:30:00Z")
 	s := newSiteFixture(t, pool, "0000000000000011", "published", "en")
+	execFixture(t, pool, "UPDATE sites SET content_rating='sfw',primary_category='community' WHERE id=$1", s)
 	web := bindFixture(t, pool, s, "leap-yearbook.example.com", "web.http", start.Add(-time.Hour), nil)
 	checkEligibility(t, svc, "0000000000000011", 2024, false, "insufficient_evidence")
 	httpFixture(t, pool, web, start)
@@ -411,6 +412,7 @@ func checkOtherEvidence(t *testing.T, pool *pgxpool.Pool, svc *Service) {
 		}
 	}
 	missing := newSiteFixture(t, pool, "0000000000000012", "published", "en")
+	execFixture(t, pool, "UPDATE sites SET content_rating='sfw',primary_category='community' WHERE id=$1", missing)
 	b := bindFixture(t, pool, missing, "no-baseline.example.com", "web.http", start, nil)
 	for i := range 14 {
 		confirmFixture(t, pool, b, "web.http", siteScope, start.AddDate(0, 0, 3*i))
@@ -420,6 +422,7 @@ func checkOtherEvidence(t *testing.T, pool *pgxpool.Pool, svc *Service) {
 	// baseline can qualify a later year without an annual change event.
 	priorID := "0000000000000013"
 	priorSite := newSiteFixture(t, pool, priorID, "published", "en")
+	execFixture(t, pool, "UPDATE sites SET content_rating='sfw',primary_category='community' WHERE id=$1", priorSite)
 	prior := bindFixture(t, pool, priorSite, "prior.example.com", "web.http", moment("2023-01-01T00:00:00Z"), nil)
 	httpFixture(t, pool, prior, moment("2023-10-01T00:00:00Z"))
 	old := `{"origin":"https://prior.example.com","final_url":"https://prior.example.com"}`

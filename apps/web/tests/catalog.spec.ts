@@ -25,7 +25,7 @@ test('regional SSR, published metadata and cookie-independent HTML', async ({ re
     const path = prefix + sitePath
     const response = await request.get(base + path, { headers: { Cookie: 'gf-locale=zh; gf-theme=dark', 'Accept-Language': 'fr-FR' } })
     expect(response.status()).toBe(200)
-    expect(response.headers()['cache-control']).toBe('public, max-age=60')
+    expect(response.headers()['cache-control']).toBe(path.includes('/sites/') ? 'public, max-age=0, must-revalidate' : 'public, max-age=60')
     expect(response.headers()['vary'] ?? '').not.toMatch(/cookie/i)
     const html = await response.text()
     expect(html).toContain(`<html lang="${locale}"`)

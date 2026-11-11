@@ -34,6 +34,7 @@ type Config struct {
 	Management        *ManagementConfig        `mapstructure:"management"`
 	Harvest           *HarvestConfig           `mapstructure:"harvest" json:"-"`
 	Yearbook          *YearbookConfig          `mapstructure:"yearbook"`
+	Navigation        *NavigationConfig        `mapstructure:"navigation" json:"-"`
 }
 
 type YearbookConfig struct {
@@ -90,9 +91,11 @@ func LoadConfig(path string) (Config, error) {
 	if err := validateWallpaperSource(v); err != nil {
 		return cfg, err
 	}
-	if v.IsSet("yearbook.enabled") {
-		if _, ok := v.Get("yearbook.enabled").(bool); !ok {
-			return cfg, fmt.Errorf("yearbook.enabled must be a YAML boolean")
+	for _, key := range []string{"yearbook.enabled", "navigation.heat_enabled"} {
+		if v.IsSet(key) {
+			if _, ok := v.Get(key).(bool); !ok {
+				return cfg, fmt.Errorf("%s must be a YAML boolean", key)
+			}
 		}
 	}
 	if err := v.UnmarshalExact(&cfg); err != nil {
@@ -129,6 +132,9 @@ func LoadConfig(path string) (Config, error) {
 		return cfg, fmt.Errorf("deployment.region must be CN or INTL")
 	}
 	if err := cfg.validateHarvest(); err != nil {
+		return cfg, err
+	}
+	if err := cfg.validateNavigation(); err != nil {
 		return cfg, err
 	}
 	if cfg.Yearbook != nil && cfg.Yearbook.Enabled && cfg.Database == nil {

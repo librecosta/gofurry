@@ -44,6 +44,13 @@ func TestCatalogPostgreSQL(t *testing.T) {
 	intl := openFixture(t, ctx, *intlFixture, "INTL")
 	c := New(cn)
 	projected := New(intl)
+	approve := func(editor *Service, region, id string, rev int64) int64 {
+		t.Helper()
+		profile, err := editor.ReviewSiteNavigation(ctx, region, id, rev,
+			NavigationEdit{Rating: "sfw", Primary: "community", Actor: "fixture", Reason: "Reviewed Site fixture"})
+		ok(t, err)
+		return profile.Revision
+	}
 
 	editorial := Editorial{Slug: "original-slug", Localizations: []Localization{
 		{Locale: "zh", Name: "示例社区", Summary: "中文编辑简介。"},
@@ -62,7 +69,9 @@ func TestCatalogPostgreSQL(t *testing.T) {
 	}
 	_, err = c.PublishedSite(ctx, fixtureSite)
 	want(t, err, ErrNotFound)
-	site, err = c.SetSiteStatus(ctx, site.ID, site.Revision, Published)
+	_, err = c.SetSiteStatus(ctx, site.ID, site.Revision, Published)
+	want(t, err, ErrInvalid)
+	site, err = c.SetSiteStatus(ctx, site.ID, approve(c, "CN", site.PublicID, site.Revision), Published)
 	ok(t, err)
 	if !site.PublishedAt.Valid {
 		t.Fatal("missing publication timestamp")
@@ -108,7 +117,7 @@ func TestCatalogPostgreSQL(t *testing.T) {
 	if calls != 2 || second.ID == site.ID || second.PublicID != otherSite || second.Slug != site.Slug {
 		t.Fatal("Public ID retry or nonunique slug failed")
 	}
-	_, err = c.SetSiteStatus(ctx, second.ID, second.Revision, Published)
+	_, err = c.SetSiteStatus(ctx, second.ID, approve(c, "CN", second.PublicID, second.Revision), Published)
 	ok(t, err)
 
 	c.publicID = func() string { return draftSite }
@@ -154,7 +163,7 @@ func TestCatalogPostgreSQL(t *testing.T) {
 	c.publicID = func() string { return "1234567890123456" }
 	decimalSite, err := c.CreateSite(ctx, updatedInput)
 	ok(t, err)
-	_, err = c.SetSiteStatus(ctx, decimalSite.ID, decimalSite.Revision, Published)
+	_, err = c.SetSiteStatus(ctx, decimalSite.ID, approve(c, "CN", decimalSite.PublicID, decimalSite.Revision), Published)
 	ok(t, err)
 
 	gameInput := GameInput{Editorial: Editorial{Slug: "orbit-game", Localizations: []Localization{
@@ -212,7 +221,7 @@ func TestCatalogPostgreSQL(t *testing.T) {
 	projected.publicID = func() string { return fixtureSite }
 	intlSite, err := projected.CreateSite(ctx, updatedInput)
 	ok(t, err)
-	intlSite, err = projected.SetSiteStatus(ctx, intlSite.ID, intlSite.Revision, Published)
+	intlSite, err = projected.SetSiteStatus(ctx, intlSite.ID, approve(projected, "INTL", intlSite.PublicID, intlSite.Revision), Published)
 	ok(t, err)
 	projected.publicID = func() string { return fixtureGame }
 	intlGame, err := projected.CreateGame(ctx, gameInput)

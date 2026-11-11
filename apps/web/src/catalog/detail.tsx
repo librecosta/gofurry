@@ -4,6 +4,7 @@ import type { Locale, Region } from '../preferences'
 import { isPublicID, readCatalogDetail, type Detail, type Kind } from './detail-server'
 import { entityPath } from './public-path'
 import { yearbookPath } from '../yearbook/path'
+import { SiteDwell, siteOutbound } from '../navigation/site-interactions'
 import styles from './detail.module.scss'
 
 export type CatalogParams = { language?: string; publicId: string; slug?: string }
@@ -41,7 +42,7 @@ export async function loadDetail(kind: Kind, params: CatalogParams, pathname: st
 
 export function detailHeaders(data: Page | undefined): Record<string, string> {
   return data?.state === 'published' && data.canonical
-    ? { 'Cache-Control': 'public, max-age=60' }
+    ? { 'Cache-Control': data.detail.kind === 'sites' ? 'public, max-age=0, must-revalidate' : 'public, max-age=60' }
     : { 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex' }
 }
 
@@ -79,14 +80,17 @@ export function DetailView({ data }: { data: Page }) {
   const display = translation ?? detail.localizations[0]
   const primary = detail.kind === 'sites' ? detail.addresses.find(address => address.kind === 'primary') : undefined
   const alternates = detail.kind === 'sites' ? detail.addresses.filter(address => address.kind === 'alternate') : []
+  const tracked = detail.kind === 'sites' && detail.interactions
+  const visit = tracked ? (event: Parameters<typeof siteOutbound>[1]) => siteOutbound(detail.public_id, event) : undefined
   return (
     <main className={styles.detail}>
+      {tracked && <SiteDwell publicID={detail.public_id} />}
       <h1 lang={display.locale}>{display.name}</h1>
       {translation?.summary && <p className={styles.summary}>{translation.summary}</p>}
       {!translation && <p>{copy.untranslated}</p>}
-      {primary && <p><a href={primary.url} rel="noopener noreferrer">{copy.primary}</a></p>}
+      {primary && <p><a href={primary.url} target="_blank" rel="noopener noreferrer" onClick={visit} onAuxClick={visit}>{copy.primary}</a></p>}
       {alternates.length > 0 && <section><h2>{copy.alternate}</h2><ul>{alternates.map(address =>
-        <li key={address.url}><a href={address.url} rel="noopener noreferrer">{address.url}</a></li>)}</ul></section>}
+        <li key={address.url}><a href={address.url} target="_blank" rel="noopener noreferrer" onClick={visit} onAuxClick={visit}>{address.url}</a></li>)}</ul></section>}
       {detail.kind === 'sites' && detail.yearbooks.length > 0 && <section><h2>{copy.yearbooks}</h2><ul>{detail.yearbooks.map(year =>
         <li key={year}><a href={yearbookPath(detail.public_id, detail.slug, year, locale, data.region)}>{year}</a></li>)}</ul></section>}
       {detail.kind === 'games' && detail.sources.length > 0 && <section><h2>{copy.sources}</h2><ul>{detail.sources.map(source =>

@@ -7,7 +7,7 @@ export type Kind = 'sites' | 'games'
 export type Localized = { locale: 'zh' | 'en'; name: string; summary?: string }
 type Identity = { public_id: string; slug: string; localizations: Localized[] }
 export type Detail =
-  | (Identity & { kind: 'sites'; addresses: { kind: 'primary' | 'alternate'; url: string }[]; yearbooks: number[] })
+  | (Identity & { kind: 'sites'; addresses: { kind: 'primary' | 'alternate'; url: string }[]; yearbooks: number[]; interactions: boolean })
   | (Identity & { kind: 'games'; sources: { platform_code: string; external_key: string; source_url?: string }[] })
 type Lookup = { kind: Kind; publicId: string; region: Region }
 type Result = { state: 'missing' } | { state: 'unavailable' } | { state: 'published'; detail: Detail; origin: string }
@@ -42,7 +42,7 @@ function decode(input: unknown, kind: Kind, id: string): Detail {
       return { kind: value.kind as 'primary' | 'alternate', url: value.url }
     })
     if (addresses.filter(value => value.kind === 'primary').length !== 1) throw new Error('Missing primary address')
-    return { ...identity, kind, addresses, yearbooks: [] }
+    return { ...identity, kind, addresses, yearbooks: [], interactions: false }
   }
   if (!Array.isArray(item.sources) || item.sources.length > 16) throw new Error('Invalid API sources')
   return { ...identity, kind, sources: item.sources.map(value => {
@@ -72,7 +72,10 @@ export const readCatalogDetail = createServerFn({ method: 'GET' }).validator((in
       throw new Error('Catalog API unavailable')
     }
     const detail = decode(await response.json(), kind, publicId)
-    if (detail.kind === 'sites') detail.yearbooks = await publishedYears(url, deployment)
+    if (detail.kind === 'sites') {
+      detail.interactions = response.headers.get('x-gofurry-interactions') === 'enabled'
+      detail.yearbooks = await publishedYears(url, deployment)
+    }
     return { state: 'published', detail, origin: publicOrigin() }
   } catch {
     setResponseStatus(503)

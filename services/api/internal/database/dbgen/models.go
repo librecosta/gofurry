@@ -144,15 +144,22 @@ type GameSource struct {
 }
 
 type Site struct {
-	ID          uuid.UUID          `json:"id"`
-	PublicID    string             `json:"public_id"`
-	Slug        string             `json:"slug"`
-	Status      string             `json:"status"`
-	Revision    int64              `json:"revision"`
-	CreatedAt   pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
-	PublishedAt pgtype.Timestamptz `json:"published_at"`
-	ArchivedAt  pgtype.Timestamptz `json:"archived_at"`
+	ID                  uuid.UUID          `json:"id"`
+	PublicID            string             `json:"public_id"`
+	Slug                string             `json:"slug"`
+	Status              string             `json:"status"`
+	Revision            int64              `json:"revision"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
+	PublishedAt         pgtype.Timestamptz `json:"published_at"`
+	ArchivedAt          pgtype.Timestamptz `json:"archived_at"`
+	FirstPublishedAt    pgtype.Timestamptz `json:"first_published_at"`
+	ContentRating       string             `json:"content_rating"`
+	LegacyDetail        bool               `json:"legacy_detail"`
+	PrimaryCategory     pgtype.Text        `json:"primary_category"`
+	SecondaryCategories []string           `json:"secondary_categories"`
+	NavigationTags      []string           `json:"navigation_tags"`
+	SupportedLanguages  []string           `json:"supported_languages"`
 }
 
 type SiteAddress struct {
@@ -201,6 +208,13 @@ type SiteEvidenceChange struct {
 	ReceivedAt          pgtype.Timestamptz `json:"received_at"`
 }
 
+type SiteInteractionDay struct {
+	SiteID         uuid.UUID   `json:"site_id"`
+	UtcDay         pgtype.Date `json:"utc_day"`
+	DetailViews    int32       `json:"detail_views"`
+	OutboundClicks int32       `json:"outbound_clicks"`
+}
+
 type SiteLocalization struct {
 	SiteID  uuid.UUID `json:"site_id"`
 	Locale  string    `json:"locale"`
@@ -224,6 +238,77 @@ type SiteMonthlyCoverage struct {
 	DayMask          int64              `json:"day_mask"`
 	FirstConfirmedAt pgtype.Timestamptz `json:"first_confirmed_at"`
 	LastConfirmedAt  pgtype.Timestamptz `json:"last_confirmed_at"`
+}
+
+type SiteNavigationFeature struct {
+	Slot      string             `json:"slot"`
+	SiteID    *uuid.UUID         `json:"site_id"`
+	Revision  int64              `json:"revision"`
+	Actor     pgtype.Text        `json:"actor"`
+	Reason    pgtype.Text        `json:"reason"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
+type SiteNavigationHeat struct {
+	SiteID uuid.UUID `json:"site_id"`
+	Score  int64     `json:"score"`
+}
+
+type SiteNavigationHeatState struct {
+	Singleton       bool               `json:"singleton"`
+	Algorithm       int32              `json:"algorithm"`
+	WindowEnd       pgtype.Date        `json:"window_end"`
+	ComputedAt      pgtype.Timestamptz `json:"computed_at"`
+	AggregateCutoff pgtype.Timestamptz `json:"aggregate_cutoff"`
+}
+
+type SiteNavigationReview struct {
+	ID             uuid.UUID          `json:"id"`
+	SiteID         uuid.UUID          `json:"site_id"`
+	SiteRevision   int64              `json:"site_revision"`
+	PreviousRating string             `json:"previous_rating"`
+	Rating         string             `json:"rating"`
+	Actor          string             `json:"actor"`
+	Reason         string             `json:"reason"`
+	ReviewedAt     pgtype.Timestamptz `json:"reviewed_at"`
+}
+
+type SitePublicHistory struct {
+	ID                  uuid.UUID          `json:"id"`
+	PublicID            string             `json:"public_id"`
+	Slug                string             `json:"slug"`
+	Status              string             `json:"status"`
+	Revision            int64              `json:"revision"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
+	PublishedAt         pgtype.Timestamptz `json:"published_at"`
+	ArchivedAt          pgtype.Timestamptz `json:"archived_at"`
+	FirstPublishedAt    pgtype.Timestamptz `json:"first_published_at"`
+	ContentRating       string             `json:"content_rating"`
+	LegacyDetail        bool               `json:"legacy_detail"`
+	PrimaryCategory     pgtype.Text        `json:"primary_category"`
+	SecondaryCategories []string           `json:"secondary_categories"`
+	NavigationTags      []string           `json:"navigation_tags"`
+	SupportedLanguages  []string           `json:"supported_languages"`
+}
+
+type SitePublicNavigation struct {
+	ID                  uuid.UUID          `json:"id"`
+	PublicID            string             `json:"public_id"`
+	Slug                string             `json:"slug"`
+	Status              string             `json:"status"`
+	Revision            int64              `json:"revision"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
+	PublishedAt         pgtype.Timestamptz `json:"published_at"`
+	ArchivedAt          pgtype.Timestamptz `json:"archived_at"`
+	FirstPublishedAt    pgtype.Timestamptz `json:"first_published_at"`
+	ContentRating       string             `json:"content_rating"`
+	LegacyDetail        bool               `json:"legacy_detail"`
+	PrimaryCategory     pgtype.Text        `json:"primary_category"`
+	SecondaryCategories []string           `json:"secondary_categories"`
+	NavigationTags      []string           `json:"navigation_tags"`
+	SupportedLanguages  []string           `json:"supported_languages"`
 }
 
 type SiteYearbook struct {

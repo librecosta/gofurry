@@ -84,7 +84,10 @@ func TestCollectionHarvestD(t *testing.T) {
 	makeSite := func() (dbgen.Site, []dbgen.CollectionBinding) {
 		site, err := editor.CreateSite(ctx, catalog.SiteInput{Editorial: text, Addresses: []catalog.Address{{Kind: "primary", URL: oldAddress}}})
 		must(t, err)
-		site, err = editor.SetSiteStatus(ctx, site.ID, site.Revision, catalog.Published)
+		profile, err := editor.ReviewSiteNavigation(ctx, "CN", site.PublicID, site.Revision,
+			catalog.NavigationEdit{Rating: "sfw", Primary: "community", Actor: "fixture", Reason: "Reviewed fixture"})
+		must(t, err)
+		site, err = editor.SetSiteStatus(ctx, site.ID, profile.Revision, catalog.Published)
 		must(t, err)
 		bindings, err := svc.BindSite(ctx, site.PublicID, oldAddress)
 		must(t, err)

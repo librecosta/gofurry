@@ -52,7 +52,7 @@ tasks:
     cmds:
       - go run github.com/sqlc-dev/sqlc/cmd/sqlc@v1.31.1 diff
   check:catalog:
-    desc: Verify Site, Game and Yearbook against disposable PostgreSQL 18 databases and built Web
+    desc: Verify Site, Game, Yearbook and Navigation with disposable PostgreSQL 18, Redis 8 and built Web
     cmds:
       - node scripts/check-catalog.mjs
   check:collection:

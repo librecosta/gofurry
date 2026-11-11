@@ -148,7 +148,7 @@ WITH recorded AS (
  AND m.month<make_date(sqlc.arg(last_year)::integer+1,1,1)
 )
 SELECT s.public_id,r.year FROM recorded r
-JOIN sites s ON s.id=r.site_id AND s.status='published'
+JOIN site_public_history s ON s.id=r.site_id AND s.status='published'
 LEFT JOIN site_yearbooks y ON y.site_id=r.site_id AND y.year=r.year
 WHERE NOT sqlc.arg(automatic)::boolean OR (y.published_revision IS NULL AND y.status IS DISTINCT FROM 'hidden'
  AND (y.checked_at IS NULL OR y.checked_at<sqlc.arg(recheck_before)::timestamptz))
@@ -200,16 +200,15 @@ SELECT y.public_id,coalesce(s.slug,y.stored_slug)::text AS slug,y.year,r.revisio
  coalesce(s.status='published',false)::boolean AS site_available,
  coalesce((SELECT jsonb_agg(jsonb_build_object('locale',l.locale,'name',l.name) ORDER BY l.locale)
   FROM site_localizations l WHERE l.site_id=s.id),'[]'::jsonb)::jsonb AS current_names
-FROM site_yearbooks y LEFT JOIN sites s ON s.id=y.site_id AND s.public_id=y.public_id
+FROM site_yearbooks y JOIN site_public_history s ON s.id=y.site_id AND s.public_id=y.public_id
 JOIN site_yearbook_revisions r ON r.site_id=y.site_id AND r.year=y.year AND r.revision=y.published_revision AND r.digest=y.published_digest
 WHERE y.public_id=sqlc.arg(public_id) AND y.year=sqlc.arg(year) AND y.status='published'
- AND y.year<=sqlc.arg(last_year) AND (s.id IS NULL OR s.status IN ('published','archived'));
+ AND y.year<=sqlc.arg(last_year);
 
 -- name: PublishedYearbookList :many
-SELECT y.year FROM site_yearbooks y LEFT JOIN sites s ON s.id=y.site_id AND s.public_id=y.public_id
+SELECT y.year FROM site_yearbooks y JOIN site_public_history s ON s.id=y.site_id AND s.public_id=y.public_id
 JOIN site_yearbook_revisions r ON r.site_id=y.site_id AND r.year=y.year AND r.revision=y.published_revision AND r.digest=y.published_digest
 WHERE y.public_id=sqlc.arg(public_id) AND y.status='published' AND y.year<=sqlc.arg(last_year)
- AND (s.id IS NULL OR s.status IN ('published','archived'))
 ORDER BY y.year DESC LIMIT 64;
 
 -- name: AuditYearbookReferences :many

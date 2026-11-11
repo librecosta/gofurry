@@ -19,7 +19,7 @@ test('published yearbook is indexed in its own locale and linked from the Site',
       headers: { Cookie: 'gf-locale=en; gf-theme=dark', 'Accept-Language': 'fr', 'X-Forwarded-Host': 'untrusted.example' },
     })
     expect(response.status()).toBe(200)
-    expect(response.headers()['cache-control']).toBe('public, max-age=60')
+    expect(response.headers()['cache-control']).toBe('public, max-age=0, must-revalidate')
     expect(response.headers()['vary'] ?? '').not.toMatch(/cookie/i)
     const html = await response.text()
     expect(html).toContain(`<html lang="${locale}"`)

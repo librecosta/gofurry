@@ -20,6 +20,7 @@ import (
 	"github.com/librecosta/gofurry/services/api/internal/handlers"
 	"github.com/librecosta/gofurry/services/api/internal/management"
 	"github.com/librecosta/gofurry/services/api/internal/middleware"
+	"github.com/librecosta/gofurry/services/api/internal/navigation"
 	"github.com/librecosta/gofurry/services/api/internal/platform"
 	"github.com/librecosta/gofurry/services/api/internal/search"
 	"github.com/librecosta/gofurry/services/api/internal/storage"
@@ -133,7 +134,14 @@ func New(logger zerolog.Logger, cfg platform.Config) *Server {
 			logger.Info().Msg("weather city catalog loaded")
 		}
 	}
-	routers.Register(s.App, s.ready.Load, handlers.Backgrounds(s.Wallpapers), handlers.Suggestions(suggestions, logger), handlers.Location(cities), handlers.Weather(cities, weatherService, cityIndex), handlers.Cities(cityIndex), handlers.NearestCity(cityIndex), shared, cfg.Deployment.Region, catalog.New(pool), yearbook.New(pool))
+	discovery := navigation.New(pool)
+	var interactionOrigin string
+	if cfg.Navigation != nil {
+		interactionOrigin = cfg.Navigation.Origin
+	}
+	counter := navigation.NewCounter(discovery, shared, cfg.Navigation.InteractionKey(), cfg.Deployment.Region)
+	interactions := handlers.NavigationInteraction(counter, interactionOrigin, cfg.Server.Environment == "production", len(cfg.Server.TrustedProxies) != 0)
+	routers.Register(s.App, s.ready.Load, handlers.Backgrounds(s.Wallpapers), handlers.Suggestions(suggestions, logger), handlers.Location(cities), handlers.Weather(cities, weatherService, cityIndex), handlers.Cities(cityIndex), handlers.NearestCity(cityIndex), shared, cfg.Deployment.Region, catalog.New(pool), yearbook.New(pool), discovery, interactions, counter.Enabled())
 	collectionCtx, stopCollection := context.WithCancel(context.Background())
 	var collector *collection.Service
 	var collectionPool *pgxpool.Pool
@@ -164,6 +172,17 @@ func New(logger zerolog.Logger, cfg platform.Config) *Server {
 	}
 	var runCollection sync.Once
 	var collectionWG sync.WaitGroup
+	var heatPool *pgxpool.Pool
+	if cfg.Navigation != nil && cfg.Navigation.HeatEnabled && pool != nil {
+		pc := pool.Config()
+		pc.MinConns, pc.MaxConns = 0, 1
+		pc.ConnConfig.RuntimeParams["application_name"] = "gofurry-heat"
+		var err error
+		heatPool, err = pgxpool.NewWithConfig(context.Background(), pc)
+		if err != nil {
+			logger.Warn().Msg("Site heat maintenance pool unavailable")
+		}
+	}
 	s.App.Hooks().OnListen(func(data fiber.ListenData) error {
 		runCollection.Do(func() {
 			if collector != nil {
@@ -178,6 +197,11 @@ func New(logger zerolog.Logger, cfg platform.Config) *Server {
 					yearbook.New(yearbookPool).Run(collectionCtx, func(err error) {
 						logger.Warn().Str("reason", err.Error()).Msg("Yearbook maintenance deferred")
 					})
+				})
+			}
+			if heatPool != nil {
+				collectionWG.Go(func() {
+					navigation.New(heatPool).Run(collectionCtx, func() { logger.Warn().Msg("Site heat maintenance deferred") })
 				})
 			}
 		})
@@ -202,6 +226,9 @@ func New(logger zerolog.Logger, cfg platform.Config) *Server {
 			}
 			if yearbookPool != nil {
 				yearbookPool.Close()
+			}
+			if heatPool != nil {
+				heatPool.Close()
 			}
 			suggestions.Close()
 			weatherService.Close()

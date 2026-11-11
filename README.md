@@ -55,6 +55,8 @@ Set `WEB_PUBLIC_ORIGIN` to the exact canonical Web origin in each deployment, su
 
 Published Sites link to their historical Yearbooks once evidence qualifies. Reports use confirmed UTC observation days, with missing days shown as Unknown. They are not uptime reports. After explicit Goose migration, set `yearbook.enabled: true` in the regional API YAML to run closure and monthly coverage compaction in the existing API. The default is off. Public reads use the local database, including when Harvest is offline. See the [D1-B2 acceptance and operator commands](docs/v0.1-d1-b2-acceptance.md).
 
+Site discovery exposes a fixed home feed and a searchable directory. Both regional deployments list reviewed SFW Sites only. Heat v1 and anonymous interactions are independently opt-in; discovery still works with no Redis. See the [D2-A API, migration and operator guide](docs/v0.1-d2-a-acceptance.md).
+
 CN deployments can opt in to the Harvest evidence consumer through their private API YAML. Collection plans require an explicit CLI action. Public Site and Game routes read GoFurry's regional database. See the [D1-B1 setup and acceptance](docs/v0.1-d1-b1-acceptance.md).
 
 ## Start page
