@@ -25,7 +25,9 @@ func (s *Service) RefreshHeat(ctx context.Context, force bool) (RefreshResult, e
 	}
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
-	err := pgx.BeginTxFunc(ctx, s.pool, pgx.TxOptions{IsoLevel: pgx.RepeatableRead}, func(tx pgx.Tx) error {
+	// Read the head after obtaining the lock. A repeatable-read snapshot taken
+	// by the lock statement can predate the preceding refresh's commit.
+	err := pgx.BeginTxFunc(ctx, s.pool, pgx.TxOptions{IsoLevel: pgx.ReadCommitted}, func(tx pgx.Tx) error {
 		q := dbgen.New(tx)
 		locked, err := q.LockNavigationHeat(ctx)
 		if err != nil || !locked {
@@ -40,12 +42,8 @@ func (s *Service) RefreshHeat(ctx context.Context, force bool) (RefreshResult, e
 			last.Algorithm == Algorithm && last.ComputedAt.Time.Truncate(heatInterval).Equal(now.Truncate(heatInterval))) {
 			return nil
 		}
-		cutoff, err := q.NavigationAggregateCutoff(ctx)
-		if err != nil {
-			return err
-		}
 		result.Ranked, err = q.RefreshNavigationHeat(ctx, dbgen.RefreshNavigationHeatParams{WindowEnd: pgDay(now),
-			ComputedAt: pgtype.Timestamptz{Time: now, Valid: true}, AggregateCutoff: cutoff})
+			ComputedAt: pgtype.Timestamptz{Time: now, Valid: true}})
 		result.Refreshed = err == nil
 		return err
 	})

@@ -42,14 +42,11 @@ WITH weighted AS MATERIALIZED (
  DELETE FROM site_navigation_heat h WHERE NOT EXISTS (SELECT 1 FROM weighted w WHERE w.site_id=h.site_id)
 ), published AS (
  INSERT INTO site_navigation_heat_state (singleton,algorithm,window_end,computed_at,aggregate_cutoff)
- VALUES (true,1,sqlc.arg(window_end)::date,sqlc.arg(computed_at)::timestamptz,sqlc.arg(aggregate_cutoff)::timestamptz)
+ VALUES (true,1,sqlc.arg(window_end)::date,sqlc.arg(computed_at)::timestamptz,statement_timestamp())
  ON CONFLICT (singleton) DO UPDATE SET algorithm=excluded.algorithm,window_end=excluded.window_end,
   computed_at=excluded.computed_at,aggregate_cutoff=excluded.aggregate_cutoff
 )
 SELECT count(*)::bigint AS ranked FROM weighted;
-
--- name: NavigationAggregateCutoff :one
-SELECT transaction_timestamp()::timestamptz;
 
 -- name: CountNavigationInteraction :execrows
 WITH visible AS (

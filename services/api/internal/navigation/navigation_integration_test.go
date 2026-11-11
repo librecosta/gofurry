@@ -222,9 +222,10 @@ func TestNavigationPostgreSQLRedis(t *testing.T) {
 		execute(t, pool, "INSERT INTO site_interaction_days VALUES ($1,$2,$3,$4)", row.site, pgDay(now.AddDate(0, 0, -row.ago)), row.views, row.clicks)
 	}
 	var wg sync.WaitGroup
-	results := make(chan RefreshResult, 2)
-	failures := make(chan error, 2)
-	for range 2 {
+	const contenders = 12
+	results := make(chan RefreshResult, contenders)
+	failures := make(chan error, contenders)
+	for range contenders {
 		wg.Go(func() { r, err := svc.RefreshHeat(ctx, false); results <- r; failures <- err })
 	}
 	wg.Wait()

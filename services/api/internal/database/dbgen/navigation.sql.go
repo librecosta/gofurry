@@ -187,17 +187,6 @@ func (q *Queries) LockNavigationSite(ctx context.Context, publicID string) (Site
 	return i, err
 }
 
-const navigationAggregateCutoff = `-- name: NavigationAggregateCutoff :one
-SELECT transaction_timestamp()::timestamptz
-`
-
-func (q *Queries) NavigationAggregateCutoff(ctx context.Context) (pgtype.Timestamptz, error) {
-	row := q.db.QueryRow(ctx, navigationAggregateCutoff)
-	var column_1 pgtype.Timestamptz
-	err := row.Scan(&column_1)
-	return column_1, err
-}
-
 const navigationCategoryCounts = `-- name: NavigationCategoryCounts :many
 SELECT c.code::text AS code,count(*)::bigint AS count FROM site_public_navigation s
 CROSS JOIN LATERAL unnest(ARRAY[s.primary_category]||s.secondary_categories) AS c(code) GROUP BY c.code
@@ -425,7 +414,7 @@ WITH weighted AS MATERIALIZED (
  DELETE FROM site_navigation_heat h WHERE NOT EXISTS (SELECT 1 FROM weighted w WHERE w.site_id=h.site_id)
 ), published AS (
  INSERT INTO site_navigation_heat_state (singleton,algorithm,window_end,computed_at,aggregate_cutoff)
- VALUES (true,1,$1::date,$2::timestamptz,$3::timestamptz)
+ VALUES (true,1,$1::date,$2::timestamptz,statement_timestamp())
  ON CONFLICT (singleton) DO UPDATE SET algorithm=excluded.algorithm,window_end=excluded.window_end,
   computed_at=excluded.computed_at,aggregate_cutoff=excluded.aggregate_cutoff
 )
@@ -433,13 +422,12 @@ SELECT count(*)::bigint AS ranked FROM weighted
 `
 
 type RefreshNavigationHeatParams struct {
-	WindowEnd       pgtype.Date        `json:"window_end"`
-	ComputedAt      pgtype.Timestamptz `json:"computed_at"`
-	AggregateCutoff pgtype.Timestamptz `json:"aggregate_cutoff"`
+	WindowEnd  pgtype.Date        `json:"window_end"`
+	ComputedAt pgtype.Timestamptz `json:"computed_at"`
 }
 
 func (q *Queries) RefreshNavigationHeat(ctx context.Context, arg RefreshNavigationHeatParams) (int64, error) {
-	row := q.db.QueryRow(ctx, refreshNavigationHeat, arg.WindowEnd, arg.ComputedAt, arg.AggregateCutoff)
+	row := q.db.QueryRow(ctx, refreshNavigationHeat, arg.WindowEnd, arg.ComputedAt)
 	var ranked int64
 	err := row.Scan(&ranked)
 	return ranked, err
