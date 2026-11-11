@@ -2,17 +2,19 @@ import { createRootRoute, HeadContent, Outlet, Scripts } from '@tanstack/react-r
 import styles from '../styles/document.module.scss'
 import { PreferencesProvider, readPreferences, usePreferences } from '../preferences'
 import { QuickAccessProvider } from '../start/quick-access-data'
+import { isCatalogPath } from '../locale-path'
 import cssUrl from '../styles/global.scss?url'
 
 export const Route = createRootRoute({
   beforeLoad: async ({ location }) => ({ preferences: await readPreferences({ data: location.pathname }) }),
-  headers: () => ({ 'Cache-Control': 'private, no-store', Vary: 'Cookie' }),
-  head: () => ({
+  head: ({ matches }) => ({
     meta: [
       { charSet: 'utf-8' },
       { name: 'viewport', content: 'width=device-width, initial-scale=1' },
-      { title: 'GoFurry · Runtime skeleton' },
-      { name: 'description', content: 'GoFurry engineering foundation.' },
+      ...(matches.some(match => isCatalogPath(match.pathname)) ? [] : [
+        { title: 'GoFurry · Runtime skeleton' },
+        { name: 'description', content: 'GoFurry engineering foundation.' },
+      ]),
     ],
     links: [{ rel: 'stylesheet', href: cssUrl }, { rel: 'icon', href: 'data:,' }],
   }),

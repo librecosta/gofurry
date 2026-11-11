@@ -62,7 +62,15 @@ func TestFormatUpgradePreservesLegacy(t *testing.T) {
 	if _, e = p.Exec(ctx, insert, id, hash); e != nil {
 		t.Fatal(e)
 	}
-	if e = database.Migrate(ctx, *cfg.Database, "../../migrations", "up", io.Discard); e != nil {
+	name = "202611050002_official_wallpaper_format.sql"
+	b, e = os.ReadFile("../../migrations/" + name)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if e = os.WriteFile(filepath.Join(dir, name), b, 0600); e != nil {
+		t.Fatal(e)
+	}
+	if e = database.Migrate(ctx, *cfg.Database, dir, "up", io.Discard); e != nil {
 		t.Fatal(e)
 	}
 	var typ, status string

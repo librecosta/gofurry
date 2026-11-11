@@ -51,6 +51,10 @@ tasks:
     dir: services/api
     cmds:
       - go run github.com/sqlc-dev/sqlc/cmd/sqlc@v1.31.1 diff
+  check:catalog:
+    desc: Verify Site/Game against disposable PostgreSQL 18 CN/INTL databases and built Web
+    cmds:
+      - node scripts/check-catalog.mjs
   check:wallpapers:
     cmds:
       - go -C services/api test ./internal/wallpaper ./internal/management ./internal/storage ./internal/platform
@@ -86,11 +90,17 @@ tasks:
   check:
     desc: Verify toolchains, Go formatting/vet/tests/build, Web build/types and browser smoke tests
     cmds:
+      - task: check:build
+      - task: check:web
+  check:build:
+    cmds:
       - task: tools
       - pnpm exec node scripts/check-go-format.mjs
       - task: check:api
       - task: build:web
       - pnpm --filter @gofurry/web typecheck
+  check:web:
+    cmds:
       - pnpm --filter @gofurry/web test:e2e
   check:api:
     dir: services/api

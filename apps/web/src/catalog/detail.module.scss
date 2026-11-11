@@ -1,0 +1,10 @@
+.detail {
+  max-width: 46rem;
+  margin-inline: auto;
+  padding: clamp(1rem, 5vw, 3rem);
+  overflow-wrap: anywhere;
+}
+
+.summary {
+  white-space: pre-line;
+}

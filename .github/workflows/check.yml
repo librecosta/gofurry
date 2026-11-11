@@ -31,7 +31,10 @@ jobs:
           version: '3.53.1'
       - run: task install
       - run: pnpm --filter @gofurry/web exec playwright install --with-deps chromium
-      - run: task check
+      - run: task check:build
+      - run: task sql:check
+      - run: task check:catalog
+      - run: task check:web
       - run: pnpm --filter @gofurry/web exec playwright test governance.spec.ts start.spec.ts
         env:
           WEB_REGION: INTL

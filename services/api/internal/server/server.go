@@ -12,6 +12,7 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"github.com/gofiber/fiber/v3/middleware/requestid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/librecosta/gofurry/services/api/internal/catalog"
 	citycatalog "github.com/librecosta/gofurry/services/api/internal/cities"
 	"github.com/librecosta/gofurry/services/api/internal/database"
 	"github.com/librecosta/gofurry/services/api/internal/geoip"
@@ -120,17 +121,17 @@ func New(logger zerolog.Logger, cfg platform.Config) *Server {
 		logger.Warn().Strs("missing_fields", cfg.QWeather.MissingFields()).Msg("weather provider unavailable")
 	}
 	weatherService := weather.NewService(provider, shared, cfg.Deployment.Region)
-	var catalog *citycatalog.Catalog
+	var cityIndex *citycatalog.Catalog
 	if cfg.Cities != nil && cfg.Cities.IndexPath != "" {
 		var err error
-		catalog, err = citycatalog.Open(cfg.Cities.IndexPath)
+		cityIndex, err = citycatalog.Open(cfg.Cities.IndexPath)
 		if err != nil {
 			logger.Warn().Msg("weather city catalog unavailable")
 		} else {
 			logger.Info().Msg("weather city catalog loaded")
 		}
 	}
-	routers.Register(s.App, s.ready.Load, handlers.Backgrounds(s.Wallpapers), handlers.Suggestions(suggestions, logger), handlers.Location(cities), handlers.Weather(cities, weatherService, catalog), handlers.Cities(catalog), handlers.NearestCity(catalog), shared, cfg.Deployment.Region)
+	routers.Register(s.App, s.ready.Load, handlers.Backgrounds(s.Wallpapers), handlers.Suggestions(suggestions, logger), handlers.Location(cities), handlers.Weather(cities, weatherService, cityIndex), handlers.Cities(cityIndex), handlers.NearestCity(cityIndex), shared, cfg.Deployment.Region, catalog.New(pool))
 	s.App.Hooks().OnListen(func(data fiber.ListenData) error {
 		s.ready.Store(true)
 		logger.Info().Str("host", data.Host).Str("port", data.Port).Msg("listening")

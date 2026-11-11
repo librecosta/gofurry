@@ -10,3 +10,4 @@ export function localizedPath(pathname: string, locale: Locale, region: Region) 
   return locale === defaultLocale(region) ? path : `/${locale}${path}`
 }
 export function isStartPath(pathname: string) { return /^\/(?:(?:en|zh)\/)?start\/?$/.test(pathname) }
+export function isCatalogPath(pathname: string) { return /^\/(?:(?:en|zh)\/)?(?:sites|games)(?:\/|$)/.test(pathname) }

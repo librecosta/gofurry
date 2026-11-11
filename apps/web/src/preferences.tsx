@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from '
 import { useNavigate, useRouterState } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
 import { getCookie, setResponseHeader } from '@tanstack/react-start/server'
-import { isStartPath, localeForPath, localizedPath } from './locale-path'
+import { isCatalogPath, isStartPath, localeForPath, localizedPath } from './locale-path'
 
 export type Region = 'CN' | 'INTL'
 export type Locale = 'zh' | 'en'
@@ -21,9 +21,16 @@ export const readPreferences = createServerFn({ method: 'GET' }).validator((path
   if (typeof pathname !== 'string' || pathname.length > 2048) throw new Error('Invalid pathname')
   return pathname
 }).handler(({ data: pathname }): Preferences => {
-  setResponseHeader('Cache-Control', 'private, no-store')
   const region = process.env.WEB_REGION ?? 'CN'
   if (region !== 'CN' && region !== 'INTL') throw new Error('WEB_REGION must be CN or INTL')
+  if (isCatalogPath(pathname)) {
+    return {
+      region, locale: localeForPath(pathname, region), theme: 'light', themePreference: 'system',
+      quickAccess: false, showFurrySearch: true, showHomepageEntry: true, startMaterial: 'frosted', contentPreference: 'SFW',
+    }
+  }
+  setResponseHeader('Cache-Control', 'private, no-store')
+  setResponseHeader('Vary', 'Cookie')
   const locale = getCookie('gf-locale')
   const savedTheme = getCookie('gf-theme')
   const themePreference = savedTheme === 'dark' || savedTheme === 'light' ? savedTheme : 'system'
@@ -67,7 +74,7 @@ export function PreferencesProvider({ initial, children }: { initial: Preference
     return () => media.removeEventListener('change', update)
   }, [themePreference])
   return <PreferencesContext value={{
-    region: initial.region, locale: isStartPath(pathname) ? localeForPath(pathname, initial.region) : legacyLocale ?? initial.locale, theme, themePreference, contentPreference, quickAccess, showFurrySearch, showHomepageEntry, startMaterial,
+    region: initial.region, locale: (isStartPath(pathname) || isCatalogPath(pathname)) ? localeForPath(pathname, initial.region) : legacyLocale ?? initial.locale, theme, themePreference, contentPreference, quickAccess, showFurrySearch, showHomepageEntry, startMaterial,
     setStartMaterial: value => {
       const next = readStartMaterial(value)
       try { remember(`gf-start-material-${initial.region}`, next) } catch { /* In-memory preference remains usable. */ }

@@ -19,6 +19,8 @@ import { Route as StartLanguageStartRouteImport } from './routes/_start.$languag
 import { Route as ApiV1StartBackgroundsRouteImport } from './routes/api.v1.start.backgrounds'
 import { Route as ApiV1StartCitiesRouteImport } from './routes/api.v1.start.cities'
 import { Route as ApiV1StartWeatherRouteImport } from './routes/api.v1.start.weather'
+import { Route as Char123LanguageChar125GamesPublicIdChar123SlugChar125RouteImport } from './routes/{-$language}.games.$publicId.{-$slug}'
+import { Route as Char123LanguageChar125SitesPublicIdChar123SlugChar125RouteImport } from './routes/{-$language}.sites.$publicId.{-$slug}'
 import { Route as ApiV1StartBackgroundsIdRouteImport } from './routes/api.v1.start.backgrounds.$id'
 import { Route as ApiV1StartCitiesNearestRouteImport } from './routes/api.v1.start.cities.nearest'
 import { Route as ApiV1StartSearchSuggestionsRouteImport } from './routes/api.v1.start.search.suggestions'
@@ -72,6 +74,18 @@ const ApiV1StartWeatherRoute = ApiV1StartWeatherRouteImport.update({
   path: '/api/v1/start/weather',
   getParentRoute: () => rootRouteImport,
 } as any)
+const Char123LanguageChar125GamesPublicIdChar123SlugChar125Route =
+  Char123LanguageChar125GamesPublicIdChar123SlugChar125RouteImport.update({
+    id: '/{-$language}/games/$publicId/{-$slug}',
+    path: '/{-$language}/games/$publicId/{-$slug}',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const Char123LanguageChar125SitesPublicIdChar123SlugChar125Route =
+  Char123LanguageChar125SitesPublicIdChar123SlugChar125RouteImport.update({
+    id: '/{-$language}/sites/$publicId/{-$slug}',
+    path: '/{-$language}/sites/$publicId/{-$slug}',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiV1StartBackgroundsIdRoute = ApiV1StartBackgroundsIdRouteImport.update({
   id: '/$id',
   path: '/$id',
@@ -99,6 +113,8 @@ export interface FileRoutesByFullPath {
   '/api/v1/start/backgrounds': typeof ApiV1StartBackgroundsRouteWithChildren
   '/api/v1/start/cities': typeof ApiV1StartCitiesRouteWithChildren
   '/api/v1/start/weather': typeof ApiV1StartWeatherRoute
+  '/{-$language}/games/$publicId/{-$slug}': typeof Char123LanguageChar125GamesPublicIdChar123SlugChar125Route
+  '/{-$language}/sites/$publicId/{-$slug}': typeof Char123LanguageChar125SitesPublicIdChar123SlugChar125Route
   '/api/v1/start/backgrounds/$id': typeof ApiV1StartBackgroundsIdRoute
   '/api/v1/start/cities/nearest': typeof ApiV1StartCitiesNearestRoute
   '/api/v1/start/search/suggestions': typeof ApiV1StartSearchSuggestionsRoute
@@ -113,6 +129,8 @@ export interface FileRoutesByTo {
   '/api/v1/start/backgrounds': typeof ApiV1StartBackgroundsRouteWithChildren
   '/api/v1/start/cities': typeof ApiV1StartCitiesRouteWithChildren
   '/api/v1/start/weather': typeof ApiV1StartWeatherRoute
+  '/{-$language}/games/$publicId/{-$slug}': typeof Char123LanguageChar125GamesPublicIdChar123SlugChar125Route
+  '/{-$language}/sites/$publicId/{-$slug}': typeof Char123LanguageChar125SitesPublicIdChar123SlugChar125Route
   '/api/v1/start/backgrounds/$id': typeof ApiV1StartBackgroundsIdRoute
   '/api/v1/start/cities/nearest': typeof ApiV1StartCitiesNearestRoute
   '/api/v1/start/search/suggestions': typeof ApiV1StartSearchSuggestionsRoute
@@ -129,6 +147,8 @@ export interface FileRoutesById {
   '/api/v1/start/backgrounds': typeof ApiV1StartBackgroundsRouteWithChildren
   '/api/v1/start/cities': typeof ApiV1StartCitiesRouteWithChildren
   '/api/v1/start/weather': typeof ApiV1StartWeatherRoute
+  '/{-$language}/games/$publicId/{-$slug}': typeof Char123LanguageChar125GamesPublicIdChar123SlugChar125Route
+  '/{-$language}/sites/$publicId/{-$slug}': typeof Char123LanguageChar125SitesPublicIdChar123SlugChar125Route
   '/api/v1/start/backgrounds/$id': typeof ApiV1StartBackgroundsIdRoute
   '/api/v1/start/cities/nearest': typeof ApiV1StartCitiesNearestRoute
   '/api/v1/start/search/suggestions': typeof ApiV1StartSearchSuggestionsRoute
@@ -145,6 +165,8 @@ export interface FileRouteTypes {
     | '/api/v1/start/backgrounds'
     | '/api/v1/start/cities'
     | '/api/v1/start/weather'
+    | '/{-$language}/games/$publicId/{-$slug}'
+    | '/{-$language}/sites/$publicId/{-$slug}'
     | '/api/v1/start/backgrounds/$id'
     | '/api/v1/start/cities/nearest'
     | '/api/v1/start/search/suggestions'
@@ -159,6 +181,8 @@ export interface FileRouteTypes {
     | '/api/v1/start/backgrounds'
     | '/api/v1/start/cities'
     | '/api/v1/start/weather'
+    | '/{-$language}/games/$publicId/{-$slug}'
+    | '/{-$language}/sites/$publicId/{-$slug}'
     | '/api/v1/start/backgrounds/$id'
     | '/api/v1/start/cities/nearest'
     | '/api/v1/start/search/suggestions'
@@ -174,6 +198,8 @@ export interface FileRouteTypes {
     | '/api/v1/start/backgrounds'
     | '/api/v1/start/cities'
     | '/api/v1/start/weather'
+    | '/{-$language}/games/$publicId/{-$slug}'
+    | '/{-$language}/sites/$publicId/{-$slug}'
     | '/api/v1/start/backgrounds/$id'
     | '/api/v1/start/cities/nearest'
     | '/api/v1/start/search/suggestions'
@@ -188,6 +214,8 @@ export interface RootRouteChildren {
   ApiV1StartBackgroundsRoute: typeof ApiV1StartBackgroundsRouteWithChildren
   ApiV1StartCitiesRoute: typeof ApiV1StartCitiesRouteWithChildren
   ApiV1StartWeatherRoute: typeof ApiV1StartWeatherRoute
+  Char123LanguageChar125GamesPublicIdChar123SlugChar125Route: typeof Char123LanguageChar125GamesPublicIdChar123SlugChar125Route
+  Char123LanguageChar125SitesPublicIdChar123SlugChar125Route: typeof Char123LanguageChar125SitesPublicIdChar123SlugChar125Route
   ApiV1StartSearchSuggestionsRoute: typeof ApiV1StartSearchSuggestionsRoute
 }
 
@@ -263,6 +291,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiV1StartWeatherRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/{-$language}/games/$publicId/{-$slug}': {
+      id: '/{-$language}/games/$publicId/{-$slug}'
+      path: '/{-$language}/games/$publicId/{-$slug}'
+      fullPath: '/{-$language}/games/$publicId/{-$slug}'
+      preLoaderRoute: typeof Char123LanguageChar125GamesPublicIdChar123SlugChar125RouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/{-$language}/sites/$publicId/{-$slug}': {
+      id: '/{-$language}/sites/$publicId/{-$slug}'
+      path: '/{-$language}/sites/$publicId/{-$slug}'
+      fullPath: '/{-$language}/sites/$publicId/{-$slug}'
+      preLoaderRoute: typeof Char123LanguageChar125SitesPublicIdChar123SlugChar125RouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/v1/start/backgrounds/$id': {
       id: '/api/v1/start/backgrounds/$id'
       path: '/$id'
@@ -332,6 +374,10 @@ const rootRouteChildren: RootRouteChildren = {
   ApiV1StartBackgroundsRoute: ApiV1StartBackgroundsRouteWithChildren,
   ApiV1StartCitiesRoute: ApiV1StartCitiesRouteWithChildren,
   ApiV1StartWeatherRoute: ApiV1StartWeatherRoute,
+  Char123LanguageChar125GamesPublicIdChar123SlugChar125Route:
+    Char123LanguageChar125GamesPublicIdChar123SlugChar125Route,
+  Char123LanguageChar125SitesPublicIdChar123SlugChar125Route:
+    Char123LanguageChar125SitesPublicIdChar123SlugChar125Route,
   ApiV1StartSearchSuggestionsRoute: ApiV1StartSearchSuggestionsRoute,
 }
 export const routeTree = rootRouteImport

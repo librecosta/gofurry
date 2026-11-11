@@ -5,12 +5,13 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/gofiber/fiber/v3/middleware/limiter"
+	"github.com/librecosta/gofurry/services/api/internal/catalog"
 	"github.com/librecosta/gofurry/services/api/internal/handlers"
 	"github.com/librecosta/gofurry/services/api/internal/middleware"
 	"github.com/redis/go-redis/v9"
 )
 
-func registerURLs(v1 fiber.Router, backgrounds, suggestions, location, weather, cities, nearestCity fiber.Handler, shared *redis.Client, region string) {
+func registerURLs(v1 fiber.Router, backgrounds, suggestions, location, weather, cities, nearestCity fiber.Handler, shared *redis.Client, region string, directory *catalog.Service) {
 	v1.Get("/status", handlers.Status)
 	// Per-client and deployment-wide bounds also cover cache misses/unique queries.
 	limited := func(max int, key func(fiber.Ctx) string) fiber.Handler {
@@ -21,6 +22,18 @@ func registerURLs(v1 fiber.Router, backgrounds, suggestions, location, weather, 
 				return fiber.ErrTooManyRequests
 			},
 		})
+	}
+	for _, route := range []struct {
+		path         string
+		page, detail fiber.Handler
+	}{
+		{"sites", handlers.CatalogPage(directory.SitePage), handlers.CatalogDetail(directory.PublishedSite)},
+		{"games", handlers.CatalogPage(directory.GamePage), handlers.CatalogDetail(directory.PublishedGame)},
+	} {
+		group := v1.Group("/"+route.path, limited(600, func(fiber.Ctx) string { return route.path }),
+			limited(120, func(c fiber.Ctx) string { return c.IP() }), middleware.RedisLimit(shared, region, route.path, 600, 120))
+		group.Get("/", route.page)
+		group.Get("/:publicID", route.detail)
 	}
 	publicBackgrounds := v1.Group("/start/backgrounds", limited(600, func(fiber.Ctx) string { return "backgrounds" }), limited(120, func(c fiber.Ctx) string { return c.IP() }))
 	publicBackgrounds.Get("/", backgrounds)

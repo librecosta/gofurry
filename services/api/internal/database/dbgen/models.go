@@ -9,6 +9,61 @@ import (
 	"uuid"
 )
 
+type Game struct {
+	ID          uuid.UUID          `json:"id"`
+	PublicID    string             `json:"public_id"`
+	Slug        string             `json:"slug"`
+	Status      string             `json:"status"`
+	Revision    int64              `json:"revision"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+	PublishedAt pgtype.Timestamptz `json:"published_at"`
+	ArchivedAt  pgtype.Timestamptz `json:"archived_at"`
+}
+
+type GameLocalization struct {
+	GameID  uuid.UUID `json:"game_id"`
+	Locale  string    `json:"locale"`
+	Name    string    `json:"name"`
+	Summary string    `json:"summary"`
+}
+
+type GameSource struct {
+	ID           uuid.UUID `json:"id"`
+	GameID       uuid.UUID `json:"game_id"`
+	PlatformCode string    `json:"platform_code"`
+	ExternalKey  string    `json:"external_key"`
+	SourceUrl    string    `json:"source_url"`
+	Active       bool      `json:"active"`
+}
+
+type Site struct {
+	ID          uuid.UUID          `json:"id"`
+	PublicID    string             `json:"public_id"`
+	Slug        string             `json:"slug"`
+	Status      string             `json:"status"`
+	Revision    int64              `json:"revision"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+	PublishedAt pgtype.Timestamptz `json:"published_at"`
+	ArchivedAt  pgtype.Timestamptz `json:"archived_at"`
+}
+
+type SiteAddress struct {
+	ID     uuid.UUID `json:"id"`
+	SiteID uuid.UUID `json:"site_id"`
+	Url    string    `json:"url"`
+	Kind   string    `json:"kind"`
+	Active bool      `json:"active"`
+}
+
+type SiteLocalization struct {
+	SiteID  uuid.UUID `json:"site_id"`
+	Locale  string    `json:"locale"`
+	Name    string    `json:"name"`
+	Summary string    `json:"summary"`
+}
+
 type StartWallpaper struct {
 	ID            uuid.UUID          `json:"id"`
 	Title         string             `json:"title"`

@@ -19,6 +19,7 @@ services:
       NODE_ENV: production
       WEB_REGION: ${WEB_REGION:-CN}
       WEB_API_BASE_URL: http://api:8080
+      WEB_PUBLIC_ORIGIN: ${WEB_PUBLIC_ORIGIN:-}
     logging: *logging
     stop_grace_period: 20s
   api:
