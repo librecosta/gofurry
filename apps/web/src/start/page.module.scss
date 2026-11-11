@@ -34,11 +34,16 @@
     height: auto;
     padding-bottom: 20px;
     > [data-start-search] { z-index: 1; }
+    @media (max-height: 399px) {
+      padding-top: 64px;
+      padding-bottom: 4px;
+    }
   }
 
   .viewport > [data-start-filing] {
     position: relative;
     inset: auto;
     margin: 0 12px max(12px, env(safe-area-inset-bottom));
+    @media (max-height: 399px) { margin-bottom: max(8px, env(safe-area-inset-bottom)); }
   }
 }

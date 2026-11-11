@@ -125,8 +125,10 @@ function CategoryRail({ selected, select }: { selected: Category; select: (id: C
         <motion.path data-widget-category-preview className={styles.previewHook} initial={false}
           animate={{ d: hookPath(previewY ?? activeY, true), opacity: previewY === undefined ? 0 : 1 }}
           transition={{ d: position, opacity: { ...timing, duration: timing.duration ? 0.16 : 0 } }} />
-        <motion.path data-widget-category-active className={styles.activeHook} initial={false}
-          animate={{ d: hookPath(activeY) }} transition={position} />
+        {timing.duration
+          ? <motion.path data-widget-category-active className={styles.activeHook} initial={false}
+            animate={{ d: hookPath(activeY) }} transition={position} />
+          : <path data-widget-category-active className={styles.activeHook} d={hookPath(activeY)} />}
       </>}
     </svg>
     {categories.map((id, index) => <button key={id} type="button" className={styles.category}

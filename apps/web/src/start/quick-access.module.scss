@@ -7,6 +7,7 @@
   gap: 12px;
   min-height: 78px;
   padding-block: 8px;
+  @media (max-height: 399px) { padding-block: 6px; }
   width: max-content;
   margin-inline: auto;
   @media (max-width: 767px) { gap: 10px; }

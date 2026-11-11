@@ -375,6 +375,15 @@ test('start: system theme is painted by SSR CSS before JS and stays synchronized
     await expect(ssr.getByRole('search')).toHaveCSS('background-color', colorScheme === 'dark' ? 'rgba(25, 30, 38, 0.36)' : 'rgba(250, 251, 253, 0.4)')
     await context.close()
   }
+  // This suite starts the production Web without a Go API. Provide the neutral
+  // weather response and use the real local no-wallpaper preference.
+  await page.route('**/api/v1/start/weather?*', route => route.fulfill({
+    headers: { 'X-GoFurry-Region': region, 'X-GoFurry-Content-Mode': 'SFW' },
+    json: { state: 'unavailable', location: null, weather: null },
+  }))
+  await page.addInitScript(region => {
+    localStorage.setItem(`gf-wallpaper:${region}`, JSON.stringify({ version: 1, source: 'official', mode: 'off' }))
+  }, region)
   const errors: string[] = []
   page.on('pageerror', e => errors.push(e.message)); page.on('console', e => { if (e.type() === 'error') errors.push(e.text()) })
   await page.emulateMedia({ colorScheme: 'dark' }); await english(page)
@@ -716,7 +725,9 @@ test('start: cold menu fonts are fetched with SSR, not on first open', async ({ 
     ] as const){
       for(let repeat=0;repeat<2;repeat++){
         await page.locator(trigger).click()
-        const first=await fonts(text),initial=await page.locator(text).evaluate(el=>({font:getComputedStyle(el).font,width:el.getBoundingClientRect().width}))
+        const label = page.locator(text)
+        await label.waitFor({ state: 'visible' })
+        const first=await fonts(text),initial=await label.evaluate(el=>({font:getComputedStyle(el).font,width:el.getBoundingClientRect().width}))
         expect(first.length).toBeGreaterThan(0);expect(first.every(f=>f.isCustomFont)).toBe(true)
         await expect(page.locator(selector)).toHaveCSS('opacity','1')
         expect(await fonts(text)).toEqual(first)

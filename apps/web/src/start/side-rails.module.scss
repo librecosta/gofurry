@@ -69,10 +69,12 @@
     display: grid;
     gap: 10px;
     margin-block-start: 18px;
+    @media (max-height: 399px) { margin-block-start: 8px; gap: 4px; }
   }
 
   .rail {
     --rail-size: 44px;
+    @media (max-height: 399px) { --rail-size: 32px; }
     position: static;
     flex-direction: row;
     flex-wrap: nowrap;

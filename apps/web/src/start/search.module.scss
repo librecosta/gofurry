@@ -17,7 +17,7 @@
   width: 100%;
   max-width: 500px;
   margin-bottom: 12px;
-  @media (max-width: 639px) { margin-bottom: 8px; }
+  @media (max-width: 639px), (max-height: 399px) { margin-bottom: 8px; }
 }
 
 .categoryTrack {
@@ -25,6 +25,7 @@
   max-width: 500px;
   overflow-x: auto;
   padding-block: 10px;
+  @media (max-height: 399px) { padding-block: 6px; }
   scrollbar-width: none;
   overscroll-behavior-x: contain;
   &::-webkit-scrollbar {
