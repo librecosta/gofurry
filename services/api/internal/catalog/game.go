@@ -56,6 +56,9 @@ func (s *Service) EditGame(ctx context.Context, id uuid.UUID, revision int64, in
 				return row, err
 			}
 		}
+		if err = q.CloseRemovedGameBindings(ctx, &id); err != nil {
+			return row, err
+		}
 		return q.UpdateGame(ctx, dbgen.UpdateGameParams{ID: id, Slug: in.Slug})
 	})
 }

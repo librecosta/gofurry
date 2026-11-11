@@ -55,6 +55,12 @@ tasks:
     desc: Verify Site/Game against disposable PostgreSQL 18 CN/INTL databases and built Web
     cmds:
       - node scripts/check-catalog.mjs
+  check:collection:
+    desc: Verify GoFurry and pinned Harvest V0.1-D against separate disposable PostgreSQL 18 databases
+    vars:
+      HARVEST_SOURCE: '{{default (print .ROOT_DIR "/../harvest") .HARVEST_SOURCE}}'
+    cmds:
+      - go -C services/api test -tags=integration ./internal/collection -run '^TestCollectionHarvestD$' -count=1 -timeout=8m -v -args -harvest-source "{{.HARVEST_SOURCE}}"
   check:wallpapers:
     cmds:
       - go -C services/api test ./internal/wallpaper ./internal/management ./internal/storage ./internal/platform

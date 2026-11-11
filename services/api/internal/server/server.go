@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/librecosta/gofurry/services/api/internal/catalog"
 	citycatalog "github.com/librecosta/gofurry/services/api/internal/cities"
+	"github.com/librecosta/gofurry/services/api/internal/collection"
 	"github.com/librecosta/gofurry/services/api/internal/database"
 	"github.com/librecosta/gofurry/services/api/internal/geoip"
 	"github.com/librecosta/gofurry/services/api/internal/handlers"
@@ -132,19 +133,54 @@ func New(logger zerolog.Logger, cfg platform.Config) *Server {
 		}
 	}
 	routers.Register(s.App, s.ready.Load, handlers.Backgrounds(s.Wallpapers), handlers.Suggestions(suggestions, logger), handlers.Location(cities), handlers.Weather(cities, weatherService, cityIndex), handlers.Cities(cityIndex), handlers.NearestCity(cityIndex), shared, cfg.Deployment.Region, catalog.New(pool))
+	collectionCtx, stopCollection := context.WithCancel(context.Background())
+	var collector *collection.Service
+	var collectionPool *pgxpool.Pool
+	if cfg.Harvest != nil && pool != nil {
+		pc := pool.Config()
+		// A pinned advisory-lock connection cannot consume the public pool's
+		// last slot during a slow remote snapshot.
+		pc.MinConns, pc.MaxConns = 0, 1
+		pc.ConnConfig.RuntimeParams["application_name"] = "gofurry-collection"
+		var err error
+		collectionPool, err = pgxpool.NewWithConfig(context.Background(), pc)
+		if err != nil {
+			logger.Warn().Msg("Harvest collection pool unavailable")
+		} else {
+			collector = collection.New(collectionPool, *cfg.Harvest)
+		}
+	}
+	var runCollection sync.Once
+	var collectionWG sync.WaitGroup
 	s.App.Hooks().OnListen(func(data fiber.ListenData) error {
+		if collector != nil {
+			runCollection.Do(func() {
+				collectionWG.Go(func() {
+					collector.Run(collectionCtx, func(code string) {
+						logger.Warn().Str("reason", code).Msg("Harvest collection deferred")
+					})
+				})
+			})
+		}
 		s.ready.Store(true)
 		logger.Info().Str("host", data.Host).Str("port", data.Port).Msg("listening")
 		return nil
 	})
 	s.App.Hooks().OnPreShutdown(func() error {
 		s.ready.Store(false)
+		stopCollection()
 		logger.Info().Msg("draining")
 		return nil
 	})
 	var once sync.Once
 	s.close = func() {
 		once.Do(func() {
+			stopCollection()
+			collectionWG.Wait()
+			if collector != nil {
+				collector.Close()
+				collectionPool.Close()
+			}
 			suggestions.Close()
 			weatherService.Close()
 			if shared != nil {

@@ -10,6 +10,27 @@ permissions:
   contents: read
 
 jobs:
+  collection:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          repository: librecosta/harvest
+          ref: 80847f575486468859c1d036ee7dd351a7ef5333
+          path: .local/harvest-fixture
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: services/api/go.mod
+          cache-dependency-path: |
+            services/api/go.sum
+            .local/harvest-fixture/go.sum
+      - uses: go-task/setup-task@70f2430ad412f838533de8c0515c749ffb2b8bd3 # v1
+        with:
+          version: '3.53.1'
+      - run: task check:collection HARVEST_SOURCE="${{ github.workspace }}/.local/harvest-fixture"
   check:
     runs-on: ubuntu-latest
     timeout-minutes: 20

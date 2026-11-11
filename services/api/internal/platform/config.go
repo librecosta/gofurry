@@ -32,6 +32,7 @@ type Config struct {
 	Redis             *RedisConfig             `mapstructure:"redis"`
 	Database          *DatabaseConfig          `mapstructure:"database"`
 	Management        *ManagementConfig        `mapstructure:"management"`
+	Harvest           *HarvestConfig           `mapstructure:"harvest" json:"-"`
 }
 
 type RedisConfig struct {
@@ -116,6 +117,9 @@ func LoadConfig(path string) (Config, error) {
 	}
 	if cfg.Deployment.Region != "CN" && cfg.Deployment.Region != "INTL" {
 		return cfg, fmt.Errorf("deployment.region must be CN or INTL")
+	}
+	if err := cfg.validateHarvest(); err != nil {
+		return cfg, err
 	}
 	if cfg.Logging.SlowRequest <= 0 {
 		return cfg, fmt.Errorf("logging.slow_request must be a positive duration")

@@ -70,11 +70,11 @@ func TestExplicitMigrationOnly(t *testing.T) {
 		t.Fatal(e)
 	}
 	defer func() {
-		if _, e := pool.Exec(context.Background(), "DROP TABLE game_sources,game_localizations,games,site_addresses,site_localizations,sites,wallpaper_audit_logs,start_wallpapers,goose_db_version; DROP FUNCTION preserve_catalog_identity()"); e != nil {
+		if _, e := pool.Exec(context.Background(), "DROP TABLE collection_sources,collection_bindings,collection_plans,collection_plan_bindings,collection_consumer,collection_gaps,collection_current,site_evidence_changes,site_daily_coverage,game_evidence_news,game_evidence_players,game_sources,game_localizations,games,site_addresses,site_localizations,sites,wallpaper_audit_logs,start_wallpapers,goose_db_version; DROP FUNCTION preserve_catalog_identity()"); e != nil {
 			t.Error("isolated test cleanup failed")
 		}
 	}()
-	if count() != 9 {
+	if count() != 20 {
 		t.Fatal("wrong migrated schema count")
 	}
 }

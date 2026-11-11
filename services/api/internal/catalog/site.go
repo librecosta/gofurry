@@ -55,6 +55,9 @@ func (s *Service) EditSite(ctx context.Context, id uuid.UUID, revision int64, in
 				return row, err
 			}
 		}
+		if err = q.CloseRemovedSiteBindings(ctx, &id); err != nil {
+			return row, err
+		}
 		return q.UpdateSite(ctx, dbgen.UpdateSiteParams{ID: id, Slug: in.Slug})
 	})
 }

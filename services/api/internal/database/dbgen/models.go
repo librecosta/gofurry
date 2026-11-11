@@ -9,6 +9,93 @@ import (
 	"uuid"
 )
 
+type CollectionBinding struct {
+	ID             uuid.UUID          `json:"id"`
+	SourceID       uuid.UUID          `json:"source_id"`
+	ResourceType   string             `json:"resource_type"`
+	SiteID         *uuid.UUID         `json:"site_id"`
+	GameID         *uuid.UUID         `json:"game_id"`
+	AddressID      *uuid.UUID         `json:"address_id"`
+	GameSourceID   *uuid.UUID         `json:"game_source_id"`
+	Purpose        string             `json:"purpose"`
+	EffectiveFrom  pgtype.Timestamptz `json:"effective_from"`
+	EffectiveUntil pgtype.Timestamptz `json:"effective_until"`
+}
+
+type CollectionConsumer struct {
+	Namespace  string             `json:"namespace"`
+	ConsumerID uuid.UUID          `json:"consumer_id"`
+	Generation *uuid.UUID         `json:"generation"`
+	Epoch      *uuid.UUID         `json:"epoch"`
+	Cursor     string             `json:"cursor"`
+	AckPending bool               `json:"ack_pending"`
+	ResetAck   *uuid.UUID         `json:"reset_ack"`
+	SweepAfter string             `json:"sweep_after"`
+	SweepAt    pgtype.Timestamptz `json:"sweep_at"`
+}
+
+type CollectionCurrent struct {
+	SourceID      uuid.UUID          `json:"source_id"`
+	Generation    uuid.UUID          `json:"generation"`
+	Capability    string             `json:"capability"`
+	OutputSchema  int32              `json:"output_schema"`
+	ScopeKey      string             `json:"scope_key"`
+	Scope         []byte             `json:"scope"`
+	Position      int64              `json:"position"`
+	State         string             `json:"state"`
+	ObservationID *uuid.UUID         `json:"observation_id"`
+	ObservedAt    pgtype.Timestamptz `json:"observed_at"`
+	ReceivedAt    pgtype.Timestamptz `json:"received_at"`
+	ConfirmedAt   pgtype.Timestamptz `json:"confirmed_at"`
+	ContentHash   string             `json:"content_hash"`
+	Evidence      string             `json:"evidence"`
+	Ruleset       string             `json:"ruleset"`
+	Data          []byte             `json:"data"`
+	Facts         []byte             `json:"facts"`
+}
+
+type CollectionGap struct {
+	ID          uuid.UUID          `json:"id"`
+	Namespace   string             `json:"namespace"`
+	PriorEpoch  uuid.UUID          `json:"prior_epoch"`
+	PriorCursor string             `json:"prior_cursor"`
+	DetectedAt  pgtype.Timestamptz `json:"detected_at"`
+}
+
+type CollectionPlan struct {
+	ID              uuid.UUID          `json:"id"`
+	SourceID        uuid.UUID          `json:"source_id"`
+	Capability      string             `json:"capability"`
+	RequestSchema   int32              `json:"request_schema"`
+	Params          []byte             `json:"params"`
+	Scope           []byte             `json:"scope"`
+	IntervalSeconds int32              `json:"interval_seconds"`
+	AnchorAt        pgtype.Timestamptz `json:"anchor_at"`
+	Policy          string             `json:"policy"`
+	ScheduleID      *uuid.UUID         `json:"schedule_id"`
+	RemoteRevision  pgtype.Int8        `json:"remote_revision"`
+	RemoteEnabled   pgtype.Bool        `json:"remote_enabled"`
+	PostStarted     bool               `json:"post_started"`
+	CheckedAt       pgtype.Timestamptz `json:"checked_at"`
+}
+
+type CollectionPlanBinding struct {
+	PlanID     uuid.UUID          `json:"plan_id"`
+	BindingID  uuid.UUID          `json:"binding_id"`
+	SourceID   uuid.UUID          `json:"source_id"`
+	AttachedAt pgtype.Timestamptz `json:"attached_at"`
+}
+
+type CollectionSource struct {
+	ID           uuid.UUID          `json:"id"`
+	Namespace    string             `json:"namespace"`
+	Provider     string             `json:"provider"`
+	ResourceType string             `json:"resource_type"`
+	ExternalKey  string             `json:"external_key"`
+	TargetID     *uuid.UUID         `json:"target_id"`
+	CheckedAt    pgtype.Timestamptz `json:"checked_at"`
+}
+
 type Game struct {
 	ID          uuid.UUID          `json:"id"`
 	PublicID    string             `json:"public_id"`
@@ -19,6 +106,25 @@ type Game struct {
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 	PublishedAt pgtype.Timestamptz `json:"published_at"`
 	ArchivedAt  pgtype.Timestamptz `json:"archived_at"`
+}
+
+type GameEvidenceNews struct {
+	SourceID      uuid.UUID          `json:"source_id"`
+	ScopeKey      string             `json:"scope_key"`
+	Gid           string             `json:"gid"`
+	PublishedAt   pgtype.Timestamptz `json:"published_at"`
+	ObservedAt    pgtype.Timestamptz `json:"observed_at"`
+	ObservationID uuid.UUID          `json:"observation_id"`
+	Value         []byte             `json:"value"`
+}
+
+type GameEvidencePlayer struct {
+	SourceID      uuid.UUID          `json:"source_id"`
+	ScopeKey      string             `json:"scope_key"`
+	Bucket        pgtype.Timestamptz `json:"bucket"`
+	ObservedAt    pgtype.Timestamptz `json:"observed_at"`
+	ObservationID uuid.UUID          `json:"observation_id"`
+	Players       int64              `json:"players"`
 }
 
 type GameLocalization struct {
@@ -55,6 +161,44 @@ type SiteAddress struct {
 	Url    string    `json:"url"`
 	Kind   string    `json:"kind"`
 	Active bool      `json:"active"`
+}
+
+type SiteDailyCoverage struct {
+	SiteID        uuid.UUID          `json:"site_id"`
+	SourceID      uuid.UUID          `json:"source_id"`
+	BindingID     uuid.UUID          `json:"binding_id"`
+	Capability    string             `json:"capability"`
+	OutputSchema  int32              `json:"output_schema"`
+	ScopeKey      string             `json:"scope_key"`
+	UtcDay        pgtype.Date        `json:"utc_day"`
+	ConfirmedAt   pgtype.Timestamptz `json:"confirmed_at"`
+	EvidenceState string             `json:"evidence_state"`
+	ObservationID uuid.UUID          `json:"observation_id"`
+}
+
+type SiteEvidenceChange struct {
+	ID                  uuid.UUID          `json:"id"`
+	SiteID              uuid.UUID          `json:"site_id"`
+	BindingID           uuid.UUID          `json:"binding_id"`
+	TargetID            uuid.UUID          `json:"target_id"`
+	Epoch               uuid.UUID          `json:"epoch"`
+	Position            int64              `json:"position"`
+	Capability          string             `json:"capability"`
+	OutputSchema        int32              `json:"output_schema"`
+	ScopeKey            string             `json:"scope_key"`
+	Scope               []byte             `json:"scope"`
+	FactKey             string             `json:"fact_key"`
+	EventKind           string             `json:"event_kind"`
+	PriorValue          []byte             `json:"prior_value"`
+	Value               []byte             `json:"value"`
+	Ruleset             string             `json:"ruleset"`
+	PriorRuleset        string             `json:"prior_ruleset"`
+	SourceObservationID *uuid.UUID         `json:"source_observation_id"`
+	ContentHash         string             `json:"content_hash"`
+	Evidence            string             `json:"evidence"`
+	FirstObservedAt     pgtype.Timestamptz `json:"first_observed_at"`
+	SourceObservedAt    pgtype.Timestamptz `json:"source_observed_at"`
+	ReceivedAt          pgtype.Timestamptz `json:"received_at"`
 }
 
 type SiteLocalization struct {
