@@ -12,6 +12,7 @@ import (
 	"encoding/base64"
 	json "encoding/json/v2"
 	"encoding/pem"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -53,9 +54,13 @@ func run(t *testing.T, dir string, env []string, command string, args ...string)
 	t.Helper()
 	cmd := exec.CommandContext(t.Context(), command, args...)
 	cmd.Dir, cmd.Env = dir, env
-	output, err := cmd.CombinedOutput()
+	output, err := cmd.Output()
 	if err != nil {
-		t.Fatalf("%s %s: %v %s", command, args[0], err, output)
+		var exit *exec.ExitError
+		if errors.As(err, &exit) {
+			t.Fatalf("%s %s: %v %s %s", command, args[0], err, output, exit.Stderr)
+		}
+		t.Fatalf("%s %s: %v", command, args[0], err)
 	}
 	return strings.TrimSpace(string(output))
 }
