@@ -58,6 +58,10 @@ func (s *Service) EditSite(ctx context.Context, id uuid.UUID, revision int64, in
 		if err = q.CloseRemovedSiteBindings(ctx, &id); err != nil {
 			return row, err
 		}
+		// A separate statement sees any rollup committed while the close waited on its binding lock.
+		if err = q.CloseRemovedSiteCoverage(ctx, &id); err != nil {
+			return row, err
+		}
 		return q.UpdateSite(ctx, dbgen.UpdateSiteParams{ID: id, Slug: in.Slug})
 	})
 }

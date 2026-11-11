@@ -98,9 +98,13 @@ func (s *Service) Unbind(ctx context.Context, id uuid.UUID) error {
 	if s.remote.writer == "" || !v7(id) {
 		return ErrIntent
 	}
-	return s.locked(ctx, func(_ *pgx.Conn, q *dbgen.Queries) error {
-		_, err := q.CloseCollectionBinding(ctx, dbgen.CloseCollectionBindingParams{ID: id, Namespace: s.namespace})
-		return err
+	return s.locked(ctx, func(conn *pgx.Conn, _ *dbgen.Queries) error {
+		return write(ctx, conn, func(q *dbgen.Queries) error {
+			if err := q.CloseCollectionBinding(ctx, dbgen.CloseCollectionBindingParams{ID: id, Namespace: s.namespace}); err != nil {
+				return err
+			}
+			return q.CloseCollectionBindingCoverage(ctx, dbgen.CloseCollectionBindingCoverageParams{ID: id, Namespace: s.namespace})
+		})
 	})
 }
 

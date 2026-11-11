@@ -3,6 +3,7 @@
 package yearbook
 
 import (
+	"context"
 	json "encoding/json/v2"
 	"errors"
 	"flag"
@@ -17,6 +18,7 @@ import (
 	"time"
 	"uuid"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/librecosta/gofurry/services/api/internal/database"
 	"github.com/librecosta/gofurry/services/api/internal/database/dbgen"
@@ -314,6 +316,9 @@ func TestYearbookPostgreSQL(t *testing.T) {
 	if archived.SiteAvailable {
 		t.Fatal("archived Site remained linked")
 	}
+	if *yearbookMeasure {
+		measurePreviewCPU(t, svc, annualSite, 2026)
+	}
 	checked(t, svc.Hide(ctx, annualSite, 2026))
 	if _, err := svc.Public(ctx, annualSite, 2026); !errors.Is(err, ErrMissing) {
 		t.Fatal("hidden revision remained publicly readable")
@@ -443,6 +448,41 @@ func checkOtherEvidence(t *testing.T, pool *pgxpool.Pool, svc *Service) {
 		t.Fatal("ownership audit did not identify orphan coverage")
 	}
 	execFixture(t, pool, "UPDATE site_daily_coverage SET binding_id=$1 WHERE site_id=$2", b.binding, missing)
+	rollup, err := pool.Begin(ctx)
+	checked(t, err)
+	defer rollup.Rollback(ctx)
+	_, err = dbgen.New(rollup).CompactSiteCoverage(ctx, dbgen.CompactSiteCoverageParams{
+		BeforeDay: date(svc.now()), AfterDay: date(time.Time{}), BatchSize: 2048,
+	})
+	checked(t, err)
+	closeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	closed := make(chan error, 1)
+	go func() {
+		closed <- pgx.BeginFunc(closeCtx, pool, func(tx pgx.Tx) error {
+			q := dbgen.New(tx)
+			if err := q.CloseCollectionBinding(closeCtx, dbgen.CloseCollectionBindingParams{ID: prior.binding, Namespace: "fixture"}); err != nil {
+				return err
+			}
+			return q.CloseCollectionBindingCoverage(closeCtx, dbgen.CloseCollectionBindingCoverageParams{ID: prior.binding, Namespace: "fixture"})
+		})
+	}()
+	for scalarFixture[int](t, pool, `SELECT count(*) FROM pg_stat_activity WHERE datname=current_database()
+ AND wait_event_type='Lock' AND query LIKE '%name: CloseCollectionBinding :exec%'`) == 0 {
+		select {
+		case err := <-closed:
+			t.Fatalf("binding close did not wait for in-flight compaction: %v", err)
+		case <-closeCtx.Done():
+			t.Fatal("binding close did not reach the compaction lock")
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
+	checked(t, rollup.Commit(ctx))
+	checked(t, <-closed)
+	if n := scalarFixture[int](t, pool, `SELECT count(*) FROM site_monthly_coverage m JOIN collection_bindings b ON m.binding_id=b.id
+ WHERE m.binding_id=$1 AND m.binding_until=b.effective_until`, prior.binding); n == 0 {
+		t.Fatal("closing a previously compacted binding did not preserve the closing date in history")
+	}
 }
 
 func seedPublicYearbook(t *testing.T, pool *pgxpool.Pool) {

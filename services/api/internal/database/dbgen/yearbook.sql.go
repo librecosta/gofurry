@@ -107,15 +107,14 @@ func (q *Queries) AuditYearbookReferences(ctx context.Context) ([]AuditYearbookR
 
 const compactSiteCoverage = `-- name: CompactSiteCoverage :one
 WITH picked AS MATERIALIZED (
- -- Limit the raw, indexed scan before joining provenance. Otherwise a low
- -- selectivity estimate for the provenance predicates can cause a full sort.
+ -- Limit the indexed scan before joining provenance. Group a Site's days
+ -- together so a historical backfill does not rewrite every bitmap each day.
  SELECT d.site_id, d.source_id, d.binding_id, d.capability, d.output_schema, d.scope_key, d.utc_day, d.confirmed_at, d.evidence_state, d.observation_id FROM site_daily_coverage d
  WHERE d.utc_day<$7::date
-  AND (d.utc_day,d.site_id)>=($1::date,$2::uuid)
-  AND (d.utc_day,d.site_id,d.source_id,d.capability,d.output_schema,d.scope_key)>
-      ($1::date,$2::uuid,$3::uuid,
+  AND (d.site_id,d.utc_day,d.source_id,d.capability,d.output_schema,d.scope_key)>
+      ($2::uuid,$1::date,$3::uuid,
        $4::text,$5::integer,$6::text)
- ORDER BY d.utc_day,d.site_id,d.source_id,d.capability,d.output_schema,d.scope_key
+ ORDER BY d.site_id,d.utc_day,d.source_id,d.capability,d.output_schema,d.scope_key
  LIMIT $8 FOR UPDATE OF d SKIP LOCKED
 ), batch AS MATERIALIZED (
  SELECT d.site_id, d.source_id, d.binding_id, d.capability, d.output_schema, d.scope_key, d.utc_day, d.confirmed_at, d.evidence_state, d.observation_id,s.external_key,s.target_id,b.purpose,b.effective_from,b.effective_until,date_trunc('month',d.utc_day::timestamp)::date AS month,
@@ -128,6 +127,9 @@ WITH picked AS MATERIALIZED (
   AND s.resource_type=CASE WHEN d.capability IN ('web.dns','web.rdap') THEN 'domain' ELSE 'origin' END
   AND d.utc_day=(d.confirmed_at AT TIME ZONE 'UTC')::date
   AND d.confirmed_at>=b.effective_from AND (b.effective_until IS NULL OR d.confirmed_at<b.effective_until)
+ -- Coordinate with binding closure so a newly compacted month cannot miss
+ -- the effective-until value the close transaction copies into history.
+ FOR SHARE OF b SKIP LOCKED
 ), merged AS (
  INSERT INTO site_monthly_coverage
  (site_id,binding_id,source_id,target_id,source_key,binding_purpose,binding_from,binding_until,capability,output_schema,scope_key,month,day_mask,first_confirmed_at,last_confirmed_at)
@@ -141,14 +143,18 @@ WITH picked AS MATERIALIZED (
   first_confirmed_at=least(site_monthly_coverage.first_confirmed_at,excluded.first_confirmed_at),
   last_confirmed_at=greatest(site_monthly_coverage.last_confirmed_at,excluded.last_confirmed_at)
  RETURNING site_id,binding_id,source_id,capability,output_schema,scope_key,month,day_mask
-), verified AS (
+), verified AS MATERIALIZED (
+ -- Finish the bitmap check on the bounded batch before the planner can
+ -- join a daily row to all of its Site's monthly groups.
  SELECT a.site_id, a.source_id, a.binding_id, a.capability, a.output_schema, a.scope_key, a.utc_day, a.confirmed_at, a.evidence_state, a.observation_id, a.external_key, a.target_id, a.purpose, a.effective_from, a.effective_until, a.month, a.day_bit FROM batch a JOIN merged m USING (site_id,binding_id,source_id,capability,output_schema,scope_key,month)
  WHERE (m.day_mask&a.day_bit)=a.day_bit
 ), pruned AS (
  DELETE FROM site_daily_coverage d USING verified v
- -- Parameterized index bounds prevent PostgreSQL from reading the entire
- -- daily table to join a small batch against its exact verified row keys.
+ -- Parameterized Site bounds keep deletion on the verified batch's
+ -- indexed range, in addition to the exact row-key comparison.
  WHERE d.utc_day BETWEEN (SELECT min(utc_day) FROM batch) AND (SELECT max(utc_day) FROM batch)
+  AND d.site_id BETWEEN (SELECT site_id FROM batch ORDER BY site_id LIMIT 1)
+                    AND (SELECT site_id FROM batch ORDER BY site_id DESC LIMIT 1)
   AND (d.site_id,d.source_id,d.capability,d.output_schema,d.scope_key,d.utc_day,d.binding_id,d.confirmed_at)
       =(v.site_id,v.source_id,v.capability,v.output_schema,v.scope_key,v.utc_day,v.binding_id,v.confirmed_at)
  RETURNING d.site_id
@@ -164,7 +170,7 @@ SELECT (SELECT count(*) FROM picked)::integer AS scanned,
 FROM (VALUES(1)) AS one(dummy)
 LEFT JOIN LATERAL (
  SELECT utc_day,site_id,source_id,capability,output_schema,scope_key FROM picked
- ORDER BY utc_day DESC,site_id DESC,source_id DESC,capability DESC,output_schema DESC,scope_key DESC LIMIT 1
+ ORDER BY site_id DESC,utc_day DESC,source_id DESC,capability DESC,output_schema DESC,scope_key DESC LIMIT 1
 ) p ON true
 `
 

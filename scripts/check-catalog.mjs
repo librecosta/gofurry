@@ -143,6 +143,15 @@ yearbook:
     })
     await waitFor(() => status(fixture.web + '/readyz', 200), region + ' Web')
   }
+  if (process.env.YEARBOOK_MEASURE === '1') {
+    const workers = () => run('docker', ['exec', container, 'psql', '-XAt', '-U', 'postgres', '-d', 'postgres', '-c',
+      "SELECT datname,state,query_start FROM pg_stat_activity WHERE application_name='gofurry-yearbook' ORDER BY datname"], root, process.env, true)
+    await waitFor(() => workers().split('\n').filter(row => row.includes('|idle|')).length === 2, 'Yearbook maintenance connections')
+    const before = workers()
+    await delay(1500)
+    if (workers() !== before) throw new Error('Yearbook maintenance did work between scheduled runs')
+    console.log('Yearbook idle sample: one idle maintenance connection per deployment, no SQL activity over 1.5 seconds.')
+  }
   run(process.execPath, ['node_modules/@playwright/test/cli.js', 'test', '--config', 'playwright.catalog.config.ts'], webDir, {
     ...process.env, CATALOG_CN_WEB: fixtures.CN.web, CATALOG_INTL_WEB: fixtures.INTL.web,
     CATALOG_CN_API: fixtures.CN.api, CATALOG_INTL_API: fixtures.INTL.api,

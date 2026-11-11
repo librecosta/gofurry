@@ -5,6 +5,7 @@ package yearbook
 import (
 	"fmt"
 	"runtime"
+	"runtime/metrics"
 	"testing"
 	"time"
 
@@ -19,6 +20,25 @@ func sizeFixture(t *testing.T, pool *pgxpool.Pool, name string) (size relationSi
 	return size
 }
 
+func measurePreviewCPU(t *testing.T, svc *Service, id string, year int32) {
+	t.Helper()
+	const n = 100
+	sample := []metrics.Sample{{Name: "/cpu/classes/user:cpu-seconds"}}
+	runtime.GC()
+	metrics.Read(sample)
+	before := sample[0].Value.Float64()
+	start := time.Now()
+	for range n {
+		_, err := svc.Preview(t.Context(), id, year)
+		checked(t, err)
+	}
+	wall := time.Since(start) / n
+	runtime.GC()
+	metrics.Read(sample)
+	t.Logf("generation preview: mean wall=%s, approximate Go user CPU=%s (%d iterations, excludes PostgreSQL CPU)",
+		wall, time.Duration((sample[0].Value.Float64()-before)*float64(time.Second)/n), n)
+}
+
 func measureYearbooks(t *testing.T, pool *pgxpool.Pool) {
 	t.Helper()
 	ctx := t.Context()
@@ -27,6 +47,7 @@ func measureYearbooks(t *testing.T, pool *pgxpool.Pool) {
 	checked(t, err)
 	execFixture(t, pool, "VACUUM (FULL, ANALYZE) site_daily_coverage")
 	for i, sample := range []struct{ sites, scopes int }{{100, 1}, {1000, 1}, {100, 3}, {1000, 3}} {
+		execFixture(t, pool, "VACUUM (FULL, ANALYZE) site_monthly_coverage")
 		baseDaily := sizeFixture(t, pool, "site_daily_coverage")
 		baseMonthly := sizeFixture(t, pool, "site_monthly_coverage")
 		baseEvidence := sizeFixture(t, pool, "site_evidence_changes")
@@ -72,7 +93,7 @@ FROM fixture CROSS JOIN generate_series(0,364) d CROSS JOIN generate_series(1,$4
 		begin = time.Now()
 		var compacted int32
 		for {
-			n, err := svc.Compact(ctx)
+			n, err := svc.compact(ctx)
 			if err != nil {
 				t.Fatalf("sample %d sites x %d scopes: %d committed rows, last call compacted %d: %v", sample.sites, sample.scopes, compacted, n, err)
 			}

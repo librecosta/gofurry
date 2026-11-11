@@ -23,15 +23,26 @@ INSERT INTO collection_bindings (id,source_id,resource_type,game_id,game_source_
 ON CONFLICT (source_id,game_source_id) WHERE effective_until IS NULL AND game_source_id IS NOT NULL DO UPDATE SET purpose=excluded.purpose
 RETURNING *;
 
--- name: CloseCollectionBinding :execrows
+-- name: CloseCollectionBinding :exec
 UPDATE collection_bindings b SET effective_until=transaction_timestamp()
 FROM collection_sources s WHERE b.id=$1 AND b.source_id=s.id AND s.namespace=$2 AND b.effective_until IS NULL;
+
+-- name: CloseCollectionBindingCoverage :exec
+UPDATE site_monthly_coverage m SET binding_until=b.effective_until
+FROM collection_bindings b JOIN collection_sources s ON b.source_id=s.id
+WHERE b.id=$1 AND s.namespace=$2 AND b.effective_until IS NOT NULL
+ AND m.site_id=b.site_id AND m.binding_id=b.id AND m.binding_until IS NULL;
 
 -- name: CloseRemovedSiteBindings :exec
 UPDATE collection_bindings b SET effective_until=transaction_timestamp()
 WHERE b.site_id=$1 AND b.effective_until IS NULL AND NOT EXISTS (
  SELECT 1 FROM site_addresses a WHERE a.id=b.address_id AND a.site_id=b.site_id AND a.active AND (b.resource_type='domain' OR a.kind=b.purpose)
 );
+
+-- name: CloseRemovedSiteCoverage :exec
+UPDATE site_monthly_coverage m SET binding_until=b.effective_until
+FROM collection_bindings b WHERE b.site_id=$1 AND b.effective_until IS NOT NULL
+ AND m.site_id=b.site_id AND m.binding_id=b.id AND m.binding_until IS NULL;
 
 -- name: CloseRemovedGameBindings :exec
 UPDATE collection_bindings b SET effective_until=transaction_timestamp()

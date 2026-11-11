@@ -68,12 +68,18 @@ func (s *Service) reconcile(ctx context.Context, year int32, apply, automatic bo
 	return results, failure
 }
 
-func (s *Service) Compact(ctx context.Context) (total int32, err error) {
+func (s *Service) Compact(ctx context.Context) (int32, error) {
+	total, err := s.compact(ctx)
+	return total, known(err)
+}
+
+func (s *Service) compact(ctx context.Context) (total int32, err error) {
 	if s.pool == nil {
 		return 0, ErrUnavailable
 	}
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
+	started := time.Now()
 	// Retain at least 45 days and wait for the entire month to leave the
 	// retention window. Late B1 confirmations can reappear in the daily table;
 	// the next OR merge consumes them without replacing previously set bits.
@@ -99,10 +105,12 @@ func (s *Service) Compact(ctx context.Context) (total int32, err error) {
 			return nil
 		})
 		if err != nil {
-			return total, known(err)
+			return total, err
 		}
 		total += result.Pruned
-		if result.Scanned < batchSize {
+		// Finish before the hard deadline when there is a large backlog.
+		// Completed batches are durable; the next pass scans the remaining keys.
+		if result.Scanned < batchSize || time.Since(started) >= 22*time.Second {
 			break
 		}
 		args.AfterDay, args.AfterSite, args.AfterSource = result.LastDay, result.LastSite, result.LastSource

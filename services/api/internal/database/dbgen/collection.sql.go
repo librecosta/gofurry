@@ -361,7 +361,7 @@ func (q *Queries) ClearCollectionPost(ctx context.Context, id uuid.UUID) error {
 	return err
 }
 
-const closeCollectionBinding = `-- name: CloseCollectionBinding :execrows
+const closeCollectionBinding = `-- name: CloseCollectionBinding :exec
 UPDATE collection_bindings b SET effective_until=transaction_timestamp()
 FROM collection_sources s WHERE b.id=$1 AND b.source_id=s.id AND s.namespace=$2 AND b.effective_until IS NULL
 `
@@ -371,12 +371,26 @@ type CloseCollectionBindingParams struct {
 	Namespace string    `json:"namespace"`
 }
 
-func (q *Queries) CloseCollectionBinding(ctx context.Context, arg CloseCollectionBindingParams) (int64, error) {
-	result, err := q.db.Exec(ctx, closeCollectionBinding, arg.ID, arg.Namespace)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
+func (q *Queries) CloseCollectionBinding(ctx context.Context, arg CloseCollectionBindingParams) error {
+	_, err := q.db.Exec(ctx, closeCollectionBinding, arg.ID, arg.Namespace)
+	return err
+}
+
+const closeCollectionBindingCoverage = `-- name: CloseCollectionBindingCoverage :exec
+UPDATE site_monthly_coverage m SET binding_until=b.effective_until
+FROM collection_bindings b JOIN collection_sources s ON b.source_id=s.id
+WHERE b.id=$1 AND s.namespace=$2 AND b.effective_until IS NOT NULL
+ AND m.site_id=b.site_id AND m.binding_id=b.id AND m.binding_until IS NULL
+`
+
+type CloseCollectionBindingCoverageParams struct {
+	ID        uuid.UUID `json:"id"`
+	Namespace string    `json:"namespace"`
+}
+
+func (q *Queries) CloseCollectionBindingCoverage(ctx context.Context, arg CloseCollectionBindingCoverageParams) error {
+	_, err := q.db.Exec(ctx, closeCollectionBindingCoverage, arg.ID, arg.Namespace)
+	return err
 }
 
 const closeRemovedGameBindings = `-- name: CloseRemovedGameBindings :exec
@@ -399,6 +413,17 @@ WHERE b.site_id=$1 AND b.effective_until IS NULL AND NOT EXISTS (
 
 func (q *Queries) CloseRemovedSiteBindings(ctx context.Context, siteID *uuid.UUID) error {
 	_, err := q.db.Exec(ctx, closeRemovedSiteBindings, siteID)
+	return err
+}
+
+const closeRemovedSiteCoverage = `-- name: CloseRemovedSiteCoverage :exec
+UPDATE site_monthly_coverage m SET binding_until=b.effective_until
+FROM collection_bindings b WHERE b.site_id=$1 AND b.effective_until IS NOT NULL
+ AND m.site_id=b.site_id AND m.binding_id=b.id AND m.binding_until IS NULL
+`
+
+func (q *Queries) CloseRemovedSiteCoverage(ctx context.Context, siteID *uuid.UUID) error {
+	_, err := q.db.Exec(ctx, closeRemovedSiteCoverage, siteID)
 	return err
 }
 
