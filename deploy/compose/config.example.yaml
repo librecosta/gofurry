@@ -7,3 +7,5 @@ deployment:
 logging:
   slow_request: 1s
 storage: null
+yearbook:
+  enabled: false

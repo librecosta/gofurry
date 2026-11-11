@@ -33,6 +33,11 @@ type Config struct {
 	Database          *DatabaseConfig          `mapstructure:"database"`
 	Management        *ManagementConfig        `mapstructure:"management"`
 	Harvest           *HarvestConfig           `mapstructure:"harvest" json:"-"`
+	Yearbook          *YearbookConfig          `mapstructure:"yearbook"`
+}
+
+type YearbookConfig struct {
+	Enabled bool `mapstructure:"enabled"`
 }
 
 type RedisConfig struct {
@@ -85,6 +90,11 @@ func LoadConfig(path string) (Config, error) {
 	if err := validateWallpaperSource(v); err != nil {
 		return cfg, err
 	}
+	if v.IsSet("yearbook.enabled") {
+		if _, ok := v.Get("yearbook.enabled").(bool); !ok {
+			return cfg, fmt.Errorf("yearbook.enabled must be a YAML boolean")
+		}
+	}
 	if err := v.UnmarshalExact(&cfg); err != nil {
 		return cfg, fmt.Errorf("invalid YAML configuration fields or types")
 	}
@@ -120,6 +130,9 @@ func LoadConfig(path string) (Config, error) {
 	}
 	if err := cfg.validateHarvest(); err != nil {
 		return cfg, err
+	}
+	if cfg.Yearbook != nil && cfg.Yearbook.Enabled && cfg.Database == nil {
+		return cfg, fmt.Errorf("yearbook.enabled requires a regional database")
 	}
 	if cfg.Logging.SlowRequest <= 0 {
 		return cfg, fmt.Errorf("logging.slow_request must be a positive duration")

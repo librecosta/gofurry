@@ -208,6 +208,49 @@ type SiteLocalization struct {
 	Summary string    `json:"summary"`
 }
 
+type SiteMonthlyCoverage struct {
+	SiteID           uuid.UUID          `json:"site_id"`
+	BindingID        uuid.UUID          `json:"binding_id"`
+	SourceID         uuid.UUID          `json:"source_id"`
+	TargetID         uuid.UUID          `json:"target_id"`
+	SourceKey        string             `json:"source_key"`
+	BindingPurpose   string             `json:"binding_purpose"`
+	BindingFrom      pgtype.Timestamptz `json:"binding_from"`
+	BindingUntil     pgtype.Timestamptz `json:"binding_until"`
+	Capability       string             `json:"capability"`
+	OutputSchema     int32              `json:"output_schema"`
+	ScopeKey         string             `json:"scope_key"`
+	Month            pgtype.Date        `json:"month"`
+	DayMask          int64              `json:"day_mask"`
+	FirstConfirmedAt pgtype.Timestamptz `json:"first_confirmed_at"`
+	LastConfirmedAt  pgtype.Timestamptz `json:"last_confirmed_at"`
+}
+
+type SiteYearbook struct {
+	SiteID            uuid.UUID          `json:"site_id"`
+	Year              int32              `json:"year"`
+	PublicID          string             `json:"public_id"`
+	StoredSlug        string             `json:"stored_slug"`
+	Status            string             `json:"status"`
+	LatestRevision    int32              `json:"latest_revision"`
+	PublishedRevision pgtype.Int4        `json:"published_revision"`
+	PublishedDigest   pgtype.Text        `json:"published_digest"`
+	PublishedAt       pgtype.Timestamptz `json:"published_at"`
+	CheckedAt         pgtype.Timestamptz `json:"checked_at"`
+}
+
+type SiteYearbookRevision struct {
+	SiteID           uuid.UUID          `json:"site_id"`
+	Year             int32              `json:"year"`
+	Revision         int32              `json:"revision"`
+	Digest           string             `json:"digest"`
+	Algorithm        int32              `json:"algorithm"`
+	Document         []byte             `json:"document"`
+	InputAsOf        pgtype.Timestamptz `json:"input_as_of"`
+	GeneratedAt      pgtype.Timestamptz `json:"generated_at"`
+	FirstPublishedAt pgtype.Timestamptz `json:"first_published_at"`
+}
+
 type StartWallpaper struct {
 	ID            uuid.UUID          `json:"id"`
 	Title         string             `json:"title"`

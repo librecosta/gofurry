@@ -31,6 +31,7 @@ func newCommand() *cobra.Command {
 	cmd.AddCommand(backgroundImportCommand(&cfg))
 	cmd.AddCommand(migrateCommand(&cfg))
 	cmd.AddCommand(collectionCommand(&cfg))
+	cmd.AddCommand(yearbookCommand(&cfg))
 	cmd.AddCommand(wallpaperImportCommand(&cfg))
 	cmd.AddCommand(&cobra.Command{
 		Use: "healthcheck", Short: "Probe the listener configured by --config", Args: cobra.NoArgs,

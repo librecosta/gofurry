@@ -222,7 +222,11 @@ func (s *Service) AddPlan(ctx context.Context, binding uuid.UUID, p Plan) (uuid.
 				return err
 			}
 			id = plan.ID
-			return q.AttachCollectionPlan(ctx, dbgen.AttachCollectionPlanParams{PlanID: plan.ID, BindingID: binding, SourceID: row.SourceID})
+			owned, err := q.AttachCollectionPlan(ctx, dbgen.AttachCollectionPlanParams{PlanID: plan.ID, BindingID: binding, SourceID: row.SourceID})
+			if err == nil && !owned {
+				return ErrIntent
+			}
+			return err
 		})
 	})
 	return id, err

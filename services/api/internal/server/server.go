@@ -25,6 +25,7 @@ import (
 	"github.com/librecosta/gofurry/services/api/internal/storage"
 	"github.com/librecosta/gofurry/services/api/internal/wallpaper"
 	"github.com/librecosta/gofurry/services/api/internal/weather"
+	"github.com/librecosta/gofurry/services/api/internal/yearbook"
 	"github.com/librecosta/gofurry/services/api/routers"
 	"github.com/rs/zerolog"
 )
@@ -132,7 +133,7 @@ func New(logger zerolog.Logger, cfg platform.Config) *Server {
 			logger.Info().Msg("weather city catalog loaded")
 		}
 	}
-	routers.Register(s.App, s.ready.Load, handlers.Backgrounds(s.Wallpapers), handlers.Suggestions(suggestions, logger), handlers.Location(cities), handlers.Weather(cities, weatherService, cityIndex), handlers.Cities(cityIndex), handlers.NearestCity(cityIndex), shared, cfg.Deployment.Region, catalog.New(pool))
+	routers.Register(s.App, s.ready.Load, handlers.Backgrounds(s.Wallpapers), handlers.Suggestions(suggestions, logger), handlers.Location(cities), handlers.Weather(cities, weatherService, cityIndex), handlers.Cities(cityIndex), handlers.NearestCity(cityIndex), shared, cfg.Deployment.Region, catalog.New(pool), yearbook.New(pool))
 	collectionCtx, stopCollection := context.WithCancel(context.Background())
 	var collector *collection.Service
 	var collectionPool *pgxpool.Pool
@@ -150,18 +151,36 @@ func New(logger zerolog.Logger, cfg platform.Config) *Server {
 			collector = collection.New(collectionPool, *cfg.Harvest)
 		}
 	}
+	var yearbookPool *pgxpool.Pool
+	if cfg.Yearbook != nil && cfg.Yearbook.Enabled && pool != nil {
+		pc := pool.Config()
+		pc.MinConns, pc.MaxConns = 0, 1
+		pc.ConnConfig.RuntimeParams["application_name"] = "gofurry-yearbook"
+		var err error
+		yearbookPool, err = pgxpool.NewWithConfig(context.Background(), pc)
+		if err != nil {
+			logger.Warn().Msg("Yearbook maintenance pool unavailable")
+		}
+	}
 	var runCollection sync.Once
 	var collectionWG sync.WaitGroup
 	s.App.Hooks().OnListen(func(data fiber.ListenData) error {
-		if collector != nil {
-			runCollection.Do(func() {
+		runCollection.Do(func() {
+			if collector != nil {
 				collectionWG.Go(func() {
 					collector.Run(collectionCtx, func(code string) {
 						logger.Warn().Str("reason", code).Msg("Harvest collection deferred")
 					})
 				})
-			})
-		}
+			}
+			if yearbookPool != nil {
+				collectionWG.Go(func() {
+					yearbook.New(yearbookPool).Run(collectionCtx, func(err error) {
+						logger.Warn().Str("reason", err.Error()).Msg("Yearbook maintenance deferred")
+					})
+				})
+			}
+		})
 		s.ready.Store(true)
 		logger.Info().Str("host", data.Host).Str("port", data.Port).Msg("listening")
 		return nil
@@ -180,6 +199,9 @@ func New(logger zerolog.Logger, cfg platform.Config) *Server {
 			if collector != nil {
 				collector.Close()
 				collectionPool.Close()
+			}
+			if yearbookPool != nil {
+				yearbookPool.Close()
 			}
 			suggestions.Close()
 			weatherService.Close()

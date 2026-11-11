@@ -1,12 +1,13 @@
 import { createServerFn } from '@tanstack/react-start'
-import { getRequestUrl, setResponseStatus } from '@tanstack/react-start/server'
+import { setResponseStatus } from '@tanstack/react-start/server'
 import type { Region } from '../preferences'
+import { publicOrigin } from './public-origin.server'
 
 export type Kind = 'sites' | 'games'
 export type Localized = { locale: 'zh' | 'en'; name: string; summary?: string }
 type Identity = { public_id: string; slug: string; localizations: Localized[] }
 export type Detail =
-  | (Identity & { kind: 'sites'; addresses: { kind: 'primary' | 'alternate'; url: string }[] })
+  | (Identity & { kind: 'sites'; addresses: { kind: 'primary' | 'alternate'; url: string }[]; yearbooks: number[] })
   | (Identity & { kind: 'games'; sources: { platform_code: string; external_key: string; source_url?: string }[] })
 type Lookup = { kind: Kind; publicId: string; region: Region }
 type Result = { state: 'missing' } | { state: 'unavailable' } | { state: 'published'; detail: Detail; origin: string }
@@ -15,16 +16,6 @@ const publicID = /^[0123456789abcdefghjkmnpqrstvwxyz]{16}$/
 const slug = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
 
 export function isPublicID(value: string) { return value.length === 16 && publicID.test(value) }
-
-function publicOrigin() {
-  const configured = process.env.WEB_PUBLIC_ORIGIN
-  const url = configured ? new URL(configured) : getRequestUrl({ xForwardedHost: false, xForwardedProto: false })
-  if (url.username || url.password || !['http:', 'https:'].includes(url.protocol)) throw new Error('Invalid public origin')
-  if (configured ? (url.pathname !== '/' || url.search || url.hash) : !['127.0.0.1', '[::1]', 'localhost'].includes(url.hostname)) {
-    throw new Error('An explicit WEB_PUBLIC_ORIGIN is required')
-  }
-  return url.origin
-}
 
 function webAddress(value: unknown): value is string {
   if (typeof value !== 'string' || value.length > 2048) return false
@@ -51,7 +42,7 @@ function decode(input: unknown, kind: Kind, id: string): Detail {
       return { kind: value.kind as 'primary' | 'alternate', url: value.url }
     })
     if (addresses.filter(value => value.kind === 'primary').length !== 1) throw new Error('Missing primary address')
-    return { ...identity, kind, addresses }
+    return { ...identity, kind, addresses, yearbooks: [] }
   }
   if (!Array.isArray(item.sources) || item.sources.length > 16) throw new Error('Invalid API sources')
   return { ...identity, kind, sources: item.sources.map(value => {
@@ -80,9 +71,27 @@ export const readCatalogDetail = createServerFn({ method: 'GET' }).validator((in
       if (response.status === 404) return { state: 'missing' }
       throw new Error('Catalog API unavailable')
     }
-    return { state: 'published', detail: decode(await response.json(), kind, publicId), origin: publicOrigin() }
+    const detail = decode(await response.json(), kind, publicId)
+    if (detail.kind === 'sites') detail.yearbooks = await publishedYears(url, deployment)
+    return { state: 'published', detail, origin: publicOrigin() }
   } catch {
     setResponseStatus(503)
     return { state: 'unavailable' }
   }
 })
+
+async function publishedYears(detailURL: URL, deployment: string): Promise<number[]> {
+  try {
+    const response = await fetch(new URL(detailURL.pathname + '/yearbooks', detailURL), { signal: AbortSignal.timeout(500), redirect: 'error' })
+    if (!response.ok || response.headers.get('x-gofurry-region') !== deployment ||
+      response.headers.get('x-gofurry-content-mode') !== 'SFW') {
+      await response.body?.cancel()
+      return []
+    }
+    const data = await response.json()
+    if (!Array.isArray(data?.years) || data.years.length > 64) return []
+    return data.years.filter((year: unknown): year is number => typeof year === 'number' && Number.isInteger(year) && year >= 2000 && year <= 9998)
+  } catch {
+    return []
+  }
+}

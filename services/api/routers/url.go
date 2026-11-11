@@ -8,11 +8,14 @@ import (
 	"github.com/librecosta/gofurry/services/api/internal/catalog"
 	"github.com/librecosta/gofurry/services/api/internal/handlers"
 	"github.com/librecosta/gofurry/services/api/internal/middleware"
+	"github.com/librecosta/gofurry/services/api/internal/yearbook"
 	"github.com/redis/go-redis/v9"
 )
 
-func registerURLs(v1 fiber.Router, backgrounds, suggestions, location, weather, cities, nearestCity fiber.Handler, shared *redis.Client, region string, directory *catalog.Service) {
+func registerURLs(v1 fiber.Router, backgrounds, suggestions, location, weather, cities, nearestCity fiber.Handler, shared *redis.Client, region string, directory *catalog.Service, yearbooks *yearbook.Service) {
 	v1.Get("/status", handlers.Status)
+	v1.Get("/sites/:publicID/yearbooks", handlers.Yearbooks(yearbooks))
+	v1.Get("/sites/:publicID/yearbooks/:year", handlers.Yearbook(yearbooks))
 	// Per-client and deployment-wide bounds also cover cache misses/unique queries.
 	limited := func(max int, key func(fiber.Ctx) string) fiber.Handler {
 		return limiter.New(limiter.Config{Max: max, Expiration: time.Minute, KeyGenerator: key,

@@ -30,17 +30,17 @@ FROM collection_sources s WHERE b.id=$1 AND b.source_id=s.id AND s.namespace=$2 
 -- name: CloseRemovedSiteBindings :exec
 UPDATE collection_bindings b SET effective_until=transaction_timestamp()
 WHERE b.site_id=$1 AND b.effective_until IS NULL AND NOT EXISTS (
- SELECT 1 FROM site_addresses a WHERE a.id=b.address_id AND a.active AND (b.resource_type='domain' OR a.kind=b.purpose)
+ SELECT 1 FROM site_addresses a WHERE a.id=b.address_id AND a.site_id=b.site_id AND a.active AND (b.resource_type='domain' OR a.kind=b.purpose)
 );
 
 -- name: CloseRemovedGameBindings :exec
 UPDATE collection_bindings b SET effective_until=transaction_timestamp()
 WHERE b.game_id=$1 AND b.effective_until IS NULL
-AND NOT EXISTS (SELECT 1 FROM game_sources g WHERE g.id=b.game_source_id AND g.active);
+AND NOT EXISTS (SELECT 1 FROM game_sources g WHERE g.id=b.game_source_id AND g.game_id=b.game_id AND g.platform_code='steam' AND g.active);
 
 -- name: OpenCollectionBinding :one
 SELECT b.id,b.source_id,b.resource_type,s.external_key FROM collection_bindings b
-JOIN collection_sources s ON s.id=b.source_id
+JOIN collection_sources s ON s.id=b.source_id AND s.resource_type=b.resource_type
 WHERE b.id=$1 AND s.namespace=$2 AND b.effective_until IS NULL FOR UPDATE OF b;
 
 -- name: SaveCollectionPlan :one
@@ -49,9 +49,16 @@ VALUES ($1,$2,$3,1,$4,$5,$6,$7,$8)
 ON CONFLICT (source_id,capability,request_schema,params,scope,interval_seconds,anchor_at,policy)
 DO UPDATE SET checked_at=NULL RETURNING *;
 
--- name: AttachCollectionPlan :exec
-INSERT INTO collection_plan_bindings (plan_id,binding_id,source_id) VALUES ($1,$2,$3)
-ON CONFLICT (plan_id,binding_id) DO NOTHING;
+-- name: AttachCollectionPlan :one
+WITH owned AS MATERIALIZED (
+ SELECT p.id AS plan_id,b.id AS binding_id,p.source_id
+ FROM collection_plans p JOIN collection_bindings b ON b.source_id=p.source_id AND b.effective_until IS NULL
+ WHERE p.id=sqlc.arg(plan_id) AND b.id=sqlc.arg(binding_id) AND p.source_id=sqlc.arg(source_id)
+), attached AS (
+ INSERT INTO collection_plan_bindings (plan_id,binding_id,source_id)
+ SELECT plan_id,binding_id,source_id FROM owned ON CONFLICT (plan_id,binding_id) DO NOTHING
+)
+SELECT EXISTS (SELECT 1 FROM owned)::boolean;
 
 -- name: PendingCollectionSources :many
 SELECT s.* FROM collection_sources s WHERE s.namespace=$1 AND s.target_id IS NULL
@@ -67,12 +74,12 @@ UPDATE collection_sources SET target_id=$2 WHERE id=$1 AND target_id IS NULL;
 -- name: PendingCollectionPlans :many
 SELECT p.*,s.target_id,s.namespace,s.provider,s.resource_type,s.external_key,
  EXISTS (SELECT 1 FROM collection_plan_bindings m JOIN collection_bindings b ON b.id=m.binding_id
-         WHERE m.plan_id=p.id AND b.effective_until IS NULL) AS desired
+ WHERE m.plan_id=p.id AND m.source_id=p.source_id AND b.source_id=m.source_id AND b.effective_until IS NULL) AS desired
 FROM collection_plans p JOIN collection_sources s ON s.id=p.source_id
 WHERE s.namespace=$1 AND s.target_id IS NOT NULL AND
  (p.checked_at IS NULL OR p.checked_at < transaction_timestamp() - CASE WHEN p.schedule_id IS NULL THEN interval '30 seconds' ELSE interval '30 minutes' END OR
   (p.schedule_id IS NOT NULL AND p.remote_enabled IS DISTINCT FROM (EXISTS (SELECT 1 FROM collection_plan_bindings m JOIN collection_bindings b ON b.id=m.binding_id
-         WHERE m.plan_id=p.id AND b.effective_until IS NULL))))
+         WHERE m.plan_id=p.id AND m.source_id=p.source_id AND b.source_id=m.source_id AND b.effective_until IS NULL))))
 ORDER BY p.checked_at NULLS FIRST,p.id LIMIT 8;
 
 -- name: TouchCollectionPlan :exec
@@ -113,8 +120,8 @@ ON CONFLICT (namespace,prior_epoch,prior_cursor) DO NOTHING;
 
 -- name: CollectionResultSource :one
 SELECT s.* FROM collection_sources s WHERE s.target_id=$1 AND s.namespace=$2 AND EXISTS (
- SELECT 1 FROM collection_plans p JOIN collection_plan_bindings m ON m.plan_id=p.id
- JOIN collection_bindings b ON b.id=m.binding_id
+ SELECT 1 FROM collection_plans p JOIN collection_plan_bindings m ON m.plan_id=p.id AND m.source_id=p.source_id
+ JOIN collection_bindings b ON b.id=m.binding_id AND b.source_id=m.source_id AND b.resource_type=s.resource_type
  WHERE p.source_id=s.id AND p.capability=$3 AND p.scope=$4
  AND m.attached_at<=sqlc.arg(evidence_at)::timestamptz
  AND (p.capability<>'web.dns' OR (p.params->'types') ? sqlc.arg(rrtype)::text)
@@ -146,7 +153,8 @@ DELETE FROM collection_current WHERE ctid IN (
 
 -- name: SiteCollectionBindingsAt :many
 SELECT DISTINCT ON (b.site_id) b.id,b.site_id,greatest(b.effective_from,m.attached_at)::timestamptz AS attributable_since FROM collection_bindings b
-JOIN collection_plan_bindings m ON m.binding_id=b.id JOIN collection_plans p ON p.id=m.plan_id
+JOIN collection_plan_bindings m ON m.binding_id=b.id AND m.source_id=b.source_id
+JOIN collection_plans p ON p.id=m.plan_id AND p.source_id=m.source_id
 WHERE b.source_id=$1 AND b.site_id IS NOT NULL AND p.capability=$2 AND p.scope=$3
  AND m.attached_at<=sqlc.arg(evidence_at)::timestamptz
  AND (p.capability<>'web.dns' OR (p.params->'types') ? sqlc.arg(rrtype)::text)
@@ -218,8 +226,8 @@ SELECT DISTINCT ON (b.site_id,c.source_id,c.capability,c.output_schema,c.scope_k
  c.confirmed_at,c.state,c.observation_id
 FROM collection_current c
 JOIN collection_bindings b ON b.source_id=c.source_id
-JOIN collection_plan_bindings m ON m.binding_id=b.id
-JOIN collection_plans p ON p.id=m.plan_id AND p.capability=c.capability
+JOIN collection_plan_bindings m ON m.binding_id=b.id AND m.source_id=b.source_id
+JOIN collection_plans p ON p.id=m.plan_id AND p.source_id=m.source_id AND p.capability=c.capability
 WHERE c.generation=$1 AND b.site_id IS NOT NULL AND c.state IN ('present','confirmed_empty') AND c.observation_id IS NOT NULL
  AND p.scope=c.scope-'namespace'-'dimensions'
  AND (c.capability<>'web.dns' OR (p.params->'types') ? (c.scope->'dimensions'->>'rrtype'))
@@ -265,8 +273,8 @@ WITH bindings AS (
   CASE WHEN c.observed_at>=greatest(b.effective_from,m.attached_at) THEN c.observed_at ELSE c.confirmed_at END AS first_observed_at
  FROM collection_current c JOIN collection_sources s ON s.id=c.source_id
  JOIN collection_bindings b ON b.source_id=c.source_id
- JOIN collection_plan_bindings m ON m.binding_id=b.id
- JOIN collection_plans p ON p.id=m.plan_id AND p.capability=c.capability
+ JOIN collection_plan_bindings m ON m.binding_id=b.id AND m.source_id=b.source_id
+ JOIN collection_plans p ON p.id=m.plan_id AND p.source_id=m.source_id AND p.capability=c.capability
  WHERE c.generation=sqlc.arg(generation) AND c.state IN ('present','confirmed_empty') AND b.site_id IS NOT NULL
   AND (sqlc.narg(source_id)::uuid IS NULL OR c.source_id=sqlc.narg(source_id)::uuid)
   AND (sqlc.narg(scope_key)::text IS NULL OR c.scope_key=sqlc.narg(scope_key)::text)
@@ -290,8 +298,8 @@ DELETE FROM collection_current WHERE ctid IN (
  SELECT c.ctid FROM collection_current c JOIN collection_sources s ON s.id=c.source_id
  WHERE s.namespace=$1 AND COALESCE(c.confirmed_at,c.received_at)<transaction_timestamp()-interval '30 days'
  AND NOT EXISTS (
-  SELECT 1 FROM collection_plans p JOIN collection_plan_bindings m ON m.plan_id=p.id
-  JOIN collection_bindings b ON b.id=m.binding_id
+  SELECT 1 FROM collection_plans p JOIN collection_plan_bindings m ON m.plan_id=p.id AND m.source_id=p.source_id
+  JOIN collection_bindings b ON b.id=m.binding_id AND b.source_id=m.source_id
   WHERE p.source_id=c.source_id AND p.capability=c.capability AND p.scope=c.scope-'namespace'-'dimensions'
    AND (c.capability<>'web.dns' OR (p.params->'types') ? (c.scope->'dimensions'->>'rrtype'))
    AND b.effective_until IS NULL

@@ -101,6 +101,13 @@ try {
   }
   run('go', ['-C', 'services/api', 'test', '-count=1', '-v', '-tags=integration', './internal/catalog',
     '-args', '-catalog-cn-config', fixtures.CN.config, '-catalog-intl-config', fixtures.INTL.config])
+  run('docker', ['exec', container, 'createdb', '-U', 'postgres', 'gofurry_d1_forward_test'])
+  const forwardConfig = join(scratch, 'forward.yaml')
+  await writeFile(forwardConfig, yaml('CN', databasePort, await port()).replace('gofurry_d1_cn_test', 'gofurry_d1_forward_test'), { mode: 0o600 })
+  run('go', ['-C', 'services/api', 'test', '-count=1', '-v',
+    ...(process.env.YEARBOOK_RACE === '1' ? ['-race'] : []), '-tags=integration', './internal/yearbook',
+    '-args', '-yearbook-cn-config', fixtures.CN.config, '-yearbook-intl-config', fixtures.INTL.config,
+    '-yearbook-forward-config', forwardConfig, ...(process.env.YEARBOOK_MEASURE === '1' ? ['-yearbook-measure'] : [])])
   const binary = join(scratch, process.platform === 'win32' ? 'api.exe' : 'api')
   run('go', ['-C', 'services/api', 'build', '-o', binary, './cmd/api'])
 
@@ -114,9 +121,22 @@ try {
   access_key_id: fixture
   secret_access_key: fixture
   public_base_url: https://wallpapers.catalog.example
+yearbook:
+  enabled: true
 `)
     launch(binary, ['--config', fixture.config], root, process.env)
     await waitFor(() => status(fixture.api + '/readyz', 200), region + ' API')
+    await waitFor(() => status(fixture.api + '/api/v1/sites/000000000000000a/yearbooks/2025', 200), region + ' automatic yearbook publication')
+    if (region === 'CN') {
+      const options = ['--config', fixture.config, 'yearbook']
+      const read = args => JSON.parse(run(binary, [...options, ...args], root, process.env, true))
+      const preview = read(['preview', '000000000000000a', '2025'])
+      const reconcile = read(['reconcile', '--dry-run', '--year', '2025', '--site', '000000000000000a'])
+      const audit = read(['audit'])
+      if (!preview.eligible || reconcile.digest !== preview.digest || !audit.length || audit.some(row => row.mismatches !== 0)) {
+        throw new Error('Yearbook CLI preview/reconcile/audit did not match the fixture')
+      }
+    }
     launch(process.execPath, ['.output/server/index.mjs'], webDir, {
       ...process.env, NODE_ENV: 'production', HOST: '127.0.0.1', PORT: String(fixture.webPort),
       WEB_REGION: region, WEB_API_BASE_URL: fixture.api, WEB_PUBLIC_ORIGIN: 'https://' + region.toLowerCase() + '.catalog.example',
@@ -130,16 +150,22 @@ try {
 
   const apiDetail = fixtures.CN.api + '/api/v1/sites/000000000000000a'
   const webDetail = fixtures.CN.web + '/sites/000000000000000a/example-community'
+  const apiYearbook = apiDetail + '/yearbooks/2025'
+  const webYearbook = webDetail + '/yearbook/2025'
   run('docker', ['pause', container])
   paused = true
   await waitFor(() => status(apiDetail, 503), 'API database-outage status')
   await waitFor(() => status(webDetail, 503), 'SSR database-outage status')
+  await waitFor(() => status(apiYearbook, 503), 'Yearbook API database-outage status')
+  await waitFor(() => status(webYearbook, 503), 'Yearbook SSR database-outage status')
   if (!(await status(fixtures.CN.web + '/start', 200))) throw new Error('Database outage affected Start SSR')
   run('docker', ['unpause', container])
   paused = false
   await waitFor(() => status(apiDetail, 200), 'API database recovery')
   await waitFor(() => status(webDetail, 200), 'SSR database recovery')
-  console.log('PostgreSQL outage returned API/SSR 503, Start remained 200, and both details recovered.')
+  await waitFor(() => status(apiYearbook, 200), 'Yearbook API database recovery')
+  await waitFor(() => status(webYearbook, 200), 'Yearbook SSR database recovery')
+  console.log('PostgreSQL outage returned API/SSR 503 for Site and Yearbook, Start remained 200, and both recovered.')
 } finally {
   if (container && paused) run('docker', ['unpause', container])
   for (const { child } of processes.reverse()) child.kill()

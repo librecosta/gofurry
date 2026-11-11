@@ -73,8 +73,8 @@ WITH bindings AS (
   CASE WHEN c.observed_at>=greatest(b.effective_from,m.attached_at) THEN c.observed_at ELSE c.confirmed_at END AS first_observed_at
  FROM collection_current c JOIN collection_sources s ON s.id=c.source_id
  JOIN collection_bindings b ON b.source_id=c.source_id
- JOIN collection_plan_bindings m ON m.binding_id=b.id
- JOIN collection_plans p ON p.id=m.plan_id AND p.capability=c.capability
+ JOIN collection_plan_bindings m ON m.binding_id=b.id AND m.source_id=b.source_id
+ JOIN collection_plans p ON p.id=m.plan_id AND p.source_id=m.source_id AND p.capability=c.capability
  WHERE c.generation=$2 AND c.state IN ('present','confirmed_empty') AND b.site_id IS NOT NULL
   AND ($3::uuid IS NULL OR c.source_id=$3::uuid)
   AND ($4::text IS NULL OR c.scope_key=$4::text)
@@ -118,8 +118,8 @@ SELECT DISTINCT ON (b.site_id,c.source_id,c.capability,c.output_schema,c.scope_k
  c.confirmed_at,c.state,c.observation_id
 FROM collection_current c
 JOIN collection_bindings b ON b.source_id=c.source_id
-JOIN collection_plan_bindings m ON m.binding_id=b.id
-JOIN collection_plans p ON p.id=m.plan_id AND p.capability=c.capability
+JOIN collection_plan_bindings m ON m.binding_id=b.id AND m.source_id=b.source_id
+JOIN collection_plans p ON p.id=m.plan_id AND p.source_id=m.source_id AND p.capability=c.capability
 WHERE c.generation=$1 AND b.site_id IS NOT NULL AND c.state IN ('present','confirmed_empty') AND c.observation_id IS NOT NULL
  AND p.scope=c.scope-'namespace'-'dimensions'
  AND (c.capability<>'web.dns' OR (p.params->'types') ? (c.scope->'dimensions'->>'rrtype'))
@@ -294,9 +294,16 @@ func (q *Queries) AddSiteEvidenceChange(ctx context.Context, arg AddSiteEvidence
 	return err
 }
 
-const attachCollectionPlan = `-- name: AttachCollectionPlan :exec
-INSERT INTO collection_plan_bindings (plan_id,binding_id,source_id) VALUES ($1,$2,$3)
-ON CONFLICT (plan_id,binding_id) DO NOTHING
+const attachCollectionPlan = `-- name: AttachCollectionPlan :one
+WITH owned AS MATERIALIZED (
+ SELECT p.id AS plan_id,b.id AS binding_id,p.source_id
+ FROM collection_plans p JOIN collection_bindings b ON b.source_id=p.source_id AND b.effective_until IS NULL
+ WHERE p.id=$1 AND b.id=$2 AND p.source_id=$3
+), attached AS (
+ INSERT INTO collection_plan_bindings (plan_id,binding_id,source_id)
+ SELECT plan_id,binding_id,source_id FROM owned ON CONFLICT (plan_id,binding_id) DO NOTHING
+)
+SELECT EXISTS (SELECT 1 FROM owned)::boolean
 `
 
 type AttachCollectionPlanParams struct {
@@ -305,9 +312,11 @@ type AttachCollectionPlanParams struct {
 	SourceID  uuid.UUID `json:"source_id"`
 }
 
-func (q *Queries) AttachCollectionPlan(ctx context.Context, arg AttachCollectionPlanParams) error {
-	_, err := q.db.Exec(ctx, attachCollectionPlan, arg.PlanID, arg.BindingID, arg.SourceID)
-	return err
+func (q *Queries) AttachCollectionPlan(ctx context.Context, arg AttachCollectionPlanParams) (bool, error) {
+	row := q.db.QueryRow(ctx, attachCollectionPlan, arg.PlanID, arg.BindingID, arg.SourceID)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
 }
 
 const boundActivatedGameNews = `-- name: BoundActivatedGameNews :exec
@@ -373,7 +382,7 @@ func (q *Queries) CloseCollectionBinding(ctx context.Context, arg CloseCollectio
 const closeRemovedGameBindings = `-- name: CloseRemovedGameBindings :exec
 UPDATE collection_bindings b SET effective_until=transaction_timestamp()
 WHERE b.game_id=$1 AND b.effective_until IS NULL
-AND NOT EXISTS (SELECT 1 FROM game_sources g WHERE g.id=b.game_source_id AND g.active)
+AND NOT EXISTS (SELECT 1 FROM game_sources g WHERE g.id=b.game_source_id AND g.game_id=b.game_id AND g.platform_code='steam' AND g.active)
 `
 
 func (q *Queries) CloseRemovedGameBindings(ctx context.Context, gameID *uuid.UUID) error {
@@ -384,7 +393,7 @@ func (q *Queries) CloseRemovedGameBindings(ctx context.Context, gameID *uuid.UUI
 const closeRemovedSiteBindings = `-- name: CloseRemovedSiteBindings :exec
 UPDATE collection_bindings b SET effective_until=transaction_timestamp()
 WHERE b.site_id=$1 AND b.effective_until IS NULL AND NOT EXISTS (
- SELECT 1 FROM site_addresses a WHERE a.id=b.address_id AND a.active AND (b.resource_type='domain' OR a.kind=b.purpose)
+ SELECT 1 FROM site_addresses a WHERE a.id=b.address_id AND a.site_id=b.site_id AND a.active AND (b.resource_type='domain' OR a.kind=b.purpose)
 )
 `
 
@@ -438,8 +447,8 @@ func (q *Queries) CollectionCurrent(ctx context.Context, arg CollectionCurrentPa
 
 const collectionResultSource = `-- name: CollectionResultSource :one
 SELECT s.id, s.namespace, s.provider, s.resource_type, s.external_key, s.target_id, s.checked_at FROM collection_sources s WHERE s.target_id=$1 AND s.namespace=$2 AND EXISTS (
- SELECT 1 FROM collection_plans p JOIN collection_plan_bindings m ON m.plan_id=p.id
- JOIN collection_bindings b ON b.id=m.binding_id
+ SELECT 1 FROM collection_plans p JOIN collection_plan_bindings m ON m.plan_id=p.id AND m.source_id=p.source_id
+ JOIN collection_bindings b ON b.id=m.binding_id AND b.source_id=m.source_id AND b.resource_type=s.resource_type
  WHERE p.source_id=s.id AND p.capability=$3 AND p.scope=$4
  AND m.attached_at<=$5::timestamptz
  AND (p.capability<>'web.dns' OR (p.params->'types') ? $6::text)
@@ -595,8 +604,8 @@ DELETE FROM collection_current WHERE ctid IN (
  SELECT c.ctid FROM collection_current c JOIN collection_sources s ON s.id=c.source_id
  WHERE s.namespace=$1 AND COALESCE(c.confirmed_at,c.received_at)<transaction_timestamp()-interval '30 days'
  AND NOT EXISTS (
-  SELECT 1 FROM collection_plans p JOIN collection_plan_bindings m ON m.plan_id=p.id
-  JOIN collection_bindings b ON b.id=m.binding_id
+  SELECT 1 FROM collection_plans p JOIN collection_plan_bindings m ON m.plan_id=p.id AND m.source_id=p.source_id
+  JOIN collection_bindings b ON b.id=m.binding_id AND b.source_id=m.source_id
   WHERE p.source_id=c.source_id AND p.capability=c.capability AND p.scope=c.scope-'namespace'-'dimensions'
    AND (c.capability<>'web.dns' OR (p.params->'types') ? (c.scope->'dimensions'->>'rrtype'))
    AND b.effective_until IS NULL
@@ -724,7 +733,7 @@ func (q *Queries) MarkCollectionPost(ctx context.Context, id uuid.UUID) (int64, 
 
 const openCollectionBinding = `-- name: OpenCollectionBinding :one
 SELECT b.id,b.source_id,b.resource_type,s.external_key FROM collection_bindings b
-JOIN collection_sources s ON s.id=b.source_id
+JOIN collection_sources s ON s.id=b.source_id AND s.resource_type=b.resource_type
 WHERE b.id=$1 AND s.namespace=$2 AND b.effective_until IS NULL FOR UPDATE OF b
 `
 
@@ -755,12 +764,12 @@ func (q *Queries) OpenCollectionBinding(ctx context.Context, arg OpenCollectionB
 const pendingCollectionPlans = `-- name: PendingCollectionPlans :many
 SELECT p.id, p.source_id, p.capability, p.request_schema, p.params, p.scope, p.interval_seconds, p.anchor_at, p.policy, p.schedule_id, p.remote_revision, p.remote_enabled, p.post_started, p.checked_at,s.target_id,s.namespace,s.provider,s.resource_type,s.external_key,
  EXISTS (SELECT 1 FROM collection_plan_bindings m JOIN collection_bindings b ON b.id=m.binding_id
-         WHERE m.plan_id=p.id AND b.effective_until IS NULL) AS desired
+ WHERE m.plan_id=p.id AND m.source_id=p.source_id AND b.source_id=m.source_id AND b.effective_until IS NULL) AS desired
 FROM collection_plans p JOIN collection_sources s ON s.id=p.source_id
 WHERE s.namespace=$1 AND s.target_id IS NOT NULL AND
  (p.checked_at IS NULL OR p.checked_at < transaction_timestamp() - CASE WHEN p.schedule_id IS NULL THEN interval '30 seconds' ELSE interval '30 minutes' END OR
   (p.schedule_id IS NOT NULL AND p.remote_enabled IS DISTINCT FROM (EXISTS (SELECT 1 FROM collection_plan_bindings m JOIN collection_bindings b ON b.id=m.binding_id
-         WHERE m.plan_id=p.id AND b.effective_until IS NULL))))
+         WHERE m.plan_id=p.id AND m.source_id=p.source_id AND b.source_id=m.source_id AND b.effective_until IS NULL))))
 ORDER BY p.checked_at NULLS FIRST,p.id LIMIT 8
 `
 
@@ -1315,7 +1324,8 @@ func (q *Queries) SaveCollectionTarget(ctx context.Context, arg SaveCollectionTa
 
 const siteCollectionBindingsAt = `-- name: SiteCollectionBindingsAt :many
 SELECT DISTINCT ON (b.site_id) b.id,b.site_id,greatest(b.effective_from,m.attached_at)::timestamptz AS attributable_since FROM collection_bindings b
-JOIN collection_plan_bindings m ON m.binding_id=b.id JOIN collection_plans p ON p.id=m.plan_id
+JOIN collection_plan_bindings m ON m.binding_id=b.id AND m.source_id=b.source_id
+JOIN collection_plans p ON p.id=m.plan_id AND p.source_id=m.source_id
 WHERE b.source_id=$1 AND b.site_id IS NOT NULL AND p.capability=$2 AND p.scope=$3
  AND m.attached_at<=$4::timestamptz
  AND (p.capability<>'web.dns' OR (p.params->'types') ? $5::text)

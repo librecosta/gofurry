@@ -3,6 +3,7 @@ import { defaultLocale } from '../locale-path'
 import type { Locale, Region } from '../preferences'
 import { isPublicID, readCatalogDetail, type Detail, type Kind } from './detail-server'
 import { entityPath } from './public-path'
+import { yearbookPath } from '../yearbook/path'
 import styles from './detail.module.scss'
 
 export type CatalogParams = { language?: string; publicId: string; slug?: string }
@@ -10,6 +11,7 @@ type DetailPage = {
   state: 'published'
   detail: Detail
   locale: Locale
+  region: Region
   canonical?: string
   alternatives: { locale: Locale; path: string; url: string }[]
 }
@@ -34,7 +36,7 @@ export async function loadDetail(kind: Kind, params: CatalogParams, pathname: st
     const path = entityPath(kind, publicId, detail.slug, entry.locale, region)
     return { locale: entry.locale, path, url: new URL(path, origin).href }
   })
-  return { state: 'published', detail, locale, canonical: alternatives.find(entry => entry.locale === locale)?.url, alternatives }
+  return { state: 'published', detail, locale, region, canonical: alternatives.find(entry => entry.locale === locale)?.url, alternatives }
 }
 
 export function detailHeaders(data: Page | undefined): Record<string, string> {
@@ -61,8 +63,8 @@ export function detailHead(data: Page | undefined) {
 }
 
 const labels = {
-  en: { unavailable: 'This detail is temporarily unavailable.', missing: 'This page was not found.', untranslated: 'An English translation is unavailable.', primary: 'Visit site', alternate: 'Alternate addresses', sources: 'Platforms' },
-  zh: { unavailable: '详情暂时无法加载。', missing: '找不到此页面。', untranslated: '此页面暂无中文译文。', primary: '访问网站', alternate: '备用地址', sources: '发行平台' },
+  en: { unavailable: 'This detail is temporarily unavailable.', missing: 'This page was not found.', untranslated: 'An English translation is unavailable.', primary: 'Visit site', alternate: 'Alternate addresses', sources: 'Platforms', yearbooks: 'Yearbooks' },
+  zh: { unavailable: '详情暂时无法加载。', missing: '找不到此页面。', untranslated: '此页面暂无中文译文。', primary: '访问网站', alternate: '备用地址', sources: '发行平台', yearbooks: '年鉴' },
 }
 
 export function MissingDetail() {
@@ -85,6 +87,8 @@ export function DetailView({ data }: { data: Page }) {
       {primary && <p><a href={primary.url} rel="noopener noreferrer">{copy.primary}</a></p>}
       {alternates.length > 0 && <section><h2>{copy.alternate}</h2><ul>{alternates.map(address =>
         <li key={address.url}><a href={address.url} rel="noopener noreferrer">{address.url}</a></li>)}</ul></section>}
+      {detail.kind === 'sites' && detail.yearbooks.length > 0 && <section><h2>{copy.yearbooks}</h2><ul>{detail.yearbooks.map(year =>
+        <li key={year}><a href={yearbookPath(detail.public_id, detail.slug, year, locale, data.region)}>{year}</a></li>)}</ul></section>}
       {detail.kind === 'games' && detail.sources.length > 0 && <section><h2>{copy.sources}</h2><ul>{detail.sources.map(source =>
         <li key={JSON.stringify([source.platform_code, source.external_key])}>{source.source_url
           ? <a href={source.source_url} rel="noopener noreferrer">{source.platform_code}</a>

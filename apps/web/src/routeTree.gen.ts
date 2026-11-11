@@ -24,6 +24,7 @@ import { Route as Char123LanguageChar125SitesPublicIdChar123SlugChar125RouteImpo
 import { Route as ApiV1StartBackgroundsIdRouteImport } from './routes/api.v1.start.backgrounds.$id'
 import { Route as ApiV1StartCitiesNearestRouteImport } from './routes/api.v1.start.cities.nearest'
 import { Route as ApiV1StartSearchSuggestionsRouteImport } from './routes/api.v1.start.search.suggestions'
+import { Route as Char123LanguageChar125SitesPublicIdSlugYearbookYearRouteImport } from './routes/{-$language}.sites.$publicId.$slug.yearbook.$year'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -102,6 +103,12 @@ const ApiV1StartSearchSuggestionsRoute =
     path: '/api/v1/start/search/suggestions',
     getParentRoute: () => rootRouteImport,
   } as any)
+const Char123LanguageChar125SitesPublicIdSlugYearbookYearRoute =
+  Char123LanguageChar125SitesPublicIdSlugYearbookYearRouteImport.update({
+    id: '/{-$language}/sites/$publicId/$slug/yearbook/$year',
+    path: '/{-$language}/sites/$publicId/$slug/yearbook/$year',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -118,6 +125,7 @@ export interface FileRoutesByFullPath {
   '/api/v1/start/backgrounds/$id': typeof ApiV1StartBackgroundsIdRoute
   '/api/v1/start/cities/nearest': typeof ApiV1StartCitiesNearestRoute
   '/api/v1/start/search/suggestions': typeof ApiV1StartSearchSuggestionsRoute
+  '/{-$language}/sites/$publicId/$slug/yearbook/$year': typeof Char123LanguageChar125SitesPublicIdSlugYearbookYearRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -134,6 +142,7 @@ export interface FileRoutesByTo {
   '/api/v1/start/backgrounds/$id': typeof ApiV1StartBackgroundsIdRoute
   '/api/v1/start/cities/nearest': typeof ApiV1StartCitiesNearestRoute
   '/api/v1/start/search/suggestions': typeof ApiV1StartSearchSuggestionsRoute
+  '/{-$language}/sites/$publicId/$slug/yearbook/$year': typeof Char123LanguageChar125SitesPublicIdSlugYearbookYearRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -152,6 +161,7 @@ export interface FileRoutesById {
   '/api/v1/start/backgrounds/$id': typeof ApiV1StartBackgroundsIdRoute
   '/api/v1/start/cities/nearest': typeof ApiV1StartCitiesNearestRoute
   '/api/v1/start/search/suggestions': typeof ApiV1StartSearchSuggestionsRoute
+  '/{-$language}/sites/$publicId/$slug/yearbook/$year': typeof Char123LanguageChar125SitesPublicIdSlugYearbookYearRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -170,6 +180,7 @@ export interface FileRouteTypes {
     | '/api/v1/start/backgrounds/$id'
     | '/api/v1/start/cities/nearest'
     | '/api/v1/start/search/suggestions'
+    | '/{-$language}/sites/$publicId/$slug/yearbook/$year'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -186,6 +197,7 @@ export interface FileRouteTypes {
     | '/api/v1/start/backgrounds/$id'
     | '/api/v1/start/cities/nearest'
     | '/api/v1/start/search/suggestions'
+    | '/{-$language}/sites/$publicId/$slug/yearbook/$year'
   id:
     | '__root__'
     | '/'
@@ -203,6 +215,7 @@ export interface FileRouteTypes {
     | '/api/v1/start/backgrounds/$id'
     | '/api/v1/start/cities/nearest'
     | '/api/v1/start/search/suggestions'
+    | '/{-$language}/sites/$publicId/$slug/yearbook/$year'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -217,6 +230,7 @@ export interface RootRouteChildren {
   Char123LanguageChar125GamesPublicIdChar123SlugChar125Route: typeof Char123LanguageChar125GamesPublicIdChar123SlugChar125Route
   Char123LanguageChar125SitesPublicIdChar123SlugChar125Route: typeof Char123LanguageChar125SitesPublicIdChar123SlugChar125Route
   ApiV1StartSearchSuggestionsRoute: typeof ApiV1StartSearchSuggestionsRoute
+  Char123LanguageChar125SitesPublicIdSlugYearbookYearRoute: typeof Char123LanguageChar125SitesPublicIdSlugYearbookYearRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -326,6 +340,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiV1StartSearchSuggestionsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/{-$language}/sites/$publicId/$slug/yearbook/$year': {
+      id: '/{-$language}/sites/$publicId/$slug/yearbook/$year'
+      path: '/{-$language}/sites/$publicId/$slug/yearbook/$year'
+      fullPath: '/{-$language}/sites/$publicId/$slug/yearbook/$year'
+      preLoaderRoute: typeof Char123LanguageChar125SitesPublicIdSlugYearbookYearRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -379,6 +400,8 @@ const rootRouteChildren: RootRouteChildren = {
   Char123LanguageChar125SitesPublicIdChar123SlugChar125Route:
     Char123LanguageChar125SitesPublicIdChar123SlugChar125Route,
   ApiV1StartSearchSuggestionsRoute: ApiV1StartSearchSuggestionsRoute,
+  Char123LanguageChar125SitesPublicIdSlugYearbookYearRoute:
+    Char123LanguageChar125SitesPublicIdSlugYearbookYearRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

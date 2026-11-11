@@ -69,6 +69,10 @@ database: null
 #   max_connection_lifetime: 30m
 #   max_connection_idle_time: 5m
 
+# Requires an explicitly migrated regional database. Enables daily UTC close and compaction.
+yearbook:
+  enabled: false
+
 # Disabled unless complete. Generate 32 crypto/rand bytes as unpadded base64url.
 # Token goes only in private YAML. Storage and database are required.
 # Admin must use the same region/environment. New uploads: 16:9 AVIF + WebP.

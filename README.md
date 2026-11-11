@@ -53,6 +53,8 @@ The regional PostgreSQL database owns both catalogs. Apply reviewed schema chang
 
 Set `WEB_PUBLIC_ORIGIN` to the exact canonical Web origin in each deployment, such as `https://catalog.example`. Local loopback development can use the request origin. Run `task build:web` and `task check:catalog` to verify both regions against disposable PostgreSQL 18 databases. See the [D1-A acceptance](docs/v0.1-d1-a-acceptance.md) and [legacy mapping specification](docs/v0.1-d1-a-legacy-mapping.md).
 
+Published Sites link to their historical Yearbooks once evidence qualifies. Reports use confirmed UTC observation days, with missing days shown as Unknown. They are not uptime reports. After explicit Goose migration, set `yearbook.enabled: true` in the regional API YAML to run closure and monthly coverage compaction in the existing API. The default is off. Public reads use the local database, including when Harvest is offline. See the [D1-B2 acceptance and operator commands](docs/v0.1-d1-b2-acceptance.md).
+
 CN deployments can opt in to the Harvest evidence consumer through their private API YAML. Collection plans require an explicit CLI action. Public Site and Game routes read GoFurry's regional database. See the [D1-B1 setup and acceptance](docs/v0.1-d1-b1-acceptance.md).
 
 ## Start page
