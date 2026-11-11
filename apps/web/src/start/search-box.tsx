@@ -316,7 +316,7 @@ export function SearchBox() {
             onClick={() => submit(phrase)} className={cx(styles.option, styles.optionBase, active === index && styles.selected)}>{highlighted(phrase)}</button>)}
       </SearchPanel>}</AnimatePresence>
     </div>
-    <motion.div data-search-tail className={styles.tail} initial={false} animate={{ height: tailHeight ?? 'auto' }} transition={tailTransition}><AnimatePresence initial={false}>
+    <motion.div data-search-tail className={styles.tail} initial={false} animate={{ height: tailTransition.duration ? tailHeight ?? 'auto' : 'auto' }} transition={tailTransition}><AnimatePresence initial={false}>
     {quickAccess ? <SearchTailView key="quick" onMeasure={setTailHeight}><QuickAccess /></SearchTailView> : <SearchTailView key="platforms" onMeasure={setTailHeight}><div role="group" aria-label={m.platforms} data-desktop-platforms onKeyDown={groupKeys} className={styles.desktopPlatforms}>
       {available.map((item) => <button key={item.id} type="button" aria-pressed={selected === item.id}
         onClick={() => choosePlatform(item.id)} className={cx(styles.chip, styles.platform, selected === item.id && styles.selected)}>{item.name[locale]}</button>)}

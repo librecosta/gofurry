@@ -196,13 +196,20 @@ test('mobile rails stack below quick access and grow the whole page on short scr
     const search = (await page.locator('[data-start-search]').boundingBox())!
     expect(official.y).toBeGreaterThanOrEqual(search.y + search.height)
     expect(self.y).toBeGreaterThan(official.y + official.height)
-    const buttons = await page.locator(widgets).getByRole('button').all()
-    expect(buttons).toHaveLength(2)
-    for (const button of buttons) {
-      const bounds = (await button.boundingBox())!
+    await expect(page.locator(widgets).getByRole('button')).toHaveCount(2)
+    // A viewport resize can reflow and adjust scroll between browser calls.
+    // Compare the row and button geometry from the same layout frame.
+    const row = await page.locator(widgets).evaluate(rail => ({
+      y: rail.getBoundingClientRect().y,
+      buttons: Array.from(rail.querySelectorAll('button'), button => {
+        const { x, y, width } = button.getBoundingClientRect()
+        return { x, y, width }
+      }),
+    }))
+    for (const bounds of row.buttons) {
       expect(bounds.x).toBeGreaterThanOrEqual(0)
       expect(bounds.x + bounds.width).toBeLessThanOrEqual(width)
-      expect(bounds.y).toBe(self.y)
+      expect(bounds.y).toBe(row.y)
     }
     await expect(page.locator('html')).toHaveCSS('scrollbar-width', 'none')
     expect(await page.evaluate(() => [document.documentElement.clientWidth, document.documentElement.scrollWidth, window.scrollX])).toEqual([width, width, 0])
