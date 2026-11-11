@@ -407,7 +407,15 @@ test('start: settings trap focus, retain their shell across language URLs and fu
   await expect(dialog).toHaveCSS('border-top-width', '0px'); await expect(dialog).toHaveCSS('box-shadow', 'none')
   await expect(dialog).toHaveCSS('transition-duration', '0s') // Motion owns opacity/transform.
   await expect(dialog.getByRole('button', { name: 'Close settings' })).toBeFocused()
-  for (let i = 0; i < 12; i++) { await page.keyboard.press('Tab'); expect(await dialog.evaluate(el => el.contains(document.activeElement))).toBe(true) }
+  for (let i = 0; i < 12; i++) {
+    await page.keyboard.press('Tab')
+    // Base UI's boundary guards return focus to the dialog on the next frame.
+    const inside = await dialog.evaluate(async el => {
+      await new Promise<void>(resolve => requestAnimationFrame(() => resolve()))
+      return el.contains(document.activeElement)
+    })
+    expect(inside).toBe(true)
+  }
   await expect(dialog.getByRole('link', { name: /GitHub/ })).toHaveAttribute('href', 'https://github.com/gofurry')
   await expect(dialog.getByRole('radio', { name: 'NSFW', exact: true })).toHaveCount(region === 'CN' ? 0 : 1)
   if (region === 'INTL') {
