@@ -51,7 +51,17 @@ jobs:
         with:
           version: '3.53.1'
       - run: task install
-      - run: pnpm --filter @gofurry/web exec playwright install --with-deps chromium
+      - name: Install and verify Playwright Chromium
+        shell: bash
+        run: |
+          pnpm --filter @gofurry/web exec playwright install chromium
+          launch_chromium() {
+            pnpm --filter @gofurry/web exec node --input-type=module -e 'import { chromium } from "@playwright/test"; const browser = await chromium.launch(); await browser.close()'
+          }
+          if ! launch_chromium; then
+            pnpm --filter @gofurry/web exec playwright install-deps chromium
+            launch_chromium
+          fi
       - run: task check:build
       - run: task sql:check
       - run: task check:catalog
