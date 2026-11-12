@@ -94,14 +94,15 @@ export function SiteProfile({ data }: { data: DetailPageData }) {
           {primary && <p className={styles.domain}>{host(primary.url)}</p>}
           {!translation && <p className={styles.translation}>{m.untranslated}</p>}
           {display.summary && <p className={styles.intro} lang={display.locale}>{display.summary}</p>}
-          {(detail.tags.length > 0 || detail.languages.length > 0 || detail.secondaryCategories.length > 0) && <ul className={styles.chips}>
+          {detail.primaryCategory && <ul className={styles.chips}>
+            <li><Link data-primary-category to={directory} search={to({ category: [detail.primaryCategory] })}>{categories[detail.primaryCategory][locale]}</Link></li>
             {detail.secondaryCategories.map(category => <li key={category}>
               <Link to={directory} search={to({ category: [category] })}>{categories[category][locale]}</Link></li>)}
             {detail.tags.slice(0, 3).map(tag => <li key={tag.code}><Link to={directory} search={to({ tags: [tag.code] })}>{tag[locale]}</Link></li>)}
             {detail.languages.slice(0, 3).map(code => <li key={code}><Link to={directory} search={to({ language: [code] })}>{languageLabel(code, locale)}</Link></li>)}
           </ul>}
           {(primary || hasMain || hasAside) && <div className={styles.actions}>
-            {primary && <a className={styles.visit} href={primary.url} target="_blank" rel="noopener noreferrer"
+            {primary && <a className={styles.visit} href={primary.url} target="_blank" rel="noopener noreferrer" aria-description={channel.newTab}
               onClick={visit} onAuxClick={visit}>{channel.visit}<ArrowUpRightIcon size={17} aria-hidden="true" /></a>}
             {(hasMain || hasAside) && <a className={styles.jump} href="#site-profile">{m.profile}<ArrowDownIcon size={16} aria-hidden="true" /></a>}
           </div>}

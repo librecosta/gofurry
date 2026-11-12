@@ -99,9 +99,12 @@ test('directory history and Start menu preserve the navigation path, with native
     events.push(route.request().postDataJSON().type)
     return route.fulfill({ status: 503 })
   })
-  const filtered = '/en/sites/directory?tags=forum'
+  const filtered = '/en/sites/directory?tags=forum%2Cportfolio'
   await page.goto(edge + filtered)
   const source = page.locator('article[data-site-id="0000000000001019"]').getByRole('link', { name: 'Field Guide 25', exact: true })
+  await expect(source).toHaveCount(0)
+  await page.getByRole('button', { name: 'Load more' }).click()
+  await expect(source).toBeVisible()
   await source.scrollIntoViewIfNeeded()
   const scroll = await page.evaluate(() => scrollY)
   expect(scroll).toBeGreaterThan(50)
@@ -112,6 +115,7 @@ test('directory history and Start menu preserve the navigation path, with native
   await page.goBack()
   await expect(page).toHaveURL(edge + filtered)
   await expect(page.getByRole('button', { name: 'Remove Forum' })).toBeVisible()
+  await expect(source).toBeVisible()
   await expect.poll(() => page.evaluate(() => scrollY)).toBeCloseTo(scroll, 0)
   await page.goto(edge + '/en/start')
   await page.getByRole('button', { name: 'GoFurry brand' }).press('Enter')

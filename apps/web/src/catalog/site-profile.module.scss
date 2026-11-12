@@ -41,6 +41,7 @@
 .profile .chips, .actions { display: flex; flex-wrap: wrap; gap: .45rem .55rem; margin-top: .9rem; }
 .profile .chips { list-style: none; padding: 0; font-size: .83rem; }
 .profile .chips a { display: inline-block; padding: .3rem .55rem; border-radius: var(--radius-small); background: var(--site-panel); }
+.profile .chips a[data-primary-category] { font-weight: 700; }
 .profile .chips a:hover { background: var(--surface-hover); }
 .profile .actions { margin-top: 1.2rem; gap: .6rem 1rem; align-items: center; }
 

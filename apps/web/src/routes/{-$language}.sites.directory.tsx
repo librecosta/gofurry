@@ -7,8 +7,11 @@ import { SitesFrame } from '../navigation/frame'
 
 export const Route = createFileRoute('/{-$language}/sites/directory')({
   loaderDeps: ({ search }) => normalizeCriteria(search),
-  loader: ({ params, location, context, deps, abortController }) =>
-    loadSites('directory', params.language, location.pathname, location.searchStr, context.preferences.region, deps, abortController.signal),
+  loader: {
+    staleReloadMode: 'blocking',
+    handler: ({ params, location, context, deps, abortController }) =>
+      loadSites('directory', params.language, location.pathname, location.searchStr, context.preferences.region, deps, abortController.signal),
+  },
   head: ({ loaderData }) => sitesHead(loaderData),
   headers: ({ loaderData }) => sitesHeaders(loaderData),
   component: Directory,

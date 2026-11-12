@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type FormEvent, type MouseEvent } from 'react'
 import { useNavigate, useRouter, useRouterState } from '@tanstack/react-router'
 import { Dialog } from '@base-ui/react/dialog'
 import { MagnifyingGlassIcon } from '@phosphor-icons/react/dist/ssr/MagnifyingGlass'
@@ -58,6 +58,12 @@ function FilterDialog({ criteria, options, locale, apply }: { criteria: Criteria
 }
 
 type PageError = 'stale' | 'unavailable' | null
+type DirectoryPosition = { scope: string; depth: number; y: number }
+type DirectoryPages = { scope: string; source: Directory; rows: Directory['items']; next?: string; depth: number; restoreY?: number }
+
+// Keep only a position for a recently visited history entry. Cards and
+// cursors are fetched again from the current regional visibility snapshot.
+const directoryPositions = new Map<string, DirectoryPosition>()
 
 export function DirectoryPage({ page, data }: { page: Page; data: Directory }) {
   const { locale, region, path } = page
@@ -68,10 +74,11 @@ export function DirectoryPage({ page, data }: { page: Page; data: Directory }) {
   const router = useRouter()
   const changing = useRouterState({ select: state => state.isLoading })
   const locationKey = useRouterState({ select: state => state.location.href })
+  const historyKey = useRouterState({ select: state => state.location.state.__TSR_key })
   const [query, setQuery] = useState(criteria.q)
   const [loading, setLoading] = useState(false)
   const [issue, setIssue] = useState<PageError>(null)
-  const [extra, setExtra] = useState<{ scope: string; source: Directory; rows: Directory['items']; next?: string }>()
+  const [extra, setExtra] = useState<DirectoryPages>()
   const debounce = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const pending = useRef<AbortController | undefined>(undefined)
   const composing = useRef(false)
@@ -100,6 +107,16 @@ export function DirectoryPage({ page, data }: { page: Page; data: Directory }) {
     setExtra(undefined)
     return () => { pending.current?.abort(); pending.current = undefined }
   }, [data, locationKey])
+  useEffect(() => {
+    if (!historyKey || changing || !data.next) return
+    const position = directoryPositions.get(historyKey)
+    if (!position || position.scope !== scope) return
+    directoryPositions.delete(historyKey)
+    void appendPages(data.next, data.items, 1, position)
+  }, [data, historyKey, scope, changing])
+  useLayoutEffect(() => {
+    if (accumulated?.restoreY !== undefined) window.scrollTo({ top: accumulated.restoreY, behavior: 'instant' })
+  }, [accumulated])
   useEffect(() => () => clearTimeout(debounce.current), [])
 
   function cancelPage() {
@@ -136,35 +153,54 @@ export function DirectoryPage({ page, data }: { page: Page; data: Directory }) {
 
   async function loadMore() {
     if (!next || pending.current || changing) return
-    const restoreFocus = document.activeElement?.hasAttribute('data-load-more')
+    await appendPages(next, results, accumulated?.depth ?? 1)
+  }
+
+  async function appendPages(cursor: string, initialRows: Directory['items'], depth: number, restore?: DirectoryPosition) {
+    const restoreFocus = !restore && document.activeElement?.hasAttribute('data-load-more')
     const controller = new AbortController()
     pending.current = controller
     const current = () => !controller.signal.aborted && pending.current === controller && livePage.current === data && liveLocation.current === locationKey
     setLoading(true)
     setIssue(null)
     try {
-      const response = await fetch('/api/v1/sites/directory?' + apiQuery(criteria, locale, next), {
-        signal: AbortSignal.any([controller.signal, AbortSignal.timeout(5000)]), redirect: 'error', credentials: 'omit',
-      })
-      if (!current()) return
-      if (response.status === 400) { setIssue('stale'); return }
-      if (!response.ok || response.headers.get('x-gofurry-region') !== region || response.headers.get('x-gofurry-content-mode') !== 'SFW') throw new Error()
-      const page = decodeDirectory(await response.json())
-      if (!current()) return
-      const seen = new Set(results.map(item => item.public_id))
-      const additions = page.items.filter(item => {
-        if (seen.has(item.public_id)) return false
-        seen.add(item.public_id)
-        return true
-      })
-      const after = page.next === next ? undefined : page.next
-      setExtra({ scope, source: data, rows: [...results, ...additions], next: after })
-      if (!after && restoreFocus) resultHeading.current?.focus()
+      const seen = new Set(initialRows.map(item => item.public_id))
+      let rows = initialRows
+      let next: string | undefined = cursor
+      const targetDepth = restore?.depth ?? depth + 1
+      while (next && depth < targetDepth) {
+        const response = await fetch('/api/v1/sites/directory?' + apiQuery(criteria, locale, next), {
+          signal: AbortSignal.any([controller.signal, AbortSignal.timeout(5000)]), redirect: 'error', credentials: 'omit',
+        })
+        if (!current()) return
+        if (response.status === 400) { setIssue('stale'); return }
+        if (!response.ok || response.headers.get('x-gofurry-region') !== region || response.headers.get('x-gofurry-content-mode') !== 'SFW') throw new Error()
+        const page = decodeDirectory(await response.json())
+        if (!current()) return
+        const additions = page.items.filter(item => {
+          if (seen.has(item.public_id)) return false
+          seen.add(item.public_id)
+          return true
+        })
+        rows = [...rows, ...additions]
+        next = page.next === next ? undefined : page.next
+        depth += 1
+        setExtra({ scope, source: data, rows, next, depth, restoreY: !next || depth === targetDepth ? restore?.y : undefined })
+      }
+      if (!next && restoreFocus) resultHeading.current?.focus()
     } catch {
       if (current()) setIssue('unavailable')
     } finally {
       if (current()) { pending.current = undefined; setLoading(false) }
     }
+  }
+
+  function rememberPosition(event: MouseEvent<HTMLElement>) {
+    if (!historyKey || !accumulated || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+    const link = event.target instanceof Element ? event.target.closest('article[data-site-id] a') : null
+    if (!(link instanceof HTMLAnchorElement) || link.target || link.origin !== window.location.origin) return
+    directoryPositions.set(historyKey, { scope, depth: accumulated.depth, y: window.scrollY })
+    if (directoryPositions.size > 16) directoryPositions.delete(directoryPositions.keys().next().value!)
   }
 
   async function refresh() {
@@ -227,7 +263,7 @@ export function DirectoryPage({ page, data }: { page: Page; data: Directory }) {
       <button type="button" className={styles.textAction} onClick={() => { commit(emptyCriteria); searchInput.current?.focus() }}>{m.reset}</button>
     </div>}
     {data.sort === 'heat_7d' && data.effective_sort === 'published_desc' && <p className={styles.notice} role="status">{m.fallback}</p>}
-    <section aria-label={m.directory} aria-busy={loading || changing}>
+    <section aria-label={m.directory} aria-busy={loading || changing} onClickCapture={rememberPosition}>
       {results.length ? <div className={styles.directoryGrid}>{results.map(site => <SiteCard key={site.public_id} site={site} ctx={ctx} />)}</div>
         : <div className={styles.message}><h2>{m.empty}</h2><p>{m.emptyHint}</p></div>}
       {next && <div className={styles.pagination}>
