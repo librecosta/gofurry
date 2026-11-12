@@ -41,6 +41,9 @@
 .main { padding-block: clamp(1.4rem, 4vw, 4rem) clamp(2.75rem, 5vw, 5rem); }
 .main > * + * { margin-top: clamp(2rem, 4.2vw, 4.25rem); }
 
+.compactCard { padding-block: .65rem; border-bottom: 1px solid var(--site-rule); }
+.page .compactCard a:hover { text-decoration: underline; text-underline-offset: .2em; }
+
 .intro, .directoryIntro { display: grid; align-items: end; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: clamp(1.15rem, 3vw, 3.5rem); }
 .intro { padding-block: clamp(.25rem, 2.2vw, 2rem) clamp(.5rem, 1vw, 1rem); }
 .intro p, .directoryIntro p { margin-top: .9rem; color: var(--site-quiet); max-width: 45ch; line-height: 1.55; }

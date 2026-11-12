@@ -142,7 +142,7 @@ func New(logger zerolog.Logger, cfg platform.Config) *Server {
 	counter := navigation.NewCounter(discovery, shared, cfg.Navigation.InteractionKey(), cfg.Deployment.Region)
 	discovery.Presentation(objects, counter.Enabled())
 	interactions := handlers.NavigationInteraction(counter, interactionOrigin, cfg.Server.Environment == "production", len(cfg.Server.TrustedProxies) != 0)
-	routers.Register(s.App, s.ready.Load, handlers.Backgrounds(s.Wallpapers), handlers.Suggestions(suggestions, logger), handlers.Location(cities), handlers.Weather(cities, weatherService, cityIndex), handlers.Cities(cityIndex), handlers.NearestCity(cityIndex), shared, cfg.Deployment.Region, catalog.New(pool), yearbook.New(pool), discovery, interactions, counter.Enabled())
+	routers.Register(s.App, s.ready.Load, handlers.Backgrounds(s.Wallpapers), handlers.Suggestions(suggestions, logger), handlers.Location(cities), handlers.Weather(cities, weatherService, cityIndex), handlers.Cities(cityIndex), handlers.NearestCity(cityIndex), shared, cfg.Deployment.Region, catalog.New(pool).WithSiteAssets(objects), yearbook.New(pool), discovery, interactions, counter.Enabled())
 	collectionCtx, stopCollection := context.WithCancel(context.Background())
 	var collector *collection.Service
 	var collectionPool *pgxpool.Pool

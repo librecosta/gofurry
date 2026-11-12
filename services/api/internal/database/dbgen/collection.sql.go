@@ -173,15 +173,17 @@ func (q *Queries) AddCollectionGameBinding(ctx context.Context, arg AddCollectio
 }
 
 const addCollectionGap = `-- name: AddCollectionGap :exec
-INSERT INTO collection_gaps (id,namespace,prior_epoch,prior_cursor) VALUES ($1,$2,$3,$4)
-ON CONFLICT (namespace,prior_epoch,prior_cursor) DO NOTHING
+INSERT INTO collection_gaps (id,namespace,prior_epoch,prior_cursor,prior_generation) VALUES ($1,$2,$3,$4,$5)
+ON CONFLICT (namespace,prior_epoch,prior_cursor) DO UPDATE SET prior_generation=excluded.prior_generation
+WHERE collection_gaps.prior_generation IS DISTINCT FROM excluded.prior_generation
 `
 
 type AddCollectionGapParams struct {
-	ID          uuid.UUID `json:"id"`
-	Namespace   string    `json:"namespace"`
-	PriorEpoch  uuid.UUID `json:"prior_epoch"`
-	PriorCursor string    `json:"prior_cursor"`
+	ID              uuid.UUID  `json:"id"`
+	Namespace       string     `json:"namespace"`
+	PriorEpoch      uuid.UUID  `json:"prior_epoch"`
+	PriorCursor     string     `json:"prior_cursor"`
+	PriorGeneration *uuid.UUID `json:"prior_generation"`
 }
 
 func (q *Queries) AddCollectionGap(ctx context.Context, arg AddCollectionGapParams) error {
@@ -190,6 +192,7 @@ func (q *Queries) AddCollectionGap(ctx context.Context, arg AddCollectionGapPara
 		arg.Namespace,
 		arg.PriorEpoch,
 		arg.PriorCursor,
+		arg.PriorGeneration,
 	)
 	return err
 }

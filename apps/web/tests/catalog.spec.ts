@@ -38,12 +38,12 @@ test('regional SSR, published metadata and cookie-independent HTML', async ({ re
   try {
     const page = await context.newPage()
     await page.goto(cn + sitePath)
-    await expect(page.getByRole('heading', { name: '示例社区' })).toBeVisible()
+    await expect(page.getByRole('heading', { level: 1, name: '示例社区', exact: true })).toBeVisible()
     await expect(page.getByRole('link', { name: '访问网站' })).toHaveAttribute('href', 'https://example.com/new/Community?tag=art&tag=games')
     await expect(page.locator('link[rel=alternate][hreflang=en]')).toHaveAttribute('href', 'https://cn.catalog.example/en' + sitePath)
     await expect(page.locator('link[rel=alternate][hreflang=zh]')).toHaveAttribute('href', 'https://cn.catalog.example' + sitePath)
     await page.getByRole('link', { name: 'English', exact: true }).click()
-    await expect(page.getByRole('heading', { name: 'Example Community' })).toBeVisible()
+    await expect(page.getByRole('heading', { level: 1, name: 'Example Community', exact: true })).toBeVisible()
   } finally {
     await context.close()
   }

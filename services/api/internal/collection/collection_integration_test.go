@@ -303,6 +303,7 @@ func TestCollectionHarvestD(t *testing.T) {
 	if detail.PublicID != game.PublicID {
 		t.Fatal("local catalog depended on Harvest")
 	}
+	assertProfileFacts(t, editor, siteA.PublicID, "content.example.com", "ghost")
 	l.worker.stop()
 	l.start()
 	must(t, svc.Tick(ctx))
@@ -324,6 +325,7 @@ func TestCollectionHarvestD(t *testing.T) {
 	siteA, err = editor.EditSite(ctx, siteA.ID, siteA.Revision, catalog.SiteInput{Editorial: text,
 		Addresses: []catalog.Address{{Kind: "primary", URL: "https://new.example.com/catalog"}}})
 	must(t, err)
+	assertProfileFacts(t, editor, siteA.PublicID, "", "")
 	moved, err := svc.BindSite(ctx, siteA.PublicID, "https://new.example.com/catalog")
 	must(t, err)
 	movedPlan := plan(moved[0].ID, "web.http", "", "")
@@ -335,6 +337,7 @@ func TestCollectionHarvestD(t *testing.T) {
 	must(t, svc.Tick(ctx))
 	count(t, pool, 1, "SELECT count(*) FROM site_evidence_changes WHERE site_id=$1 AND binding_id=$2 AND fact_key='http.response'", siteA.ID, moved[0].ID)
 	count(t, pool, 0, "SELECT count(*) FROM site_evidence_changes WHERE site_id=$1 AND binding_id=$2", siteB.ID, moved[0].ID)
+	assertProfileFacts(t, editor, siteA.PublicID, "new.example.com", "ghost")
 
 	// Force the real 14/30-day retention paths to age only disposable data.
 	l.dns.Store(0)
@@ -371,6 +374,7 @@ func TestCollectionHarvestD(t *testing.T) {
 	case <-time.After(12 * time.Second):
 		t.Fatal("snapshot did not reach its first page")
 	}
+	assertProfileFacts(t, editor, siteA.PublicID, "", "")
 	l.mode.Store(0)
 	l.job(req(movedPlan))
 	l.job(req(movedDNS))
@@ -386,6 +390,7 @@ func TestCollectionHarvestD(t *testing.T) {
 	count(t, pool, 1, "SELECT count(*) FROM game_evidence_news WHERE gid='123456'")
 	count(t, pool, 1, "SELECT count(*) FROM collection_current c JOIN collection_consumer n USING(generation) WHERE source_id=$1 AND facts ? 'tech.detected.wordpress'", moved[0].SourceID)
 	count(t, pool, 1, "SELECT count(*) FROM collection_current c JOIN collection_consumer n USING(generation) WHERE source_id=$1 AND facts ? 'dns.rrset'", moved[1].SourceID)
+	assertProfileFacts(t, editor, siteA.PublicID, "new.example.com", "wordpress")
 	expectEventually(t, 15*time.Second, "Harvest did not prune the replaced Observation", func() bool {
 		return scalar[int64](t, remotePool, "SELECT count(*) FROM harvest.observations WHERE id=$1", aged) == 0
 	})
@@ -408,6 +413,31 @@ func TestCollectionHarvestD(t *testing.T) {
 		scalar[int64](t, pool, "SELECT sum(CASE WHEN reltoastrelid=0 THEN 0 ELSE pg_total_relation_size(reltoastrelid) END)::bigint FROM pg_class WHERE relname IN ('site_evidence_changes','site_daily_coverage','collection_current','game_evidence_news','game_evidence_players')"),
 		scalar[int64](t, pool, "SELECT pg_wal_lsn_diff(pg_current_wal_insert_lsn(),$1::text::pg_lsn)::bigint", walBefore), l.calls.Load())
 	measureSiteYears(t, pool)
+}
+
+func assertProfileFacts(t *testing.T, editor *catalog.Service, id, host, fingerprint string) {
+	t.Helper()
+	profile, err := editor.PublishedSite(t.Context(), id)
+	must(t, err)
+	if profile.Localizations[0].Summary != "Editorial text" || len(profile.Technology) > 5 {
+		t.Fatal("profile facts exceeded their scope or changed editorial content")
+	}
+	if host == "" {
+		if len(profile.Technology) != 0 {
+			t.Fatal("closed or recovering projection provided public technology")
+		}
+		return
+	}
+	detected := false
+	for _, fact := range profile.Technology {
+		if fact.Source != host || fact.LatestConfirmed.IsZero() || fact.Ruleset == "" {
+			t.Fatalf("invalid public attribution for %s", fact.Kind)
+		}
+		detected = detected || fact.Technology == fingerprint
+	}
+	if !detected {
+		t.Fatalf("missing %s public fingerprint on the active binding (%v)", fingerprint, profile.Technology)
+	}
 }
 
 func checkRulesAndWithdrawal(t *testing.T, pool *pgxpool.Pool, svc *Service, current event, epoch, generation uuid.UUID, priorFacts int64) {

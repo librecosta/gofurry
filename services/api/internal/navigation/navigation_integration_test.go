@@ -107,25 +107,43 @@ func TestNavigationPostgreSQLRedis(t *testing.T) {
 	must(t, os.WriteFile(filepath.Join(old, d2a), data, 0600))
 	must(t, database.Migrate(ctx, *d, old, "up", io.Discard))
 	execute(t, pool, "INSERT INTO site_navigation_reviews(id,site_id,site_revision,previous_rating,rating,actor,reason) VALUES ($1,$2,1,'unreviewed','unreviewed','fixture','Preserved D2-A audit')", uuid.NewV7(), legacy)
+	const d2b = "202611120002_site_assets.sql"
+	data, err = os.ReadFile(filepath.Join(migrations, d2b))
+	must(t, err)
+	must(t, os.WriteFile(filepath.Join(old, d2b), data, 0600))
+	must(t, database.Migrate(ctx, *d, old, "up", io.Discard))
+	logo := "sites/logos/" + strings.Repeat("a", 64) + ".webp"
+	execute(t, pool, "UPDATE sites SET logo_asset_key=$2 WHERE id=$1", legacy, logo)
+	game := uuid.NewV7()
+	execute(t, pool, "INSERT INTO games(id,public_id,slug) VALUES ($1,'000000000000000g','preserved-game')", game)
+	execute(t, pool, "INSERT INTO site_navigation_heat(site_id,score) VALUES ($1,20)", legacy)
+	execute(t, pool, `INSERT INTO collection_bindings(id,source_id,site_id,address_id,resource_type,purpose)
+ SELECT uuidv7(),s.id,a.site_id,a.id,'origin','primary' FROM collection_sources s JOIN site_addresses a ON a.site_id=$1`, legacy)
 	must(t, database.Migrate(ctx, *d, migrations, "up", io.Discard))
 	must(t, database.Migrate(ctx, *d, migrations, "up", io.Discard))
 	if value[int](t, pool, "SELECT count(*) FROM site_yearbooks WHERE site_id=$1", legacy) != 1 ||
 		value[int](t, pool, "SELECT count(*) FROM collection_sources WHERE namespace='fixture'") != 1 ||
 		value[int](t, pool, "SELECT count(*) FROM site_navigation_reviews WHERE site_id=$1", legacy) != 1 ||
 		value[int](t, pool, "SELECT count(*) FROM start_wallpapers WHERE title='Preserved fixture' AND status='published'") != 1 ||
-		value[int](t, pool, "SELECT count(*) FROM pg_constraint WHERE contype='f' AND conrelid::regclass::text IN ('site_navigation_reviews','site_navigation_features','site_interaction_days','site_navigation_heat','site_navigation_heat_state')") != 0 {
+		value[int](t, pool, "SELECT count(*) FROM pg_constraint WHERE contype='f' AND connamespace='public'::regnamespace") != 4 ||
+		value[int](t, pool, "SELECT count(*) FROM games WHERE id=$1 AND public_id='000000000000000g'", game) != 1 ||
+		value[int](t, pool, "SELECT count(*) FROM collection_bindings WHERE site_id=$1", legacy) != 1 ||
+		value[int](t, pool, "SELECT count(*) FROM site_navigation_heat WHERE site_id=$1 AND score=20", legacy) != 1 ||
+		value[string](t, pool, "SELECT body FROM site_localizations WHERE site_id=$1", legacy) != "" {
 		t.Fatal("migration lost history or added foreign keys")
 	}
-	if !value[bool](t, pool, "SELECT legacy_detail AND content_rating='unreviewed' AND first_published_at IS NULL AND primary_category IS NULL AND logo_asset_key IS NULL AND featured_cover_asset_key IS NULL FROM sites WHERE id=$1", legacy) {
+	if !value[bool](t, pool, "SELECT legacy_detail AND content_rating='unreviewed' AND first_published_at IS NULL AND primary_category IS NULL AND logo_asset_key=$2 AND featured_cover_asset_key IS NULL FROM sites WHERE id=$1", legacy, logo) {
 		t.Fatal("migration invented editorial facts for a legacy Site")
 	}
 	editor := catalog.New(pool)
 	oldDetail, err := editor.PublishedSite(ctx, oldID)
 	must(t, err)
-	if oldDetail.InteractionEligible {
-		t.Fatal("unreviewed legacy detail enabled interaction collection")
+	if oldDetail.Reviewed || oldDetail.LogoURL != "" || len(oldDetail.Technology) != 0 || len(oldDetail.Addresses) != 0 {
+		t.Fatal("unreviewed legacy detail returned enriched fields")
 	}
 	svc := New(pool)
+	_, err = svc.Related(ctx, oldID)
+	mustError(t, err, catalog.ErrNotFound)
 	now := time.Date(2027, 1, 8, 14, 0, 0, 0, time.UTC)
 	svc.now = func() time.Time { return now }
 	f := Filters{Locale: "en"}
@@ -321,6 +339,8 @@ func TestNavigationPostgreSQLRedis(t *testing.T) {
 	_, err = editor.PublishedSite(ctx, a.PublicID)
 	mustError(t, err, catalog.ErrNotFound)
 	_, err = svc.Stats(ctx, a.PublicID)
+	mustError(t, err, catalog.ErrNotFound)
+	_, err = svc.Related(ctx, a.PublicID)
 	mustError(t, err, catalog.ErrNotFound)
 	out, err = svc.Home(ctx)
 	must(t, err)

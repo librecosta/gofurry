@@ -1,4 +1,3 @@
-import { CompassIcon } from '@phosphor-icons/react/dist/ssr/Compass'
 import { MagnifyingGlassIcon } from '@phosphor-icons/react/dist/ssr/MagnifyingGlass'
 import { ArrowRightIcon } from '@phosphor-icons/react/dist/ssr/ArrowRight'
 import { ChatsCircleIcon } from '@phosphor-icons/react/dist/ssr/ChatsCircle'
@@ -16,31 +15,11 @@ import { criteriaQuery, directoryHref, emptyCriteria, normalizeKeyword, type Cri
 import { FeaturedCard, SiteCard, TrendingRow, type CardContext } from './cards'
 import { categories, copy } from './messages'
 import type { Page } from './load'
+import { SitesFrame } from './frame'
 import styles from './sites.module.scss'
 
 const icons = { community: ChatsCircleIcon, gallery: ImageIcon, literature: BookOpenIcon, resources: ToolboxIcon,
   marketplace: StorefrontIcon, knowledge: NewspaperIcon, gaming: GameControllerIcon, events: CalendarDotsIcon }
-
-export function SitesFrame({ page, children }: { page: Page; children: React.ReactNode }) {
-  const { locale, region, criteria } = page
-  const m = copy[locale]
-  const alternate = locale === 'zh' ? 'en' : 'zh'
-  const home = localizedPath('/sites', locale, region)
-  const dir = directoryHref(locale, region)
-  return <div className={styles.page}>
-    <header className={styles.masthead}>
-      <a className={styles.wordmark} href={home}><CompassIcon size={22} aria-hidden="true" />GoFurry</a>
-      <nav aria-label={locale === 'zh' ? '网站频道' : 'Sites navigation'}>
-        <a href={home} aria-current={page.page === 'home' ? 'page' : undefined}>{m.sites}</a>
-        <a href={dir} aria-current={page.page === 'directory' ? 'page' : undefined}>{m.directory}</a>
-        <a href={localizedPath(page.page === 'home' ? '/sites' : '/sites/directory', alternate, region) + (criteria ? criteriaQuery(criteria) : '')}
-          lang={alternate} hrefLang={alternate}>{m.language}</a>
-      </nav>
-    </header>
-    <main className={styles.main}>{children}</main>
-    <footer className={styles.footer}><span>GoFurry</span><a href={dir}>{m.directory}</a><a href={localizedPath('/start', locale, region)}>{m.start}</a></footer>
-  </div>
-}
 
 export function SitesFailure({ page }: { page: Page }) {
   const m = copy[page.locale]

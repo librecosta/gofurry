@@ -17,11 +17,12 @@ UPDATE sites SET status=sqlc.arg(new_status),revision=revision+1,updated_at=tran
  archived_at=CASE WHEN sqlc.arg(new_status)::text='archived' THEN transaction_timestamp() ELSE archived_at END
 WHERE id=sqlc.arg(id) RETURNING *;
 
--- name: ClearSiteLocalizations :exec
-DELETE FROM site_localizations WHERE site_id=$1;
+-- name: RemoveOmittedSiteLocalizations :exec
+DELETE FROM site_localizations WHERE site_id=$1 AND NOT (locale=ANY(sqlc.arg(locales)::text[]));
 
 -- name: AddSiteLocalization :exec
-INSERT INTO site_localizations (site_id,locale,name,summary) VALUES ($1,$2,$3,$4);
+INSERT INTO site_localizations (site_id,locale,name,summary) VALUES ($1,$2,$3,$4)
+ON CONFLICT (site_id,locale) DO UPDATE SET name=excluded.name,summary=excluded.summary;
 
 -- name: DisableSiteAddresses :exec
 UPDATE site_addresses SET active=false WHERE site_id=$1 AND active;
@@ -36,12 +37,15 @@ INSERT INTO site_addresses (id,site_id,url,kind) VALUES ($1,$2,$3,$4)
 ON CONFLICT (site_id,url) DO UPDATE SET kind=excluded.kind,active=true;
 
 -- name: PublishedSite :one
-SELECT e.public_id,e.slug,COALESCE((SELECT jsonb_agg(jsonb_build_object('locale',l.locale,'name',l.name,'summary',l.summary) ORDER BY l.locale)
+SELECT e.public_id,e.slug,COALESCE((SELECT jsonb_agg(jsonb_build_object('locale',l.locale,'name',l.name,'summary',l.summary,
+ 'body',CASE WHEN n.id IS NOT NULL THEN l.body ELSE '' END) ORDER BY l.locale)
  FROM site_localizations l WHERE l.site_id=e.id),'[]'::jsonb)::jsonb AS localizations,
- EXISTS (SELECT 1 FROM site_public_navigation n WHERE n.id=e.id)::boolean AS interaction_eligible,
+ (n.id IS NOT NULL)::boolean AS interaction_eligible,
+ n.primary_category,n.secondary_categories,n.navigation_tags,n.supported_languages,s.logo_asset_key,
  COALESCE((SELECT jsonb_agg(jsonb_build_object('kind',x.kind,'url',x.url) ORDER BY x.kind DESC,x.url COLLATE "C")
- FROM site_addresses x WHERE x.site_id=e.id AND x.active),'[]'::jsonb)::jsonb AS addresses
-FROM site_public_history e WHERE e.public_id=$1 AND e.status='published';
+ FROM site_addresses x WHERE x.site_id=n.id AND x.active),'[]'::jsonb)::jsonb AS addresses
+FROM site_public_history e JOIN sites s ON s.id=e.id LEFT JOIN site_public_navigation n ON n.id=e.id
+WHERE e.public_id=$1 AND e.status='published';
 
 -- name: PublishedSitePage :many
 SELECT e.public_id,e.slug,COALESCE((SELECT jsonb_agg(jsonb_build_object('locale',l.locale,'name',l.name,'summary',l.summary) ORDER BY l.locale)

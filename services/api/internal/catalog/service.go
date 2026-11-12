@@ -8,15 +8,22 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/librecosta/gofurry/services/api/internal/database/dbgen"
+	"github.com/librecosta/gofurry/services/api/internal/storage"
 )
 
 type Service struct {
 	pool     *pgxpool.Pool
 	publicID func() string
+	assets   *storage.Store
 }
 
 func New(pool *pgxpool.Pool) *Service {
 	return &Service{pool: pool, publicID: newPublicID}
+}
+
+func (s *Service) WithSiteAssets(assets *storage.Store) *Service {
+	s.assets = assets
+	return s
 }
 
 func write[T any](ctx context.Context, s *Service, operation func(context.Context, *dbgen.Queries) (T, error)) (result T, err error) {

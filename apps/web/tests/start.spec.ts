@@ -602,6 +602,10 @@ test('start: logo navigation has stable first-frame placement and unavailable de
   })
   const trigger = page.getByRole('button', { name: 'GoFurry brand', exact: true }), popup = page.locator('[data-start-brand]')
   await trigger.click(); await expect(popup).toHaveCSS('opacity', '1')
+  const sites = popup.getByRole('link', { name: 'Sites', exact: true })
+  const sitesPath = region === 'CN' ? '/en/sites' : '/sites'
+  await expect(sites).toHaveAttribute('href', sitesPath)
+  await expect(sites).not.toHaveAttribute('aria-disabled')
   const buttons = popup.locator('[aria-disabled="true"]')
   for (const button of await buttons.all()) {
     const bounds = (await button.boundingBox())!
@@ -616,6 +620,9 @@ test('start: logo navigation has stable first-frame placement and unavailable de
   await page.keyboard.press('Escape'); await expect(popup).toHaveCount(0); await expect(trigger).toBeFocused()
   await trigger.press('Enter'); await expect(popup).toHaveCSS('opacity', '1')
   await page.mouse.click(370, 600); await expect(popup).toHaveCount(0); await expect(trigger).toBeFocused()
+  await trigger.press('Enter'); await sites.focus(); await sites.press('Enter')
+  await expect(page).toHaveURL(sitesPath)
+  await expect(popup).toHaveCount(0)
 })
 
 test('start: custom clear cancels suggestions, preserves focus and never submits', async ({ page }) => {

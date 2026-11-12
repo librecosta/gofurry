@@ -83,6 +83,16 @@ func NavigationStats(service *navigation.Service) fiber.Handler {
 	}
 }
 
+func NavigationRelated(service *navigation.Service) fiber.Handler {
+	return func(c fiber.Ctx) error {
+		if c.Request().URI().QueryArgs().Len() != 0 {
+			return navigationResponse(c, nil, catalog.ErrInvalid)
+		}
+		result, err := service.Related(c.Context(), c.Params("publicID"))
+		return navigationResponse(c, result, err)
+	}
+}
+
 func navigationResponse(c fiber.Ctx, result any, err error) error {
 	if err == nil {
 		c.Set("Cache-Control", "no-store")

@@ -8,6 +8,7 @@ import { join } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
 import { sitesFixtureSQL } from './sites-fixture.mjs'
+import { profileFixtureSQL, profileID } from './site-profile-fixture.mjs'
 
 const root = fileURLToPath(new URL('../', import.meta.url))
 const webDir = join(root, 'apps', 'web')
@@ -82,6 +83,22 @@ async function fixtureEdge(port, fixture) {
   })
   await new Promise((resolve, reject) => edge.once('error', reject).listen(port, '127.0.0.1', resolve))
   edges.push(edge)
+}
+
+async function observedAPI(port, fixture) {
+  const listener = createHTTPServer((incoming, response) => {
+    fixture.ssrPaths?.push(incoming.url?.split('?')[0])
+    const upstream = proxyRequest(fixture.api, { path: incoming.url, method: incoming.method, headers: incoming.headers }, result => {
+      response.writeHead(result.statusCode, result.headers)
+      result.pipe(response)
+    })
+    upstream.on('error', () => { if (!response.headersSent) response.writeHead(503); response.end() })
+    response.on('close', () => upstream.destroy())
+    incoming.pipe(upstream)
+  })
+  await new Promise((resolve, reject) => listener.once('error', reject).listen(port, '127.0.0.1', resolve))
+  edges.push(listener)
+  return 'http://127.0.0.1:' + port
 }
 
 function yaml(region, databasePort, apiPort) {
@@ -202,7 +219,7 @@ navigation:
     }
     launch(process.execPath, ['.output/server/index.mjs'], webDir, {
       ...process.env, NODE_ENV: 'production', HOST: '127.0.0.1', PORT: String(fixture.webPort),
-      WEB_REGION: region, WEB_API_BASE_URL: fixture.api, WEB_PUBLIC_ORIGIN: 'https://' + region.toLowerCase() + '.catalog.example',
+      WEB_REGION: region, WEB_API_BASE_URL: await observedAPI(await port(), fixture), WEB_PUBLIC_ORIGIN: 'https://' + region.toLowerCase() + '.catalog.example',
     })
     await waitFor(() => status(fixture.web + '/readyz', 200), region + ' Web')
     await fixtureEdge(fixture.edgePort, fixture)
@@ -276,6 +293,15 @@ navigation:
     throw new Error('An ambiguous aggregate write was incorrectly retried')
   }
   console.log('PostgreSQL outage returned API/SSR 503 for Site and Yearbook, Start remained 200, and both recovered.')
+  const fixtureSQL = (region, sql) => run('docker', ['exec', container, 'psql', '-Xq', '-v', 'ON_ERROR_STOP=1', '-U', 'postgres',
+    '-d', 'gofurry_d1_' + region.toLowerCase() + '_test', '-c', sql])
+  fixtureSQL('CN', "UPDATE sites SET content_rating='unreviewed',legacy_detail=true WHERE public_id='000000000000000a'")
+  const legacy = await fetch(webDetail)
+  if (legacy.status !== 200 || legacy.headers.get('x-robots-tag') !== 'noindex' ||
+      !(await legacy.text()).includes('/example-community/yearbook/2025') || !await status(apiYearbook, 200)) {
+    throw new Error('Legacy compatibility lost its published yearbook or noindex status')
+  }
+  fixtureSQL('CN', "UPDATE sites SET content_rating='sfw',legacy_detail=false WHERE public_id='000000000000000a'")
   for (const [region, fixture] of Object.entries(fixtures)) {
     const nav = ['--config', fixture.config, 'navigation']
     const id = '000000000000000a'
@@ -283,7 +309,7 @@ navigation:
     run(binary, [...nav, 'review', id, String(profile.revision), '--rating', region === 'CN' ? 'unreviewed' : 'adult',
       '--actor', 'fixture', '--reason', 'Withdraw public visibility'], root, process.env, true)
     const base = fixture.api + '/api/v1/sites/'
-    for (const path of [id, id + '/stats', id + '/yearbooks', id + '/yearbooks/2025']) {
+    for (const path of [id, id + '/stats', id + '/related', id + '/yearbooks', id + '/yearbooks/2025']) {
       if (!await status(base + path, 404)) throw new Error(region + ' rating withdrawal leaked through an API')
     }
     const page = '/sites/000000000000000a/example-community'
@@ -304,14 +330,52 @@ navigation:
   const logo = siteAsset('logo', 'site-logo.webp')
   const cover = siteAsset('cover', 'site-cover.avif')
   for (const region of ['CN', 'INTL']) {
-    run('docker', ['exec', container, 'psql', '-Xq', '-v', 'ON_ERROR_STOP=1', '-U', 'postgres',
-      '-d', 'gofurry_d1_' + region.toLowerCase() + '_test', '-c', sitesFixtureSQL(region, logo, cover)])
+    fixtureSQL(region, sitesFixtureSQL(region, logo, cover) + profileFixtureSQL(region))
   }
+  const cn = fixtures.CN
+  const profileURL = cn.api + '/api/v1/sites/' + profileID
+  const readProfile = async () => (await fetch(profileURL)).json()
+  const before = await readProfile()
+  const options = ['--config', cn.config]
+  const op = ['site-profile', 'set-description', profileID]
+  const revision = JSON.parse(run(binary, [...options, 'navigation', 'inspect', profileID], root, process.env, true)).revision
+  const enText = join(scratch, 'description.en.txt')
+  const zhText = join(scratch, 'description.zh.txt')
+  await writeFile(enText, 'Pinewood Commons is a meeting place for artists, makers, and friends. Its project forum makes room for works in progress and thoughtful feedback.\n\nMembers share event plans, technique notes, and invitations to collaborate on costumes and stories.', { mode: 0o600 })
+  await writeFile(zhText, '松林兽圈是创作者、手工爱好者和朋友们的交流空间。项目论坛欢迎大家分享未完成的作品，交流具体的修改建议。\n\n成员会分享活动计划、制作笔记，也会邀请同好一起完成兽装和故事。', { mode: 0o600 })
+  const en = JSON.parse(run(binary, [...options, ...op, 'en', String(revision), enText, '--confirm-reviewed'], root, process.env, true))
+  const rejected = args => spawnSync(binary, [...options, ...op, ...args], { cwd: root, stdio: 'ignore' }).status === 1
+  if (!rejected(['zh', String(revision), zhText, '--confirm-reviewed']) || !rejected(['zh', String(en.revision), zhText])) {
+    throw new Error('Site profile CLI accepted a stale revision or missing review confirmation')
+  }
+  const zh = JSON.parse(run(binary, [...options, ...op, 'zh', String(en.revision), zhText, '--confirm-reviewed'], root, process.env, true))
+  const after = await readProfile()
+  if (zh.revision !== revision + 2 || after.localizations.filter(x => x.body?.includes('\n\n')).length !== 2 ||
+      ['addresses', 'tags', 'primary_category', 'logo_url'].some(key => JSON.stringify(before[key]) !== JSON.stringify(after[key]))) {
+    throw new Error('Site profile CLI changed unrelated fields or lost one language')
+  }
+  cn.ssrPaths = []
+  const begin = performance.now()
+  const ssr = await fetch(cn.web + '/en/sites/' + profileID + '/field-guide-1')
+  const bytes = (await ssr.arrayBuffer()).byteLength
+  const actual = cn.ssrPaths
+  cn.ssrPaths = undefined
+  if (!ssr.ok || actual.length !== 1 || actual[0] !== '/api/v1/sites/' + profileID) throw new Error('Unexpected detail SSR API fan-out: ' + actual)
+  console.log(`Site profile: ${bytes} B SSR HTML, ${(performance.now() - begin).toFixed(1)} ms local, 1 regional API read; bilingual CLI CAS verified.`)
   run(binary, ['--config', fixtures.CN.config, 'navigation', 'refresh-heat'])
   await runAsync(process.execPath, ['node_modules/@playwright/test/cli.js', 'test', '--config', 'playwright.sites.config.ts'], webDir, {
     ...process.env, CATALOG_CN_WEB: fixtures.CN.web, CATALOG_INTL_WEB: fixtures.INTL.web,
     CATALOG_CN_API: fixtures.CN.api, CATALOG_INTL_API: fixtures.INTL.api, CATALOG_CN_EDGE: fixtures.CN.edge,
   })
+  const evidence = " FROM collection_sources s WHERE c.source_id=s.id AND s.namespace='profile-fixture'"
+  fixtureSQL('CN', "UPDATE collection_current c SET ruleset='web-passive-2'" + evidence + " AND c.facts ? 'tech.detected.astro'")
+  const revised = (await readProfile()).technology
+  if (!revised || revised.length !== 2 || revised.some(fact => fact.technology)) throw new Error('Unknown detector ruleset reached the public profile')
+  fixtureSQL('CN', "UPDATE collection_current c SET observed_at=now()-interval '32 days',confirmed_at=now()-interval '31 days'" + evidence +
+    " AND c.facts ? 'http.response'")
+  fixtureSQL('CN', "UPDATE collection_current c SET state='withdrawn',observation_id=NULL" + evidence + " AND c.facts ? 'tls.certificate'")
+  if ((await readProfile()).technology !== undefined) throw new Error('Expired or withdrawn evidence reached the public profile')
+  console.log('Site profile: expired confirmation, unknown detector ruleset and withdrawal omitted from public output.')
 } finally {
   if (container && paused) run('docker', ['unpause', container])
   if (redisContainer && redisPaused) run('docker', ['unpause', redisContainer])

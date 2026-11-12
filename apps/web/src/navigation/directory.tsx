@@ -9,7 +9,7 @@ import { apiQuery, criteriaParams, criteriaQuery, decodeDirectory, emptyCriteria
 import { languageLabel, SiteCard } from './cards'
 import { categories, copy } from './messages'
 import type { Page } from './load'
-import { SitesFrame } from './pages'
+import { SitesFrame } from './frame'
 import styles from './sites.module.scss'
 
 type Dimension = 'category' | 'tags' | 'language'

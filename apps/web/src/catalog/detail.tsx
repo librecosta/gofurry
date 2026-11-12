@@ -3,8 +3,6 @@ import { defaultLocale } from '../locale-path'
 import type { Locale, Region } from '../preferences'
 import { isPublicID, readCatalogDetail, type Detail, type Kind } from './detail-server'
 import { entityPath } from './public-path'
-import { yearbookPath } from '../yearbook/path'
-import { SiteDwell, siteOutbound } from '../navigation/site-interactions'
 import styles from './detail.module.scss'
 
 export type CatalogParams = { language?: string; publicId: string; slug?: string }
@@ -16,9 +14,9 @@ type DetailPage = {
   canonical?: string
   alternatives: { locale: Locale; path: string; url: string }[]
 }
-type Page = DetailPage | { state: 'unavailable'; locale: Locale }
+export type DetailPageData = DetailPage | { state: 'unavailable'; locale: Locale; region: Region }
 
-export async function loadDetail(kind: Kind, params: CatalogParams, pathname: string, region: Region): Promise<Page> {
+export async function loadDetail(kind: Kind, params: CatalogParams, pathname: string, region: Region): Promise<DetailPageData> {
   const { language, publicId } = params
   // TanStack can also match a route as a prefix of a longer unknown path.
   if (!/^\/(?:(?:en|zh)\/)?(?:sites|games)\/[^/]+(?:\/[^/]+)?\/?$/.test(pathname)) throw notFound()
@@ -29,7 +27,7 @@ export async function loadDetail(kind: Kind, params: CatalogParams, pathname: st
   const locale = language ?? defaultLocale(region)
   const result = await readCatalogDetail({ data: { kind, publicId, region } })
   if (result.state === 'missing') throw notFound()
-  if (result.state === 'unavailable') return { state: 'unavailable', locale }
+  if (result.state === 'unavailable') return { state: 'unavailable', locale, region }
   const { detail, origin } = result
   const path = entityPath(kind, publicId, detail.slug, locale, region)
   if (pathname !== path) throw redirect({ href: path, statusCode: 301, headers: { 'Cache-Control': 'no-store' } })
@@ -40,59 +38,50 @@ export async function loadDetail(kind: Kind, params: CatalogParams, pathname: st
   return { state: 'published', detail, locale, region, canonical: alternatives.find(entry => entry.locale === locale)?.url, alternatives }
 }
 
-export function detailHeaders(data: Page | undefined): Record<string, string> {
-  return data?.state === 'published' && data.canonical
+export function detailHeaders(data: DetailPageData | undefined): Record<string, string> {
+  return data?.state === 'published' && data.canonical && (data.detail.kind !== 'sites' || data.detail.reviewed)
     ? { 'Cache-Control': data.detail.kind === 'sites' ? 'public, max-age=0, must-revalidate' : 'public, max-age=60' }
     : { 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex' }
 }
 
-export function detailHead(data: Page | undefined) {
+export function detailHead(data: DetailPageData | undefined) {
   if (data?.state !== 'published') return { meta: [{ name: 'robots', content: 'noindex' }] }
   const translation = data.detail.localizations.find(entry => entry.locale === data.locale)
   const name = (translation ?? data.detail.localizations[0]).name
+  const reviewed = data.detail.kind !== 'sites' || data.detail.reviewed
   return {
     meta: [
       { title: name },
-      ...(translation?.summary ? [{ name: 'description', content: translation.summary }] : []),
-      ...(!translation ? [{ name: 'robots', content: 'noindex' }] : []),
+      ...(reviewed && translation?.summary ? [{ name: 'description', content: translation.summary }] : []),
+      ...(!reviewed || !translation ? [{ name: 'robots', content: 'noindex' }] : []),
     ],
     links: [
       ...(data.canonical ? [{ rel: 'canonical', href: data.canonical }] : []),
-      ...data.alternatives.map(item => ({ rel: 'alternate', hrefLang: item.locale, href: item.url })),
+      ...(reviewed ? data.alternatives.map(item => ({ rel: 'alternate', hrefLang: item.locale, href: item.url })) : []),
     ],
   }
 }
 
 const labels = {
-  en: { unavailable: 'This detail is temporarily unavailable.', missing: 'This page was not found.', untranslated: 'An English translation is unavailable.', primary: 'Visit site', alternate: 'Alternate addresses', sources: 'Platforms', yearbooks: 'Yearbooks' },
-  zh: { unavailable: '详情暂时无法加载。', missing: '找不到此页面。', untranslated: '此页面暂无中文译文。', primary: '访问网站', alternate: '备用地址', sources: '发行平台', yearbooks: '年鉴' },
+  en: { unavailable: 'This detail is temporarily unavailable.', missing: 'This page was not found.', untranslated: 'An English translation is unavailable.', sources: 'Platforms' },
+  zh: { unavailable: '详情暂时无法加载。', missing: '找不到此页面。', untranslated: '此页面暂无中文译文。', sources: '发行平台' },
 }
 
 export function MissingDetail() {
   return <main className={styles.detail}><h1>404</h1><p lang="zh">{labels.zh.missing}</p><p lang="en">{labels.en.missing}</p></main>
 }
 
-export function DetailView({ data }: { data: Page }) {
+export function DetailView({ data }: { data: DetailPageData }) {
   const copy = labels[data.locale]
   if (data.state === 'unavailable') return <main className={styles.detail}><h1>{copy.unavailable}</h1></main>
   const { detail, locale, alternatives } = data
   const translation = detail.localizations.find(entry => entry.locale === locale)
   const display = translation ?? detail.localizations[0]
-  const primary = detail.kind === 'sites' ? detail.addresses.find(address => address.kind === 'primary') : undefined
-  const alternates = detail.kind === 'sites' ? detail.addresses.filter(address => address.kind === 'alternate') : []
-  const tracked = detail.kind === 'sites' && detail.interactions
-  const visit = tracked ? (event: Parameters<typeof siteOutbound>[1]) => siteOutbound(detail.public_id, event) : undefined
   return (
     <main className={styles.detail}>
-      {tracked && <SiteDwell publicID={detail.public_id} />}
       <h1 lang={display.locale}>{display.name}</h1>
       {translation?.summary && <p className={styles.summary}>{translation.summary}</p>}
       {!translation && <p>{copy.untranslated}</p>}
-      {primary && <p><a href={primary.url} target="_blank" rel="noopener noreferrer" onClick={visit} onAuxClick={visit}>{copy.primary}</a></p>}
-      {alternates.length > 0 && <section><h2>{copy.alternate}</h2><ul>{alternates.map(address =>
-        <li key={address.url}><a href={address.url} target="_blank" rel="noopener noreferrer" onClick={visit} onAuxClick={visit}>{address.url}</a></li>)}</ul></section>}
-      {detail.kind === 'sites' && detail.yearbooks.length > 0 && <section><h2>{copy.yearbooks}</h2><ul>{detail.yearbooks.map(year =>
-        <li key={year}><a href={yearbookPath(detail.public_id, detail.slug, year, locale, data.region)}>{year}</a></li>)}</ul></section>}
       {detail.kind === 'games' && detail.sources.length > 0 && <section><h2>{copy.sources}</h2><ul>{detail.sources.map(source =>
         <li key={JSON.stringify([source.platform_code, source.external_key])}>{source.source_url
           ? <a href={source.source_url} rel="noopener noreferrer">{source.platform_code}</a>

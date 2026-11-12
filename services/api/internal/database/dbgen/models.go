@@ -55,11 +55,12 @@ type CollectionCurrent struct {
 }
 
 type CollectionGap struct {
-	ID          uuid.UUID          `json:"id"`
-	Namespace   string             `json:"namespace"`
-	PriorEpoch  uuid.UUID          `json:"prior_epoch"`
-	PriorCursor string             `json:"prior_cursor"`
-	DetectedAt  pgtype.Timestamptz `json:"detected_at"`
+	ID              uuid.UUID          `json:"id"`
+	Namespace       string             `json:"namespace"`
+	PriorEpoch      uuid.UUID          `json:"prior_epoch"`
+	PriorCursor     string             `json:"prior_cursor"`
+	DetectedAt      pgtype.Timestamptz `json:"detected_at"`
+	PriorGeneration *uuid.UUID         `json:"prior_generation"`
 }
 
 type CollectionPlan struct {
@@ -222,6 +223,7 @@ type SiteLocalization struct {
 	Locale  string    `json:"locale"`
 	Name    string    `json:"name"`
 	Summary string    `json:"summary"`
+	Body    string    `json:"body"`
 }
 
 type SiteMonthlyCoverage struct {

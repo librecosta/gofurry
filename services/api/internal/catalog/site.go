@@ -99,7 +99,11 @@ func requireSitePublication(ctx context.Context, q *dbgen.Queries, id uuid.UUID)
 }
 
 func saveSiteContent(ctx context.Context, q *dbgen.Queries, id uuid.UUID, in SiteInput) error {
-	if err := q.ClearSiteLocalizations(ctx, id); err != nil {
+	locales := make([]string, 0, len(in.Localizations))
+	for _, localization := range in.Localizations {
+		locales = append(locales, localization.Locale)
+	}
+	if err := q.RemoveOmittedSiteLocalizations(ctx, dbgen.RemoveOmittedSiteLocalizationsParams{SiteID: id, Locales: locales}); err != nil {
 		return err
 	}
 	for _, localization := range in.Localizations {

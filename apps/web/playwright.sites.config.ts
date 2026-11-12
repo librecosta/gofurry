@@ -2,7 +2,7 @@ import { defineConfig } from '@playwright/test'
 
 export default defineConfig({
   testDir: './tests',
-  testMatch: 'sites-experience.spec.ts',
+  testMatch: ['sites-experience.spec.ts', 'site-profile.spec.ts'],
   workers: 1,
   use: { browserName: 'chromium', channel: process.env.PLAYWRIGHT_CHANNEL },
 })

@@ -412,6 +412,50 @@ func (q *Queries) NavigationLanguages(ctx context.Context) ([]string, error) {
 	return items, nil
 }
 
+const navigationRelated = `-- name: NavigationRelated :one
+WITH subject AS MATERIALIZED (
+ SELECT origin.id,origin.primary_category,origin.secondary_categories,origin.navigation_tags,origin.supported_languages
+ FROM site_public_navigation origin WHERE origin.public_id=$1
+), scored AS (
+ SELECT n.id,n.public_id,
+  CASE WHEN n.primary_category=s.primary_category THEN 3
+   WHEN n.primary_category=ANY(s.secondary_categories) OR s.primary_category=ANY(n.secondary_categories) THEN 2
+   WHEN n.secondary_categories&&s.secondary_categories THEN 1 ELSE 0 END AS category_score,
+  (SELECT count(*) FROM unnest(n.navigation_tags) t(code) WHERE t.code=ANY(s.navigation_tags)) AS tags_score,
+  (SELECT count(*) FROM unnest(n.supported_languages) l(code) WHERE l.code=ANY(s.supported_languages)) AS languages_score,
+  coalesce(h.score,0) AS heat_score
+ FROM subject s JOIN site_public_navigation n ON n.id<>s.id
+ LEFT JOIN site_navigation_heat h ON $2::boolean AND h.site_id=n.id
+ WHERE n.primary_category=ANY(ARRAY[s.primary_category]||s.secondary_categories)
+  OR n.secondary_categories&&(ARRAY[s.primary_category]||s.secondary_categories)
+  OR n.navigation_tags&&s.navigation_tags
+), picks AS MATERIALIZED (
+ SELECT id,row_number() OVER (ORDER BY category_score DESC,tags_score DESC,languages_score DESC,heat_score DESC,public_id COLLATE "C") AS ordinal
+ FROM scored WHERE category_score>0 OR tags_score>=2
+ ORDER BY ordinal LIMIT 6
+)
+SELECT coalesce((SELECT jsonb_agg(jsonb_build_object(
+ 'public_id',s.public_id,'slug',s.slug,'primary_category',s.primary_category,'secondary_categories',s.secondary_categories,
+ 'tags',s.navigation_tags,'languages',s.supported_languages,'first_published_at',s.first_published_at,
+ 'logo_asset_key',s.logo_asset_key,
+ 'localizations',coalesce((SELECT jsonb_agg(jsonb_build_object('locale',l.locale,'name',l.name) ORDER BY l.locale)
+  FROM site_localizations l WHERE l.site_id=s.id),'[]'::jsonb)) ORDER BY p.ordinal)
+ FROM picks p JOIN sites s ON s.id=p.id),'[]'::jsonb)::jsonb AS items
+FROM subject
+`
+
+type NavigationRelatedParams struct {
+	PublicID string `json:"public_id"`
+	UseHeat  bool   `json:"use_heat"`
+}
+
+func (q *Queries) NavigationRelated(ctx context.Context, arg NavigationRelatedParams) ([]byte, error) {
+	row := q.db.QueryRow(ctx, navigationRelated, arg.PublicID, arg.UseHeat)
+	var items []byte
+	err := row.Scan(&items)
+	return items, err
+}
+
 const navigationStats = `-- name: NavigationStats :one
 SELECT coalesce(sum(d.detail_views),0)::bigint AS detail_views,coalesce(sum(d.outbound_clicks),0)::bigint AS outbound_clicks,
  count(d.utc_day)::integer AS confirmed_days

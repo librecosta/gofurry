@@ -1,5 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { HomePage, SitesFailure, SitesFrame } from '../navigation/pages'
+import { HomePage, SitesFailure } from '../navigation/pages'
+import { SitesFrame } from '../navigation/frame'
 import { loadSites, sitesHead, sitesHeaders } from '../navigation/load'
 
 export const Route = createFileRoute('/{-$language}/sites/')({

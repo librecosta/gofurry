@@ -8,11 +8,13 @@ package dbgen
 import (
 	"context"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"uuid"
 )
 
 const addSiteLocalization = `-- name: AddSiteLocalization :exec
 INSERT INTO site_localizations (site_id,locale,name,summary) VALUES ($1,$2,$3,$4)
+ON CONFLICT (site_id,locale) DO UPDATE SET name=excluded.name,summary=excluded.summary
 `
 
 type AddSiteLocalizationParams struct {
@@ -83,15 +85,6 @@ func (q *Queries) ChangeSiteStatus(ctx context.Context, arg ChangeSiteStatusPara
 		&i.FeaturedCoverAssetKey,
 	)
 	return i, err
-}
-
-const clearSiteLocalizations = `-- name: ClearSiteLocalizations :exec
-DELETE FROM site_localizations WHERE site_id=$1
-`
-
-func (q *Queries) ClearSiteLocalizations(ctx context.Context, siteID uuid.UUID) error {
-	_, err := q.db.Exec(ctx, clearSiteLocalizations, siteID)
-	return err
 }
 
 const createSite = `-- name: CreateSite :one
@@ -171,20 +164,28 @@ func (q *Queries) LockSite(ctx context.Context, id uuid.UUID) (Site, error) {
 }
 
 const publishedSite = `-- name: PublishedSite :one
-SELECT e.public_id,e.slug,COALESCE((SELECT jsonb_agg(jsonb_build_object('locale',l.locale,'name',l.name,'summary',l.summary) ORDER BY l.locale)
+SELECT e.public_id,e.slug,COALESCE((SELECT jsonb_agg(jsonb_build_object('locale',l.locale,'name',l.name,'summary',l.summary,
+ 'body',CASE WHEN n.id IS NOT NULL THEN l.body ELSE '' END) ORDER BY l.locale)
  FROM site_localizations l WHERE l.site_id=e.id),'[]'::jsonb)::jsonb AS localizations,
- EXISTS (SELECT 1 FROM site_public_navigation n WHERE n.id=e.id)::boolean AS interaction_eligible,
+ (n.id IS NOT NULL)::boolean AS interaction_eligible,
+ n.primary_category,n.secondary_categories,n.navigation_tags,n.supported_languages,s.logo_asset_key,
  COALESCE((SELECT jsonb_agg(jsonb_build_object('kind',x.kind,'url',x.url) ORDER BY x.kind DESC,x.url COLLATE "C")
- FROM site_addresses x WHERE x.site_id=e.id AND x.active),'[]'::jsonb)::jsonb AS addresses
-FROM site_public_history e WHERE e.public_id=$1 AND e.status='published'
+ FROM site_addresses x WHERE x.site_id=n.id AND x.active),'[]'::jsonb)::jsonb AS addresses
+FROM site_public_history e JOIN sites s ON s.id=e.id LEFT JOIN site_public_navigation n ON n.id=e.id
+WHERE e.public_id=$1 AND e.status='published'
 `
 
 type PublishedSiteRow struct {
-	PublicID            string `json:"public_id"`
-	Slug                string `json:"slug"`
-	Localizations       []byte `json:"localizations"`
-	InteractionEligible bool   `json:"interaction_eligible"`
-	Addresses           []byte `json:"addresses"`
+	PublicID            string      `json:"public_id"`
+	Slug                string      `json:"slug"`
+	Localizations       []byte      `json:"localizations"`
+	InteractionEligible bool        `json:"interaction_eligible"`
+	PrimaryCategory     pgtype.Text `json:"primary_category"`
+	SecondaryCategories []string    `json:"secondary_categories"`
+	NavigationTags      []string    `json:"navigation_tags"`
+	SupportedLanguages  []string    `json:"supported_languages"`
+	LogoAssetKey        pgtype.Text `json:"logo_asset_key"`
+	Addresses           []byte      `json:"addresses"`
 }
 
 func (q *Queries) PublishedSite(ctx context.Context, publicID string) (PublishedSiteRow, error) {
@@ -195,6 +196,11 @@ func (q *Queries) PublishedSite(ctx context.Context, publicID string) (Published
 		&i.Slug,
 		&i.Localizations,
 		&i.InteractionEligible,
+		&i.PrimaryCategory,
+		&i.SecondaryCategories,
+		&i.NavigationTags,
+		&i.SupportedLanguages,
+		&i.LogoAssetKey,
 		&i.Addresses,
 	)
 	return i, err
@@ -236,6 +242,20 @@ func (q *Queries) PublishedSitePage(ctx context.Context, arg PublishedSitePagePa
 		return nil, err
 	}
 	return items, nil
+}
+
+const removeOmittedSiteLocalizations = `-- name: RemoveOmittedSiteLocalizations :exec
+DELETE FROM site_localizations WHERE site_id=$1 AND NOT (locale=ANY($2::text[]))
+`
+
+type RemoveOmittedSiteLocalizationsParams struct {
+	SiteID  uuid.UUID `json:"site_id"`
+	Locales []string  `json:"locales"`
+}
+
+func (q *Queries) RemoveOmittedSiteLocalizations(ctx context.Context, arg RemoveOmittedSiteLocalizationsParams) error {
+	_, err := q.db.Exec(ctx, removeOmittedSiteLocalizations, arg.SiteID, arg.Locales)
+	return err
 }
 
 const saveSiteAddress = `-- name: SaveSiteAddress :exec

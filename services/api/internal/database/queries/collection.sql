@@ -126,8 +126,9 @@ UPDATE collection_consumer SET ack_pending=false,reset_ack=NULL WHERE namespace=
 UPDATE collection_consumer SET sweep_after=$2,sweep_at=$3 WHERE namespace=$1;
 
 -- name: AddCollectionGap :exec
-INSERT INTO collection_gaps (id,namespace,prior_epoch,prior_cursor) VALUES ($1,$2,$3,$4)
-ON CONFLICT (namespace,prior_epoch,prior_cursor) DO NOTHING;
+INSERT INTO collection_gaps (id,namespace,prior_epoch,prior_cursor,prior_generation) VALUES ($1,$2,$3,$4,$5)
+ON CONFLICT (namespace,prior_epoch,prior_cursor) DO UPDATE SET prior_generation=excluded.prior_generation
+WHERE collection_gaps.prior_generation IS DISTINCT FROM excluded.prior_generation;
 
 -- name: CollectionResultSource :one
 SELECT s.* FROM collection_sources s WHERE s.target_id=$1 AND s.namespace=$2 AND EXISTS (

@@ -34,7 +34,7 @@ func registerURLs(v1 fiber.Router, backgrounds, suggestions, location, weather, 
 		path         string
 		page, detail fiber.Handler
 	}{
-		{"sites", handlers.CatalogPage(directory.SitePage, true), handlers.SiteDetail(directory, interactionsEnabled)},
+		{"sites", handlers.CatalogPage(directory.SitePage, true), handlers.SiteDetail(directory, discovery, yearbooks, interactionsEnabled)},
 		{"games", handlers.CatalogPage(directory.GamePage, false), handlers.CatalogDetail(directory.PublishedGame)},
 	} {
 		group := v1.Group("/"+route.path, limited(600, func(fiber.Ctx) string { return route.path }),
@@ -43,6 +43,7 @@ func registerURLs(v1 fiber.Router, backgrounds, suggestions, location, weather, 
 			group.Get("/discovery", handlers.NavigationHome(discovery))
 			group.Get("/directory", handlers.NavigationDirectory(discovery, region))
 			group.Get("/:publicID/stats", handlers.NavigationStats(discovery))
+			group.Get("/:publicID/related", handlers.NavigationRelated(discovery))
 		}
 		group.Get("/", route.page)
 		group.Get("/:publicID", route.detail)

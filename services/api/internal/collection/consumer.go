@@ -133,7 +133,7 @@ func (s *Service) reset(ctx context.Context, conn *pgx.Conn, q *dbgen.Queries, s
 	defer cancel()
 	if state.Epoch != nil {
 		if err := q.AddCollectionGap(ctx, dbgen.AddCollectionGapParams{
-			ID: uuid.NewV7(), Namespace: s.namespace, PriorEpoch: *state.Epoch, PriorCursor: state.Cursor,
+			ID: uuid.NewV7(), Namespace: s.namespace, PriorEpoch: *state.Epoch, PriorCursor: state.Cursor, PriorGeneration: state.Generation,
 		}); err != nil {
 			return err
 		}

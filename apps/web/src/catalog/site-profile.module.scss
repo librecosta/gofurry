@@ -1,0 +1,109 @@
+.profile {
+  max-width: 76rem;
+  margin-inline: auto;
+  overflow-wrap: anywhere;
+}
+
+.breadcrumb {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .55rem;
+  color: var(--site-quiet);
+  font-size: .87rem;
+}
+
+.profile :is(.breadcrumb, .information, .alternates) a:hover { text-decoration: underline; text-underline-offset: .23em; }
+
+.hero {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: clamp(1rem, 3.5vw, 3.1rem);
+  align-items: start;
+  margin-block: 1.2rem 2.25rem;
+  padding: clamp(1rem, 3.5vw, 2.75rem);
+  border-radius: var(--radius-large);
+  background: var(--site-wash);
+}
+
+.profile .mark {
+  width: clamp(3.25rem, 9vw, 7rem);
+  height: auto;
+  aspect-ratio: 1;
+  font-size: clamp(1.45rem, 4vw, 3.45rem);
+  background: var(--site-panel);
+}
+
+.profile .heroCopy h1 { font-size: clamp(2.25rem, 5vw, 4.5rem); }
+.profile .domain { margin-top: .38rem; font-size: .95rem; color: var(--site-quiet); }
+.profile .translation { margin-top: .65rem; color: var(--site-quiet); font-size: .85rem; }
+.profile .intro { max-width: 63ch; margin-top: .8rem; line-height: 1.65; white-space: pre-line; }
+.profile .chips, .actions { display: flex; flex-wrap: wrap; gap: .45rem .55rem; margin-top: .9rem; }
+.profile .chips { list-style: none; padding: 0; font-size: .83rem; }
+.profile .chips a { display: inline-block; padding: .3rem .55rem; border-radius: var(--radius-small); background: var(--site-panel); }
+.profile .chips a:hover { background: var(--surface-hover); }
+.profile .actions { margin-top: 1.2rem; gap: .6rem 1rem; align-items: center; }
+
+.profile :is(.visit, .jump) {
+  display: inline-flex;
+  align-items: center;
+  gap: .45rem;
+  min-height: 2.65rem;
+  border-radius: var(--radius-small);
+  padding: .5rem .8rem;
+  font-weight: 730;
+  font-size: .89rem;
+}
+
+.profile .visit { color: var(--page-background); background: color-mix(in srgb, var(--accent) 88%, var(--text)); }
+.profile .visit:hover { background: var(--text); }
+.profile .jump:hover { background: var(--site-panel); }
+.profile :is(.visit, .jump, .chips a):active { filter: brightness(.9); }
+
+.columns { scroll-margin-top: 1.25rem; }
+.columns[data-two-columns] {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(15rem, 1fr);
+  gap: clamp(1.5rem, 5vw, 5rem);
+}
+
+.sections { min-width: 0; }
+.sections > section + section { margin-top: 2rem; }
+.sections > section { border-top: 1px solid var(--site-rule); padding-top: 1.15rem; }
+.prose { max-width: 66ch; line-height: 1.72; white-space: pre-line; }
+.profile .prose p + p { margin-top: .9rem; }
+.information { display: grid; margin: 0; }
+.information > div {
+  display: grid;
+  grid-template-columns: minmax(7.75rem, 1fr) minmax(0, 3fr);
+  gap: .65rem;
+  padding-block: .66rem;
+  border-bottom: 1px solid var(--site-rule);
+}
+.information dt, .counts dt, .window { color: var(--site-quiet); font-size: .87rem; }
+.information dd { display: flex; flex-wrap: wrap; gap: .32rem .8rem; margin: 0; }
+.information a, .alternates a { color: var(--accent); }
+.alternates { margin-top: .85rem; }
+.alternates summary { width: fit-content; cursor: pointer; padding-block: .28rem; }
+.profile .alternates summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.profile .alternates ul { padding-inline-start: 1.3rem; margin-top: .5rem; }
+.counts { display: flex; flex-wrap: wrap; gap: .75rem 2.2rem; margin: 1rem 0 0; }
+.counts dd { margin: .2rem 0 0; font-size: 1.65rem; font-weight: 780; font-variant-numeric: tabular-nums; }
+.facts, .years { list-style: none; padding: 0; }
+.facts li { display: grid; gap: .2rem; padding-block: .62rem; border-bottom: 1px solid var(--site-rule); }
+.facts small { color: var(--site-quiet); }
+.years a { display: flex; align-items: center; gap: .6rem; padding-block: .65rem; border-bottom: 1px solid var(--site-rule); font-weight: 650; }
+.years a svg { color: var(--accent); flex: none; }
+.years a svg:last-child { margin-inline-start: auto; }
+.years a:hover { text-decoration: underline; text-underline-offset: .23em; }
+.failure a { display: inline-block; margin-top: 1rem; text-decoration: underline; }
+
+@container (max-width: 49rem) {
+  .columns[data-two-columns] { grid-template-columns: minmax(0, 1fr); }
+}
+
+@container (max-width: 34rem) {
+  .hero { grid-template-columns: minmax(0, 1fr); }
+  .profile .heroCopy h1 { font-size: clamp(1.85rem, 10cqi, 2.85rem); }
+  .information > div { grid-template-columns: minmax(0, 1fr); gap: .28rem; }
+}

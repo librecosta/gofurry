@@ -14,12 +14,6 @@ type Summary struct {
 	Localizations []Localization `json:"localizations"`
 }
 
-type SiteDetail struct {
-	Summary
-	Addresses           []Address `json:"addresses"`
-	InteractionEligible bool      `json:"-"`
-}
-
 type GameDetail struct {
 	Summary
 	Sources []Source `json:"sources"`
@@ -34,27 +28,6 @@ func summary(id, slug string, localizations []byte) (Summary, error) {
 	out := Summary{PublicID: id, Slug: slug}
 	if err := json.Unmarshal(localizations, &out.Localizations); err != nil {
 		return Summary{}, ErrUnavailable
-	}
-	return out, nil
-}
-
-func (s *Service) PublishedSite(ctx context.Context, publicID string) (SiteDetail, error) {
-	if !ValidPublicID(publicID) {
-		return SiteDetail{}, ErrNotFound
-	}
-	if s.pool == nil {
-		return SiteDetail{}, ErrUnavailable
-	}
-	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
-	defer cancel()
-	row, err := dbgen.New(s.pool).PublishedSite(ctx, publicID)
-	if err != nil {
-		return SiteDetail{}, classify(err)
-	}
-	base, err := summary(row.PublicID, row.Slug, row.Localizations)
-	out := SiteDetail{Summary: base, InteractionEligible: row.InteractionEligible}
-	if err != nil || json.Unmarshal(row.Addresses, &out.Addresses) != nil {
-		return SiteDetail{}, ErrUnavailable
 	}
 	return out, nil
 }

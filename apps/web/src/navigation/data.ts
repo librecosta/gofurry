@@ -148,3 +148,7 @@ export function decodeDirectory(value: unknown): Directory {
     heat: heat(d.heat), tag_registry: d.tag_registry, language_registry: (d.language_registry ?? []).filter(validLanguage), interactions: d.interactions === true,
   }
 }
+
+export function decodeRelated(value: unknown) {
+  return cards(object(value).items, 6)
+}

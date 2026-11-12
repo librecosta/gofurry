@@ -32,7 +32,7 @@ test('published yearbook is indexed in its own locale and linked from the Site',
   try {
     const page = await context.newPage()
     await page.goto(cn + site)
-    await page.getByRole('link', { name: '2025' }).click()
+    await page.getByRole('link', { name: '2025 年站点年鉴', exact: true }).click()
     await expect(page.getByRole('heading', { name: '2025 年站点年鉴' })).toBeVisible()
     await expect(page.getByText('14 / 365 天', { exact: true })).toBeVisible()
     await expect(page.getByText('未知表示该日缺少可确认的证据。', { exact: false })).toBeVisible()

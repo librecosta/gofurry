@@ -2,7 +2,8 @@ import { createFileRoute } from '@tanstack/react-router'
 import { DirectoryPage } from '../navigation/directory'
 import { normalizeCriteria } from '../navigation/data'
 import { loadSites, sitesHead, sitesHeaders } from '../navigation/load'
-import { SitesFailure, SitesFrame } from '../navigation/pages'
+import { SitesFailure } from '../navigation/pages'
+import { SitesFrame } from '../navigation/frame'
 
 export const Route = createFileRoute('/{-$language}/sites/directory')({
   loaderDeps: ({ search }) => normalizeCriteria(search),

@@ -368,6 +368,36 @@ type Stats struct {
 	OutboundClicks *int64 `json:"outbound_clicks,omitempty"`
 }
 
+type Related struct {
+	Items []Card `json:"items"`
+}
+
+func (s *Service) Related(ctx context.Context, id string) (Related, error) {
+	if !catalog.ValidPublicID(id) {
+		return Related{}, catalog.ErrNotFound
+	}
+	return read(ctx, s.pool, func(ctx context.Context, q *dbgen.Queries) (Related, error) {
+		var out Related
+		heat, err := heatState(ctx, q, s.now().UTC())
+		if err != nil {
+			return out, err
+		}
+		raw, err := q.NavigationRelated(ctx, dbgen.NavigationRelatedParams{PublicID: id, UseHeat: heat.Status == "ready"})
+		if err != nil {
+			return out, err
+		}
+		var cards []cardProjection
+		if err = json.Unmarshal(raw, &cards); err != nil {
+			return out, err
+		}
+		out.Items = make([]Card, 0, len(cards))
+		for _, item := range cards {
+			out.Items = append(out.Items, s.project(item))
+		}
+		return out, nil
+	})
+}
+
 func (s *Service) Stats(ctx context.Context, id string) (Stats, error) {
 	if !catalog.ValidPublicID(id) {
 		return Stats{}, catalog.ErrNotFound

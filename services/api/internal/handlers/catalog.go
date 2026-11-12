@@ -4,9 +4,12 @@ import (
 	"context"
 	"errors"
 	"strconv"
+	"time"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/librecosta/gofurry/services/api/internal/catalog"
+	"github.com/librecosta/gofurry/services/api/internal/navigation"
+	"github.com/librecosta/gofurry/services/api/internal/yearbook"
 )
 
 func CatalogDetail[T any](read func(context.Context, string) (T, error)) fiber.Handler {
@@ -16,13 +19,39 @@ func CatalogDetail[T any](read func(context.Context, string) (T, error)) fiber.H
 	}
 }
 
-func SiteDetail(service *catalog.Service, interactionsEnabled bool) fiber.Handler {
+type siteProfileResponse struct {
+	catalog.SiteDetail
+	Related   []navigation.Card `json:"related,omitempty"`
+	Stats     *navigation.Stats `json:"stats,omitempty"`
+	Yearbooks []int32           `json:"yearbooks,omitempty"`
+}
+
+func SiteDetail(service *catalog.Service, discovery *navigation.Service, yearbooks *yearbook.Service, interactionsEnabled bool) fiber.Handler {
 	return func(c fiber.Ctx) error {
-		result, err := service.PublishedSite(c.Context(), c.Params("publicID"))
-		if err == nil && interactionsEnabled && result.InteractionEligible {
+		id := c.Params("publicID")
+		result, err := service.PublishedSite(c.Context(), id)
+		if err != nil {
+			return navigationResponse(c, nil, err)
+		}
+		if interactionsEnabled && result.Reviewed {
 			c.Set("X-GoFurry-Interactions", "enabled")
 		}
-		return navigationResponse(c, result, err)
+		if c.Query("profile") != "1" {
+			return navigationResponse(c, result, nil)
+		}
+		ctx, cancel := context.WithTimeout(c.Context(), 650*time.Millisecond)
+		defer cancel()
+		response := siteProfileResponse{SiteDetail: result}
+		response.Yearbooks, _ = yearbooks.Years(ctx, id)
+		if result.Reviewed {
+			if stats, err := discovery.Stats(ctx, id); err == nil {
+				response.Stats = &stats
+			}
+			if related, err := discovery.Related(ctx, id); err == nil {
+				response.Related = related.Items
+			}
+		}
+		return navigationResponse(c, response, nil)
 	}
 }
 

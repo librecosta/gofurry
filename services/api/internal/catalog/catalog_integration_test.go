@@ -76,6 +76,17 @@ func TestCatalogPostgreSQL(t *testing.T) {
 	if !site.PublishedAt.Valid {
 		t.Fatal("missing publication timestamp")
 	}
+	zhBody := strings.Repeat("站点正文与示例。", 300)
+	revision, err := c.SetSiteDescription(ctx, fixtureSite, site.Revision, "zh", zhBody)
+	ok(t, err)
+	_, err = c.SetSiteDescription(ctx, fixtureSite, site.Revision, "en", "stale")
+	want(t, err, ErrConflict)
+	_, err = c.SetSiteDescription(ctx, fixtureSite, revision, "en", "<script>invalid</script>")
+	want(t, err, ErrInvalid)
+	_, err = c.SetSiteDescription(ctx, fixtureSite, revision, "en", strings.Repeat("文", SiteDescriptionLimit/3+1))
+	want(t, err, ErrInvalid)
+	site.Revision, err = c.SetSiteDescription(ctx, fixtureSite, revision, "en", "First paragraph.\r\n\r\nSecond paragraph.")
+	ok(t, err)
 
 	updatedInput := siteInput
 	updatedInput.Slug = "example-community"
@@ -97,6 +108,9 @@ func TestCatalogPostgreSQL(t *testing.T) {
 	ok(t, err)
 	if len(read.Addresses) != 2 || read.Addresses[0].URL != updatedInput.Addresses[0].URL || len(read.Localizations) != 2 {
 		t.Fatal("site edits, primary and alternate addresses failed")
+	}
+	if read.Localizations[0].Body != "First paragraph.\n\nSecond paragraph." || read.Localizations[1].Body != zhBody {
+		t.Fatal("ordinary Site edit lost reviewed localized body")
 	}
 	var originalAddress string
 	ok(t, cn.QueryRow(ctx, "SELECT url FROM site_addresses WHERE site_id=$1 AND NOT active", site.ID).Scan(&originalAddress))
