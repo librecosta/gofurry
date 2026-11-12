@@ -57,7 +57,7 @@ Published Sites link to their historical Yearbooks once evidence qualifies. Repo
 
 Site discovery is available from the Start Sites menu and at `/sites`, with shareable filters and cursor pagination at `/sites/directory`. Each region lists its own reviewed SFW Sites. Profiles show reviewed addresses, related Sites and any qualifying activity, technology and Yearbooks. Heat v1 and anonymous interactions are independently opt-in, and discovery works with no Redis. See the [D2-A operations guide](docs/v0.1-d2-a-acceptance.md), [D2-B asset guide](docs/v0.1-d2-b-acceptance.md) and [D2-C profile and editorial guide](docs/v0.1-d2-c-acceptance.md).
 
-CN deployments can opt in to the Harvest evidence consumer through their private API YAML. Collection plans require an explicit CLI action. Public Site and Game routes read GoFurry's regional database. See the [D1-B1 setup and acceptance](docs/v0.1-d1-b1-acceptance.md).
+CN deployments can opt in to the Harvest evidence consumer through their private API YAML. Reviewed Site and Game collection plans use the collection CLI. An optional Game Intake can also create a Steam plan after accepting a work. Submit, inspect and review Intake privately with the `game-intake` CLI. Public Site and Game routes read GoFurry's regional database. See the [D1-B1 setup](docs/v0.1-d1-b1-acceptance.md) and [D3-A1 acceptance and commands](docs/v0.1-d3-a1-acceptance.md).
 
 ## Start page
 
