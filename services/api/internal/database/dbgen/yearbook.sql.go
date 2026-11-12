@@ -224,7 +224,7 @@ func (q *Queries) CompactSiteCoverage(ctx context.Context, arg CompactSiteCovera
 }
 
 const findYearbookSite = `-- name: FindYearbookSite :one
-SELECT id, public_id, slug, status, revision, created_at, updated_at, published_at, archived_at, first_published_at, content_rating, legacy_detail, primary_category, secondary_categories, navigation_tags, supported_languages FROM sites WHERE public_id=$1
+SELECT id, public_id, slug, status, revision, created_at, updated_at, published_at, archived_at, first_published_at, content_rating, legacy_detail, primary_category, secondary_categories, navigation_tags, supported_languages, logo_asset_key, featured_cover_asset_key FROM sites WHERE public_id=$1
 `
 
 func (q *Queries) FindYearbookSite(ctx context.Context, publicID string) (Site, error) {
@@ -247,6 +247,8 @@ func (q *Queries) FindYearbookSite(ctx context.Context, publicID string) (Site, 
 		&i.SecondaryCategories,
 		&i.NavigationTags,
 		&i.SupportedLanguages,
+		&i.LogoAssetKey,
+		&i.FeaturedCoverAssetKey,
 	)
 	return i, err
 }
@@ -270,7 +272,7 @@ func (q *Queries) HideYearbook(ctx context.Context, arg HideYearbookParams) (int
 }
 
 const lockYearbookSite = `-- name: LockYearbookSite :one
-SELECT id, public_id, slug, status, revision, created_at, updated_at, published_at, archived_at, first_published_at, content_rating, legacy_detail, primary_category, secondary_categories, navigation_tags, supported_languages FROM sites WHERE public_id=$1 FOR UPDATE
+SELECT id, public_id, slug, status, revision, created_at, updated_at, published_at, archived_at, first_published_at, content_rating, legacy_detail, primary_category, secondary_categories, navigation_tags, supported_languages, logo_asset_key, featured_cover_asset_key FROM sites WHERE public_id=$1 FOR UPDATE
 `
 
 func (q *Queries) LockYearbookSite(ctx context.Context, publicID string) (Site, error) {
@@ -293,6 +295,8 @@ func (q *Queries) LockYearbookSite(ctx context.Context, publicID string) (Site, 
 		&i.SecondaryCategories,
 		&i.NavigationTags,
 		&i.SupportedLanguages,
+		&i.LogoAssetKey,
+		&i.FeaturedCoverAssetKey,
 	)
 	return i, err
 }

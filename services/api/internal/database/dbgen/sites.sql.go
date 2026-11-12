@@ -51,7 +51,7 @@ UPDATE sites SET status=$1,revision=revision+1,updated_at=transaction_timestamp(
  first_published_at=CASE WHEN $1::text='published' AND published_at IS NULL
   THEN coalesce(first_published_at,transaction_timestamp()) ELSE first_published_at END,
  archived_at=CASE WHEN $1::text='archived' THEN transaction_timestamp() ELSE archived_at END
-WHERE id=$2 RETURNING id, public_id, slug, status, revision, created_at, updated_at, published_at, archived_at, first_published_at, content_rating, legacy_detail, primary_category, secondary_categories, navigation_tags, supported_languages
+WHERE id=$2 RETURNING id, public_id, slug, status, revision, created_at, updated_at, published_at, archived_at, first_published_at, content_rating, legacy_detail, primary_category, secondary_categories, navigation_tags, supported_languages, logo_asset_key, featured_cover_asset_key
 `
 
 type ChangeSiteStatusParams struct {
@@ -79,6 +79,8 @@ func (q *Queries) ChangeSiteStatus(ctx context.Context, arg ChangeSiteStatusPara
 		&i.SecondaryCategories,
 		&i.NavigationTags,
 		&i.SupportedLanguages,
+		&i.LogoAssetKey,
+		&i.FeaturedCoverAssetKey,
 	)
 	return i, err
 }
@@ -94,7 +96,7 @@ func (q *Queries) ClearSiteLocalizations(ctx context.Context, siteID uuid.UUID) 
 
 const createSite = `-- name: CreateSite :one
 INSERT INTO sites (id,public_id,slug) VALUES ($1,$2,$3)
-ON CONFLICT (public_id) DO NOTHING RETURNING id, public_id, slug, status, revision, created_at, updated_at, published_at, archived_at, first_published_at, content_rating, legacy_detail, primary_category, secondary_categories, navigation_tags, supported_languages
+ON CONFLICT (public_id) DO NOTHING RETURNING id, public_id, slug, status, revision, created_at, updated_at, published_at, archived_at, first_published_at, content_rating, legacy_detail, primary_category, secondary_categories, navigation_tags, supported_languages, logo_asset_key, featured_cover_asset_key
 `
 
 type CreateSiteParams struct {
@@ -123,6 +125,8 @@ func (q *Queries) CreateSite(ctx context.Context, arg CreateSiteParams) (Site, e
 		&i.SecondaryCategories,
 		&i.NavigationTags,
 		&i.SupportedLanguages,
+		&i.LogoAssetKey,
+		&i.FeaturedCoverAssetKey,
 	)
 	return i, err
 }
@@ -137,7 +141,7 @@ func (q *Queries) DisableSiteAddresses(ctx context.Context, siteID uuid.UUID) er
 }
 
 const lockSite = `-- name: LockSite :one
-SELECT id, public_id, slug, status, revision, created_at, updated_at, published_at, archived_at, first_published_at, content_rating, legacy_detail, primary_category, secondary_categories, navigation_tags, supported_languages FROM sites WHERE id=$1 FOR UPDATE
+SELECT id, public_id, slug, status, revision, created_at, updated_at, published_at, archived_at, first_published_at, content_rating, legacy_detail, primary_category, secondary_categories, navigation_tags, supported_languages, logo_asset_key, featured_cover_asset_key FROM sites WHERE id=$1 FOR UPDATE
 `
 
 func (q *Queries) LockSite(ctx context.Context, id uuid.UUID) (Site, error) {
@@ -160,6 +164,8 @@ func (q *Queries) LockSite(ctx context.Context, id uuid.UUID) (Site, error) {
 		&i.SecondaryCategories,
 		&i.NavigationTags,
 		&i.SupportedLanguages,
+		&i.LogoAssetKey,
+		&i.FeaturedCoverAssetKey,
 	)
 	return i, err
 }
@@ -256,7 +262,7 @@ func (q *Queries) SaveSiteAddress(ctx context.Context, arg SaveSiteAddressParams
 
 const updateSite = `-- name: UpdateSite :one
 UPDATE sites SET slug=$2,revision=revision+1,updated_at=transaction_timestamp()
-WHERE id=$1 RETURNING id, public_id, slug, status, revision, created_at, updated_at, published_at, archived_at, first_published_at, content_rating, legacy_detail, primary_category, secondary_categories, navigation_tags, supported_languages
+WHERE id=$1 RETURNING id, public_id, slug, status, revision, created_at, updated_at, published_at, archived_at, first_published_at, content_rating, legacy_detail, primary_category, secondary_categories, navigation_tags, supported_languages, logo_asset_key, featured_cover_asset_key
 `
 
 type UpdateSiteParams struct {
@@ -284,6 +290,8 @@ func (q *Queries) UpdateSite(ctx context.Context, arg UpdateSiteParams) (Site, e
 		&i.SecondaryCategories,
 		&i.NavigationTags,
 		&i.SupportedLanguages,
+		&i.LogoAssetKey,
+		&i.FeaturedCoverAssetKey,
 	)
 	return i, err
 }

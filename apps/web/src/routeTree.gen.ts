@@ -16,6 +16,9 @@ import { Route as ReadyzRouteImport } from './routes/readyz'
 import { Route as StatusRouteImport } from './routes/status'
 import { Route as StartStartRouteImport } from './routes/_start.start'
 import { Route as StartLanguageStartRouteImport } from './routes/_start.$language.start'
+import { Route as Char123LanguageChar125SitesIndexRouteImport } from './routes/{-$language}.sites.index'
+import { Route as Char123LanguageChar125SitesDirectoryRouteImport } from './routes/{-$language}.sites.directory'
+import { Route as ApiV1SitesDirectoryRouteImport } from './routes/api.v1.sites.directory'
 import { Route as ApiV1StartBackgroundsRouteImport } from './routes/api.v1.start.backgrounds'
 import { Route as ApiV1StartCitiesRouteImport } from './routes/api.v1.start.cities'
 import { Route as ApiV1StartWeatherRouteImport } from './routes/api.v1.start.weather'
@@ -59,6 +62,23 @@ const StartLanguageStartRoute = StartLanguageStartRouteImport.update({
   id: '/$language/start',
   path: '/$language/start',
   getParentRoute: () => StartRoute,
+} as any)
+const Char123LanguageChar125SitesIndexRoute =
+  Char123LanguageChar125SitesIndexRouteImport.update({
+    id: '/{-$language}/sites/',
+    path: '/{-$language}/sites/',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const Char123LanguageChar125SitesDirectoryRoute =
+  Char123LanguageChar125SitesDirectoryRouteImport.update({
+    id: '/{-$language}/sites/directory',
+    path: '/{-$language}/sites/directory',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiV1SitesDirectoryRoute = ApiV1SitesDirectoryRouteImport.update({
+  id: '/api/v1/sites/directory',
+  path: '/api/v1/sites/directory',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const ApiV1StartBackgroundsRoute = ApiV1StartBackgroundsRouteImport.update({
   id: '/api/v1/start/backgrounds',
@@ -117,6 +137,9 @@ export interface FileRoutesByFullPath {
   '/status': typeof StatusRoute
   '/start': typeof StartStartRoute
   '/$language/start': typeof StartLanguageStartRoute
+  '/{-$language}/sites/directory': typeof Char123LanguageChar125SitesDirectoryRoute
+  '/{-$language}/sites/': typeof Char123LanguageChar125SitesIndexRoute
+  '/api/v1/sites/directory': typeof ApiV1SitesDirectoryRoute
   '/api/v1/start/backgrounds': typeof ApiV1StartBackgroundsRouteWithChildren
   '/api/v1/start/cities': typeof ApiV1StartCitiesRouteWithChildren
   '/api/v1/start/weather': typeof ApiV1StartWeatherRoute
@@ -134,6 +157,9 @@ export interface FileRoutesByTo {
   '/status': typeof StatusRoute
   '/start': typeof StartStartRoute
   '/$language/start': typeof StartLanguageStartRoute
+  '/{-$language}/sites/directory': typeof Char123LanguageChar125SitesDirectoryRoute
+  '/{-$language}/sites': typeof Char123LanguageChar125SitesIndexRoute
+  '/api/v1/sites/directory': typeof ApiV1SitesDirectoryRoute
   '/api/v1/start/backgrounds': typeof ApiV1StartBackgroundsRouteWithChildren
   '/api/v1/start/cities': typeof ApiV1StartCitiesRouteWithChildren
   '/api/v1/start/weather': typeof ApiV1StartWeatherRoute
@@ -153,6 +179,9 @@ export interface FileRoutesById {
   '/status': typeof StatusRoute
   '/_start/start': typeof StartStartRoute
   '/_start/$language/start': typeof StartLanguageStartRoute
+  '/{-$language}/sites/directory': typeof Char123LanguageChar125SitesDirectoryRoute
+  '/{-$language}/sites/': typeof Char123LanguageChar125SitesIndexRoute
+  '/api/v1/sites/directory': typeof ApiV1SitesDirectoryRoute
   '/api/v1/start/backgrounds': typeof ApiV1StartBackgroundsRouteWithChildren
   '/api/v1/start/cities': typeof ApiV1StartCitiesRouteWithChildren
   '/api/v1/start/weather': typeof ApiV1StartWeatherRoute
@@ -172,6 +201,9 @@ export interface FileRouteTypes {
     | '/status'
     | '/start'
     | '/$language/start'
+    | '/{-$language}/sites/directory'
+    | '/{-$language}/sites/'
+    | '/api/v1/sites/directory'
     | '/api/v1/start/backgrounds'
     | '/api/v1/start/cities'
     | '/api/v1/start/weather'
@@ -189,6 +221,9 @@ export interface FileRouteTypes {
     | '/status'
     | '/start'
     | '/$language/start'
+    | '/{-$language}/sites/directory'
+    | '/{-$language}/sites'
+    | '/api/v1/sites/directory'
     | '/api/v1/start/backgrounds'
     | '/api/v1/start/cities'
     | '/api/v1/start/weather'
@@ -207,6 +242,9 @@ export interface FileRouteTypes {
     | '/status'
     | '/_start/start'
     | '/_start/$language/start'
+    | '/{-$language}/sites/directory'
+    | '/{-$language}/sites/'
+    | '/api/v1/sites/directory'
     | '/api/v1/start/backgrounds'
     | '/api/v1/start/cities'
     | '/api/v1/start/weather'
@@ -224,6 +262,9 @@ export interface RootRouteChildren {
   LivezRoute: typeof LivezRoute
   ReadyzRoute: typeof ReadyzRoute
   StatusRoute: typeof StatusRoute
+  Char123LanguageChar125SitesDirectoryRoute: typeof Char123LanguageChar125SitesDirectoryRoute
+  Char123LanguageChar125SitesIndexRoute: typeof Char123LanguageChar125SitesIndexRoute
+  ApiV1SitesDirectoryRoute: typeof ApiV1SitesDirectoryRoute
   ApiV1StartBackgroundsRoute: typeof ApiV1StartBackgroundsRouteWithChildren
   ApiV1StartCitiesRoute: typeof ApiV1StartCitiesRouteWithChildren
   ApiV1StartWeatherRoute: typeof ApiV1StartWeatherRoute
@@ -283,6 +324,27 @@ declare module '@tanstack/react-router' {
       fullPath: '/$language/start'
       preLoaderRoute: typeof StartLanguageStartRouteImport
       parentRoute: typeof StartRoute
+    }
+    '/{-$language}/sites/': {
+      id: '/{-$language}/sites/'
+      path: '/{-$language}/sites'
+      fullPath: '/{-$language}/sites/'
+      preLoaderRoute: typeof Char123LanguageChar125SitesIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/{-$language}/sites/directory': {
+      id: '/{-$language}/sites/directory'
+      path: '/{-$language}/sites/directory'
+      fullPath: '/{-$language}/sites/directory'
+      preLoaderRoute: typeof Char123LanguageChar125SitesDirectoryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/sites/directory': {
+      id: '/api/v1/sites/directory'
+      path: '/api/v1/sites/directory'
+      fullPath: '/api/v1/sites/directory'
+      preLoaderRoute: typeof ApiV1SitesDirectoryRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/api/v1/start/backgrounds': {
       id: '/api/v1/start/backgrounds'
@@ -392,6 +454,10 @@ const rootRouteChildren: RootRouteChildren = {
   LivezRoute: LivezRoute,
   ReadyzRoute: ReadyzRoute,
   StatusRoute: StatusRoute,
+  Char123LanguageChar125SitesDirectoryRoute:
+    Char123LanguageChar125SitesDirectoryRoute,
+  Char123LanguageChar125SitesIndexRoute: Char123LanguageChar125SitesIndexRoute,
+  ApiV1SitesDirectoryRoute: ApiV1SitesDirectoryRoute,
   ApiV1StartBackgroundsRoute: ApiV1StartBackgroundsRouteWithChildren,
   ApiV1StartCitiesRoute: ApiV1StartCitiesRouteWithChildren,
   ApiV1StartWeatherRoute: ApiV1StartWeatherRoute,

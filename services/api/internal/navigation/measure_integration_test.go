@@ -23,13 +23,17 @@ func measureNavigation(t *testing.T, pool *pgxpool.Pool, svc *Service) {
 		execute(t, pool, `WITH fixture AS MATERIALIZED (
  SELECT i,uuidv7() AS id FROM generate_series(1,$1::integer) i
 ), published AS (
- INSERT INTO sites(id,public_id,slug,status,published_at,first_published_at,content_rating,primary_category,secondary_categories,navigation_tags,supported_languages)
+ INSERT INTO sites(id,public_id,slug,status,published_at,first_published_at,content_rating,primary_category,secondary_categories,navigation_tags,supported_languages,logo_asset_key)
  SELECT id,lpad(to_hex(i),16,'0'),'measure-site','published',timestamptz '2026-01-01 UTC'+i*interval '1 second',
   timestamptz '2026-01-01 UTC'+i*interval '1 second','sfw',
-  CASE WHEN i%2=0 THEN 'gallery' ELSE 'community' END,ARRAY['resources'],ARRAY['tutorial'],ARRAY['en','zh'] FROM fixture
+  CASE WHEN i%2=0 THEN 'gallery' ELSE 'community' END,ARRAY['resources'],ARRAY['tutorial'],ARRAY['en','zh'],
+  CASE WHEN i%4=0 THEN 'sites/logos/'||repeat('a',64)||'.webp' END FROM fixture
 ), names AS (
  INSERT INTO site_localizations SELECT id,'en','Fixture community '||i,'A measured directory with resources and galleries' FROM fixture
  UNION ALL SELECT id,'zh','测量社区 '||i,'真实数据库基准' FROM fixture
+), addresses AS (
+ INSERT INTO site_addresses(id,site_id,url,kind)
+ SELECT uuidv7(),id,'https://example.test/guide/'||i||'?language=en','primary' FROM fixture
 )
 INSERT INTO site_interaction_days SELECT id,$2::date-d,4+i%19,1+i%3 FROM fixture CROSS JOIN generate_series(0,6) d`, n, pgDay(start))
 		seed := time.Since(begin)

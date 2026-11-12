@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
+import { sitesFixtureSQL } from './sites-fixture.mjs'
 
 const root = fileURLToPath(new URL('../', import.meta.url))
 const webDir = join(root, 'apps', 'web')
@@ -258,6 +259,8 @@ navigation:
   await waitFor(() => status(apiYearbook, 503), 'Yearbook API database-outage status')
   await waitFor(() => status(webYearbook, 503), 'Yearbook SSR database-outage status')
   await waitFor(() => status(fixtures.CN.api + '/api/v1/sites/directory', 503), 'Navigation database-outage status')
+  await waitFor(() => status(fixtures.CN.web + '/sites', 503), 'Discovery SSR database-outage status')
+  await waitFor(() => status(fixtures.CN.web + '/sites/directory?category=community', 503), 'Directory SSR database-outage status')
   if (!(await status(fixtures.CN.web + '/start', 200))) throw new Error('Database outage affected Start SSR')
   run('docker', ['unpause', container])
   paused = false
@@ -294,6 +297,21 @@ navigation:
     }
   }
   console.log('Navigation: trusted edge dedup, failed-write reservation, Redis/PG outage and both regions’ withdrawal verified.')
+  const siteAsset = (kind, file) => JSON.parse(run(binary, [
+    '--config', fixtures.CN.config, 'site-assets', 'import', kind,
+    join(root, 'services', 'api', 'internal', 'storage', 'testdata', file), '--preflight',
+  ], root, process.env, true)).key
+  const logo = siteAsset('logo', 'site-logo.webp')
+  const cover = siteAsset('cover', 'site-cover.avif')
+  for (const region of ['CN', 'INTL']) {
+    run('docker', ['exec', container, 'psql', '-Xq', '-v', 'ON_ERROR_STOP=1', '-U', 'postgres',
+      '-d', 'gofurry_d1_' + region.toLowerCase() + '_test', '-c', sitesFixtureSQL(region, logo, cover)])
+  }
+  run(binary, ['--config', fixtures.CN.config, 'navigation', 'refresh-heat'])
+  await runAsync(process.execPath, ['node_modules/@playwright/test/cli.js', 'test', '--config', 'playwright.sites.config.ts'], webDir, {
+    ...process.env, CATALOG_CN_WEB: fixtures.CN.web, CATALOG_INTL_WEB: fixtures.INTL.web,
+    CATALOG_CN_API: fixtures.CN.api, CATALOG_INTL_API: fixtures.INTL.api, CATALOG_CN_EDGE: fixtures.CN.edge,
+  })
 } finally {
   if (container && paused) run('docker', ['unpause', container])
   if (redisContainer && redisPaused) run('docker', ['unpause', redisContainer])

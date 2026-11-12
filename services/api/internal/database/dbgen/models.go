@@ -144,22 +144,24 @@ type GameSource struct {
 }
 
 type Site struct {
-	ID                  uuid.UUID          `json:"id"`
-	PublicID            string             `json:"public_id"`
-	Slug                string             `json:"slug"`
-	Status              string             `json:"status"`
-	Revision            int64              `json:"revision"`
-	CreatedAt           pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
-	PublishedAt         pgtype.Timestamptz `json:"published_at"`
-	ArchivedAt          pgtype.Timestamptz `json:"archived_at"`
-	FirstPublishedAt    pgtype.Timestamptz `json:"first_published_at"`
-	ContentRating       string             `json:"content_rating"`
-	LegacyDetail        bool               `json:"legacy_detail"`
-	PrimaryCategory     pgtype.Text        `json:"primary_category"`
-	SecondaryCategories []string           `json:"secondary_categories"`
-	NavigationTags      []string           `json:"navigation_tags"`
-	SupportedLanguages  []string           `json:"supported_languages"`
+	ID                    uuid.UUID          `json:"id"`
+	PublicID              string             `json:"public_id"`
+	Slug                  string             `json:"slug"`
+	Status                string             `json:"status"`
+	Revision              int64              `json:"revision"`
+	CreatedAt             pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
+	PublishedAt           pgtype.Timestamptz `json:"published_at"`
+	ArchivedAt            pgtype.Timestamptz `json:"archived_at"`
+	FirstPublishedAt      pgtype.Timestamptz `json:"first_published_at"`
+	ContentRating         string             `json:"content_rating"`
+	LegacyDetail          bool               `json:"legacy_detail"`
+	PrimaryCategory       pgtype.Text        `json:"primary_category"`
+	SecondaryCategories   []string           `json:"secondary_categories"`
+	NavigationTags        []string           `json:"navigation_tags"`
+	SupportedLanguages    []string           `json:"supported_languages"`
+	LogoAssetKey          pgtype.Text        `json:"logo_asset_key"`
+	FeaturedCoverAssetKey pgtype.Text        `json:"featured_cover_asset_key"`
 }
 
 type SiteAddress struct {

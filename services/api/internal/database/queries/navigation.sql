@@ -103,18 +103,23 @@ SELECT (SELECT count(*) FROM scored)::bigint AS total, (sqlc.arg(after_id)::text
   'public_id',s.public_id,'slug',s.slug,'primary_category',s.primary_category,'secondary_categories',s.secondary_categories,
    'heat_qualified',sqlc.arg(use_heat)::boolean AND p.metric>0,
    'tags',s.navigation_tags,'languages',s.supported_languages,'first_published_at',s.first_published_at,
+   'logo_asset_key',s.logo_asset_key,'visit_url',a.url,
    'localizations',coalesce((SELECT jsonb_agg(jsonb_build_object('locale',l.locale,'name',l.name,'summary',l.summary) ORDER BY l.locale)
     FROM site_localizations l WHERE l.site_id=s.id),'[]'::jsonb)) ORDER BY p.metric DESC,p.name_key,p.public_id),'[]'::jsonb)::jsonb AS items
-FROM page p JOIN sites s ON s.id=p.id;
+FROM page p JOIN sites s ON s.id=p.id
+LEFT JOIN site_addresses a ON a.site_id=s.id AND a.active AND a.kind='primary';
 
 -- name: NavigationHome :many
 WITH featured AS MATERIALIZED (
  SELECT f.slot,s.id FROM site_navigation_features f JOIN site_public_navigation s ON s.id=f.site_id
-), trending AS MATERIALIZED (
+), ranked AS (
  SELECT s.id,row_number() OVER (ORDER BY h.score DESC,s.public_id)::integer AS rank
  FROM site_navigation_heat h JOIN site_public_navigation s ON s.id=h.site_id
- WHERE sqlc.arg(use_heat)::boolean AND NOT EXISTS (SELECT 1 FROM featured f WHERE f.id=s.id)
- ORDER BY h.score DESC,s.public_id LIMIT 8
+ WHERE sqlc.arg(use_heat)::boolean
+ ORDER BY h.score DESC,s.public_id LIMIT 11
+), trending AS MATERIALIZED (
+ SELECT r.id,r.rank FROM ranked r WHERE NOT EXISTS (SELECT 1 FROM featured f WHERE f.id=r.id)
+ ORDER BY r.rank LIMIT 8
 ), recent AS MATERIALIZED (
  SELECT s.id,row_number() OVER (ORDER BY s.first_published_at DESC NULLS LAST,s.public_id)::integer AS rank
  FROM site_public_navigation s WHERE s.first_published_at IS NOT NULL
@@ -131,10 +136,20 @@ WITH featured AS MATERIALIZED (
 )
 SELECT x.section,x.key,jsonb_build_object('public_id',s.public_id,'slug',s.slug,'primary_category',s.primary_category,
  'secondary_categories',s.secondary_categories,'tags',s.navigation_tags,'languages',s.supported_languages,'first_published_at',s.first_published_at,
+ 'logo_asset_key',s.logo_asset_key,'visit_url',a.url,
+ 'cover_asset_key',CASE WHEN x.section='featured' THEN s.featured_cover_asset_key END,
+ 'rank',CASE WHEN x.section='trending' THEN x.rank END,
  'localizations',coalesce((SELECT jsonb_agg(jsonb_build_object('locale',l.locale,'name',l.name,'summary',l.summary) ORDER BY l.locale)
  FROM site_localizations l WHERE l.site_id=s.id),'[]'::jsonb))::jsonb AS item
-FROM sections x JOIN sites s ON s.id=x.id ORDER BY x.section,x.rank,x.key;
+FROM sections x JOIN sites s ON s.id=x.id
+LEFT JOIN site_addresses a ON a.site_id=s.id AND a.active AND a.kind='primary'
+ORDER BY x.section,x.rank,x.key;
 
 -- name: NavigationCategoryCounts :many
 SELECT c.code::text AS code,count(*)::bigint AS count FROM site_public_navigation s
 CROSS JOIN LATERAL unnest(ARRAY[s.primary_category]||s.secondary_categories) AS c(code) GROUP BY c.code;
+
+-- name: NavigationLanguages :many
+SELECT DISTINCT c.code::text AS code FROM site_public_navigation s
+CROSS JOIN LATERAL unnest(s.supported_languages) AS c(code)
+ORDER BY code;

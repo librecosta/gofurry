@@ -1,0 +1,41 @@
+export const copy = {
+  zh: {
+    homeTitle: '网站发现', intro: '探索兽圈社区、创作、工具与活动，找到值得再访的网站。', directory: '网站目录',
+    directoryDescription: '按分类、标签和网站支持语言查找已收录的兽圈网站。', search: '搜索网站', placeholder: '输入站点名称、简介或标签',
+    browse: '浏览全部网站', editorial: '编辑精选', recent: '最新收录', trending: '本周热门', topics: '按分类探索',
+    random: '随机发现', ranking: '查看完整热度排序', heatWaiting: '热度数据正在积累。', noTrend: '本周暂无符合条件的热门网站。',
+    noRecent: '暂无新收录的网站。', visit: '访问网站', newTab: '在新标签页打开', start: '起始页', sites: '网站发现',
+    filters: '筛选', categories: '分类', tags: '标签', languages: '网站支持语言', apply: '应用筛选', cancel: '取消',
+    reset: '清除条件', sort: '排序', relevance: '相关程度', published_desc: '最新收录', heat_7d: '本周热度', name_asc: '站点名称',
+    fallback: '热度暂不可用，当前按最新收录排序。', loadMore: '加载更多', loading: '加载中…', retry: '重试',
+    empty: '没有符合条件的网站。', emptyHint: '试试其他关键词或减少筛选条件。', unavailable: '暂时无法加载网站。',
+    invalid: '无法应用这些筛选条件。', stale: '目录已更新。刷新结果后可继续浏览。', pageError: '暂时无法加载更多网站。',
+    refresh: '刷新结果', results: (n: number) => `${n.toLocaleString('zh-CN')} 个网站`, remove: (label: string) => `移除${label}`,
+    language: 'English', languageHint: '同一组条件中匹配任一项即可，不同组条件需同时满足。',
+  },
+  en: {
+    homeTitle: 'Discover furry sites', intro: 'Find communities, artwork, tools and events across the furry web.', directory: 'Site directory',
+    directoryDescription: 'Search the furry web by category, tag and supported language.', search: 'Search sites', placeholder: 'Name, description or tag',
+    browse: 'Browse all sites', editorial: 'Editor’s picks', recent: 'Latest arrivals', trending: 'Trending this week', topics: 'Explore by category',
+    random: 'Random discovery', ranking: 'See the full heat ranking', heatWaiting: 'Weekly rankings are still gathering activity.', noTrend: 'No sites qualify for this week’s ranking yet.',
+    noRecent: 'No new sites have been added yet.', visit: 'Visit website', newTab: 'opens in a new tab', start: 'Start', sites: 'Discover sites',
+    filters: 'Filters', categories: 'Categories', tags: 'Tags', languages: 'Site languages', apply: 'Apply filters', cancel: 'Cancel',
+    reset: 'Clear filters', sort: 'Sort', relevance: 'Relevance', published_desc: 'Latest added', heat_7d: 'Weekly heat', name_asc: 'Site name',
+    fallback: 'Weekly heat is unavailable. Showing the latest additions first.', loadMore: 'Load more', loading: 'Loading…', retry: 'Retry',
+    empty: 'No sites match these filters.', emptyHint: 'Try a different keyword or fewer filters.', unavailable: 'Sites are temporarily unavailable.',
+    invalid: 'These filters could not be applied.', stale: 'The directory has changed. Refresh results to continue.', pageError: 'More sites could not be loaded.',
+    refresh: 'Refresh results', results: (n: number) => `${n.toLocaleString('en')} ${n === 1 ? 'site' : 'sites'}`, remove: (label: string) => `Remove ${label}`,
+    language: '简体中文', languageHint: 'Match any option in a group. A site must match each selected group.',
+  },
+}
+
+export const categories = {
+  community: { zh: '社区交流', en: 'Communities', zhCaption: '论坛与同好交流', enCaption: 'Forums and conversations' },
+  gallery: { zh: '作品展示', en: 'Art & Galleries', zhCaption: '插画、摄影与创作', enCaption: 'Illustration, photography and art' },
+  literature: { zh: '文学阅读', en: 'Literature', zhCaption: '故事、小说与同人作品', enCaption: 'Stories, fiction and fan writing' },
+  resources: { zh: '工具资源', en: 'Tools & Resources', zhCaption: '素材、教程与实用工具', enCaption: 'Tutorials, assets and practical tools' },
+  marketplace: { zh: '委托交易', en: 'Commissions & Marketplace', zhCaption: '约稿、制作与市集', enCaption: 'Commissions, makers and markets' },
+  knowledge: { zh: '资讯百科', en: 'News & Knowledge', zhCaption: '报道、百科与参考资料', enCaption: 'News, wikis and references' },
+  gaming: { zh: '游戏互动', en: 'Games & Interactive', zhCaption: '互动作品与游戏社区', enCaption: 'Interactive projects and game communities' },
+  events: { zh: '活动组织', en: 'Events & Organizations', zhCaption: '展会、兽聚与社团', enCaption: 'Conventions, meetups and groups' },
+}

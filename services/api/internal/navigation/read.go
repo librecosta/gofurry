@@ -18,16 +18,23 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/librecosta/gofurry/services/api/internal/catalog"
 	"github.com/librecosta/gofurry/services/api/internal/database/dbgen"
+	"github.com/librecosta/gofurry/services/api/internal/storage"
 )
 
 const Algorithm = 1
 
 type Service struct {
-	pool *pgxpool.Pool
-	now  func() time.Time
+	pool         *pgxpool.Pool
+	now          func() time.Time
+	assets       *storage.Store
+	interactions bool
 }
 
-func New(pool *pgxpool.Pool) *Service { return &Service{pool, time.Now} }
+func New(pool *pgxpool.Pool) *Service { return &Service{pool: pool, now: time.Now} }
+
+func (s *Service) Presentation(assets *storage.Store, interactions bool) {
+	s.assets, s.interactions = assets, interactions
+}
 
 type Card struct {
 	catalog.Summary
@@ -37,6 +44,31 @@ type Card struct {
 	Languages           []string   `json:"languages"`
 	FirstPublishedAt    *time.Time `json:"first_published_at"`
 	HeatQualified       bool       `json:"heat_qualified,omitempty"`
+	LogoURL             string     `json:"logo_url,omitempty"`
+	CoverURL            string     `json:"cover_url,omitempty"`
+	VisitURL            string     `json:"visit_url,omitempty"`
+	Rank                int        `json:"rank,omitempty"`
+}
+
+type cardProjection struct {
+	Card
+	LogoKey    *string `json:"logo_asset_key"`
+	CoverKey   *string `json:"cover_asset_key"`
+	PrimaryURL *string `json:"visit_url"`
+}
+
+func (s *Service) project(p cardProjection) Card {
+	card := p.Card
+	if p.LogoKey != nil {
+		card.LogoURL = s.assets.SiteAssetURL(storage.SiteLogo, *p.LogoKey)
+	}
+	if p.CoverKey != nil {
+		card.CoverURL = s.assets.SiteAssetURL(storage.SiteCover, *p.CoverKey)
+	}
+	if p.PrimaryURL != nil {
+		card.VisitURL = catalog.PublicVisitURL(*p.PrimaryURL)
+	}
+	return card
 }
 
 type Heat struct {
@@ -60,13 +92,15 @@ type Featured struct {
 }
 
 type Home struct {
-	Version    int        `json:"version"`
-	Featured   Featured   `json:"featured"`
-	Trending   []Card     `json:"trending"`
-	Recent     []Card     `json:"recent"`
-	Categories []Category `json:"categories"`
-	Random     *Card      `json:"random"`
-	Heat       Heat       `json:"heat"`
+	Version      int                      `json:"version"`
+	Featured     Featured                 `json:"featured"`
+	Trending     []Card                   `json:"trending"`
+	Recent       []Card                   `json:"recent"`
+	Categories   []Category               `json:"categories"`
+	Random       *Card                    `json:"random"`
+	Heat         Heat                     `json:"heat"`
+	Interactions bool                     `json:"interactions"`
+	Tags         []catalog.NavigationTerm `json:"tag_registry"`
 }
 
 type Filters struct {
@@ -84,6 +118,8 @@ type Directory struct {
 	EffectiveSort string                   `json:"effective_sort"`
 	Heat          Heat                     `json:"heat"`
 	Tags          []catalog.NavigationTerm `json:"tag_registry"`
+	Languages     []string                 `json:"language_registry"`
+	Interactions  bool                     `json:"interactions"`
 }
 
 type position struct {
@@ -220,7 +256,7 @@ func (s *Service) Directory(ctx context.Context, filters Filters, cursor string)
 	return read(ctx, s.pool, func(ctx context.Context, q *dbgen.Queries) (Directory, error) {
 		h, err := heatState(ctx, q, s.now().UTC())
 		result := Directory{Version: catalog.NavigationVersion, Sort: f.Sort, EffectiveSort: f.Sort, Heat: h,
-			Tags: catalog.NavigationTags(), Items: []Card{}}
+			Tags: catalog.NavigationTags(), Items: []Card{}, Languages: []string{}, Interactions: s.interactions}
 		if err != nil {
 			return result, err
 		}
@@ -244,7 +280,7 @@ func (s *Service) Directory(ctx context.Context, filters Filters, cursor string)
 		if !row.CursorValid {
 			return result, catalog.ErrInvalid
 		}
-		var items []Card
+		var items []cardProjection
 		if err := json.Unmarshal(row.Items, &items); err != nil {
 			return result, err
 		}
@@ -255,7 +291,20 @@ func (s *Service) Directory(ctx context.Context, filters Filters, cursor string)
 			raw, _ := json.Marshal(position{key, generation, last.PublicID})
 			result.Next = base64.RawURLEncoding.EncodeToString(raw)
 		}
-		result.Items = append(result.Items, items...)
+		for _, item := range items {
+			result.Items = append(result.Items, s.project(item))
+		}
+		if cursor == "" {
+			languages, err := q.NavigationLanguages(ctx)
+			if err != nil {
+				return result, err
+			}
+			for _, code := range languages {
+				if catalog.NavigationLanguage(code) {
+					result.Languages = append(result.Languages, code)
+				}
+			}
+		}
 		return result, nil
 	})
 }
@@ -263,7 +312,7 @@ func (s *Service) Directory(ctx context.Context, filters Filters, cursor string)
 func (s *Service) Home(ctx context.Context) (Home, error) {
 	now := s.now().UTC()
 	return read(ctx, s.pool, func(ctx context.Context, q *dbgen.Queries) (Home, error) {
-		out := Home{Version: catalog.NavigationVersion, Trending: []Card{}, Recent: []Card{}}
+		out := Home{Version: catalog.NavigationVersion, Trending: []Card{}, Recent: []Card{}, Interactions: s.interactions, Tags: catalog.NavigationTags()}
 		var err error
 		out.Heat, err = heatState(ctx, q, now)
 		if err != nil {
@@ -274,10 +323,11 @@ func (s *Service) Home(ctx context.Context) (Home, error) {
 			return out, err
 		}
 		for _, row := range rows {
-			var card Card
-			if err := json.Unmarshal(row.Item, &card); err != nil {
+			var projection cardProjection
+			if err := json.Unmarshal(row.Item, &projection); err != nil {
 				return out, err
 			}
+			card := s.project(projection)
 			switch row.Section {
 			case "featured":
 				switch row.Key {

@@ -24,6 +24,7 @@ import (
 	"github.com/librecosta/gofurry/services/api/internal/database"
 	"github.com/librecosta/gofurry/services/api/internal/database/dbgen"
 	"github.com/librecosta/gofurry/services/api/internal/platform"
+	"github.com/librecosta/gofurry/services/api/internal/storage"
 )
 
 var fixtureConfig = flag.String("navigation-config", "", "Disposable navigation PostgreSQL YAML")
@@ -100,15 +101,22 @@ func TestNavigationPostgreSQLRedis(t *testing.T) {
  preview_key,preview_sha256,preview_bytes,preview_width,preview_height,published_at)
  VALUES (uuidv7(),'Preserved fixture','published','start/backgrounds/'||repeat('a',64)||'.avif',repeat('a',64),
  'image/avif',1000,1920,1080,'start/backgrounds/'||repeat('b',64)||'.webp',repeat('b',64),100,480,270,now())`)
+	const d2a = "202611120001_navigation.sql"
+	data, err := os.ReadFile(filepath.Join(migrations, d2a))
+	must(t, err)
+	must(t, os.WriteFile(filepath.Join(old, d2a), data, 0600))
+	must(t, database.Migrate(ctx, *d, old, "up", io.Discard))
+	execute(t, pool, "INSERT INTO site_navigation_reviews(id,site_id,site_revision,previous_rating,rating,actor,reason) VALUES ($1,$2,1,'unreviewed','unreviewed','fixture','Preserved D2-A audit')", uuid.NewV7(), legacy)
 	must(t, database.Migrate(ctx, *d, migrations, "up", io.Discard))
 	must(t, database.Migrate(ctx, *d, migrations, "up", io.Discard))
 	if value[int](t, pool, "SELECT count(*) FROM site_yearbooks WHERE site_id=$1", legacy) != 1 ||
 		value[int](t, pool, "SELECT count(*) FROM collection_sources WHERE namespace='fixture'") != 1 ||
+		value[int](t, pool, "SELECT count(*) FROM site_navigation_reviews WHERE site_id=$1", legacy) != 1 ||
 		value[int](t, pool, "SELECT count(*) FROM start_wallpapers WHERE title='Preserved fixture' AND status='published'") != 1 ||
 		value[int](t, pool, "SELECT count(*) FROM pg_constraint WHERE contype='f' AND conrelid::regclass::text IN ('site_navigation_reviews','site_navigation_features','site_interaction_days','site_navigation_heat','site_navigation_heat_state')") != 0 {
 		t.Fatal("migration lost history or added foreign keys")
 	}
-	if !value[bool](t, pool, "SELECT legacy_detail AND content_rating='unreviewed' AND first_published_at IS NULL AND primary_category IS NULL FROM sites WHERE id=$1", legacy) {
+	if !value[bool](t, pool, "SELECT legacy_detail AND content_rating='unreviewed' AND first_published_at IS NULL AND primary_category IS NULL AND logo_asset_key IS NULL AND featured_cover_asset_key IS NULL FROM sites WHERE id=$1", legacy) {
 		t.Fatal("migration invented editorial facts for a legacy Site")
 	}
 	editor := catalog.New(pool)
@@ -175,6 +183,23 @@ func TestNavigationPostgreSQLRedis(t *testing.T) {
 	if value[int](t, pool, "SELECT count(*) FROM site_navigation_reviews WHERE site_id=$1", a.ID) != 1 {
 		t.Fatal("failed reviews were not atomic")
 	}
+	logoKey := "sites/logos/" + strings.Repeat("a", 64) + ".webp"
+	coverKey := "sites/covers/" + strings.Repeat("b", 64) + ".avif"
+	_, err = editor.SetSiteAsset(ctx, a.PublicID, a.Revision, storage.SiteLogo, coverKey)
+	mustError(t, err, catalog.ErrInvalid)
+	nextRevision, err := editor.SetSiteAsset(ctx, a.PublicID, a.Revision, storage.SiteLogo, logoKey)
+	must(t, err)
+	_, err = editor.SetSiteAsset(ctx, a.PublicID, a.Revision, storage.SiteLogo, "")
+	mustError(t, err, catalog.ErrConflict)
+	nextRevision, err = editor.SetSiteAsset(ctx, a.PublicID, nextRevision, storage.SiteCover, coverKey)
+	must(t, err)
+	nextRevision, err = editor.SetSiteAsset(ctx, a.PublicID, nextRevision, storage.SiteLogo, "")
+	must(t, err)
+	a.Revision, err = editor.SetSiteAsset(ctx, a.PublicID, nextRevision, storage.SiteLogo, logoKey)
+	must(t, err)
+	assets := storage.New(platform.StorageConfig{PublicBaseURL: "https://assets.example.test/region"})
+	defer assets.Close()
+	svc.Presentation(assets, true)
 	for _, tc := range []struct {
 		query Filters
 		want  int64
@@ -246,13 +271,17 @@ func TestNavigationPostgreSQLRedis(t *testing.T) {
 	out, err := svc.Home(ctx)
 	must(t, err)
 	if out.Heat.Status != "ready" || out.Featured.Primary == nil || out.Featured.Primary.PublicID != a.PublicID ||
-		out.Featured.Secondary1 != nil || len(out.Trending) != 1 || out.Trending[0].PublicID != b.PublicID ||
+		out.Featured.Primary.LogoURL != "https://assets.example.test/region/"+logoKey ||
+		out.Featured.Primary.CoverURL != "https://assets.example.test/region/"+coverKey ||
+		out.Featured.Primary.VisitURL != "https://site.example.com/entry?type=fixture" ||
+		out.Featured.Secondary1 != nil || len(out.Trending) != 1 || out.Trending[0].PublicID != b.PublicID || out.Trending[0].Rank != 2 ||
 		len(out.Recent) != 1 || out.Recent[0].PublicID != c.PublicID || len(out.Categories) != 8 || out.Categories[0].Count != 3 {
 		t.Fatalf("unexpected fixed discovery response %+v", out)
 	}
 	rank, err := svc.Directory(ctx, Filters{Locale: "en", Sort: "heat_7d", PageSize: 1}, "")
 	must(t, err)
-	if rank.Items[0].PublicID != a.PublicID || !rank.Items[0].HeatQualified {
+	if rank.Items[0].PublicID != a.PublicID || !rank.Items[0].HeatQualified || rank.Items[0].CoverURL != "" || rank.Items[0].LogoURL == "" ||
+		!slices.Equal(rank.Languages, []string{"en", "ja", "zh"}) {
 		t.Fatal("featured selection altered the natural heat ranking")
 	}
 	low, err := svc.Stats(ctx, c.PublicID)
