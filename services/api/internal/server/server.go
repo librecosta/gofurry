@@ -173,6 +173,10 @@ func New(logger zerolog.Logger, cfg platform.Config) *Server {
 	}
 	var runCollection sync.Once
 	var collectionWG sync.WaitGroup
+	var intake *collection.Intake
+	if collector != nil && cfg.Harvest.IntakeEnabled {
+		intake = collection.NewIntake(pool, cfg.Harvest)
+	}
 	var heatPool *pgxpool.Pool
 	if cfg.Navigation != nil && cfg.Navigation.HeatEnabled && pool != nil {
 		pc := pool.Config()
@@ -191,6 +195,11 @@ func New(logger zerolog.Logger, cfg platform.Config) *Server {
 					collector.Run(collectionCtx, func(code string) {
 						logger.Warn().Str("reason", code).Msg("Harvest collection deferred")
 					})
+				})
+			}
+			if intake != nil {
+				collectionWG.Go(func() {
+					intake.Run(collectionCtx, func() { logger.Warn().Msg("Game intake tick deferred") })
 				})
 			}
 			if yearbookPool != nil {
@@ -221,6 +230,9 @@ func New(logger zerolog.Logger, cfg platform.Config) *Server {
 		once.Do(func() {
 			stopCollection()
 			collectionWG.Wait()
+			if intake != nil {
+				intake.Close()
+			}
 			if collector != nil {
 				collector.Close()
 				collectionPool.Close()

@@ -92,7 +92,7 @@ func CatalogPage(read func(context.Context, string, int32) (catalog.Page, error)
 
 func catalogResponse(c fiber.Ctx, result any, err error) error {
 	if err == nil {
-		c.Set("Cache-Control", "public, max-age=60")
+		c.Set("Cache-Control", "public, max-age=0, must-revalidate")
 		return c.JSON(result)
 	}
 	c.Set("Cache-Control", "no-store")

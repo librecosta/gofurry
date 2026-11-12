@@ -49,6 +49,10 @@ func newClient(c platform.HarvestConfig) *client {
 }
 
 func (c *client) call(ctx context.Context, token, method, path string, query url.Values, input, output any, expected int) error {
+	return c.callWithKey(ctx, token, method, path, query, input, output, expected, "")
+}
+
+func (c *client) callWithKey(ctx context.Context, token, method, path string, query url.Values, input, output any, expected int, key string) error {
 	if token == "" {
 		return errors.New("Harvest role credential unavailable")
 	}
@@ -70,6 +74,9 @@ func (c *client) call(ctx context.Context, token, method, path string, query url
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Accept", "application/json")
+	if key != "" {
+		req.Header.Set("Idempotency-Key", key)
+	}
 	if input != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
@@ -162,6 +169,8 @@ type observation struct {
 	Source     string         `json:"source"`
 	Evidence   string         `json:"evidence"`
 	Sample     bool           `json:"sample"`
+	JobID      uuid.UUID      `json:"job_id"`
+	AttemptID  uuid.UUID      `json:"attempt_id"`
 }
 type currentItem struct {
 	observation

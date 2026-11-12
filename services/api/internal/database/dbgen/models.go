@@ -98,15 +98,17 @@ type CollectionSource struct {
 }
 
 type Game struct {
-	ID          uuid.UUID          `json:"id"`
-	PublicID    string             `json:"public_id"`
-	Slug        string             `json:"slug"`
-	Status      string             `json:"status"`
-	Revision    int64              `json:"revision"`
-	CreatedAt   pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
-	PublishedAt pgtype.Timestamptz `json:"published_at"`
-	ArchivedAt  pgtype.Timestamptz `json:"archived_at"`
+	ID                  uuid.UUID          `json:"id"`
+	PublicID            string             `json:"public_id"`
+	Slug                string             `json:"slug"`
+	Status              string             `json:"status"`
+	Revision            int64              `json:"revision"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
+	PublishedAt         pgtype.Timestamptz `json:"published_at"`
+	ArchivedAt          pgtype.Timestamptz `json:"archived_at"`
+	IntakeManaged       bool               `json:"intake_managed"`
+	IntakeDisplaySource *uuid.UUID         `json:"intake_display_source"`
 }
 
 type GameEvidenceNews struct {
@@ -126,6 +128,45 @@ type GameEvidencePlayer struct {
 	ObservedAt    pgtype.Timestamptz `json:"observed_at"`
 	ObservationID uuid.UUID          `json:"observation_id"`
 	Players       int64              `json:"players"`
+}
+
+type GameIntakeCandidate struct {
+	ID                   uuid.UUID          `json:"id"`
+	PlatformCode         string             `json:"platform_code"`
+	ExternalKey          string             `json:"external_key"`
+	DiscoveredVia        string             `json:"discovered_via"`
+	State                string             `json:"state"`
+	Reason               string             `json:"reason"`
+	NextAt               pgtype.Timestamptz `json:"next_at"`
+	LeaseID              *uuid.UUID         `json:"lease_id"`
+	LeaseUntil           pgtype.Timestamptz `json:"lease_until"`
+	Failures             int32              `json:"failures"`
+	Namespace            string             `json:"namespace"`
+	EgressRegion         string             `json:"egress_region"`
+	TargetID             *uuid.UUID         `json:"target_id"`
+	JobStartedAt         pgtype.Timestamptz `json:"job_started_at"`
+	JobWriterBinding     string             `json:"job_writer_binding"`
+	JobRound             int32              `json:"job_round"`
+	JobID                *uuid.UUID         `json:"job_id"`
+	AttemptID            *uuid.UUID         `json:"attempt_id"`
+	ObservationID        *uuid.UUID         `json:"observation_id"`
+	ObservationHash      string             `json:"observation_hash"`
+	GameID               *uuid.UUID         `json:"game_id"`
+	GameSourceID         *uuid.UUID         `json:"game_source_id"`
+	ProfileScopeKey      string             `json:"profile_scope_key"`
+	Profile              []byte             `json:"profile"`
+	ProfileAt            pgtype.Timestamptz `json:"profile_at"`
+	ProfileObservationID *uuid.UUID         `json:"profile_observation_id"`
+	WorkTitle            string             `json:"work_title"`
+	Relation             []byte             `json:"relation"`
+	RelationAttached     bool               `json:"relation_attached"`
+	DecisionVersion      int32              `json:"decision_version"`
+	Review               []byte             `json:"review"`
+	ReviewUntil          pgtype.Timestamptz `json:"review_until"`
+	PublishedAt          pgtype.Timestamptz `json:"published_at"`
+	DecidedAt            pgtype.Timestamptz `json:"decided_at"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
 }
 
 type GameLocalization struct {

@@ -231,6 +231,7 @@ type lab struct {
 	http                                    *http.Client
 	plane, worker                           *process
 	mode, dns, news                         atomic.Int32
+	intakeVersion                           atomic.Int32
 	calls                                   atomic.Int64
 	certificate                             atomic.Pointer[tls.Certificate]
 	sign                                    func() *tls.Certificate
@@ -458,7 +459,27 @@ func (l *lab) feed(w http.ResponseWriter, r *http.Request) {
 		case "HK":
 			extra = `"is_free":false`
 		}
-		_, _ = fmt.Fprintf(w, `{%q:{"success":true,"data":{"steam_appid":%s,"name":%q,"type":"game",%s}}}`, q.Get("appids"), q.Get("appids"), "Observed "+q.Get("l"), extra)
+		app := q.Get("appids")
+		name, kind, description := "Observed "+q.Get("l"), "game", ""
+		switch app {
+		case "3000000001", "3000000005":
+			name, description = "Fable of the Foxes", "<p>An anthropomorphic fox cast restores a library.</p><script>fixture-private-marker</script>"
+			if l.intakeVersion.Load() == 1 && app == "3000000001" {
+				name, description = "Fable of the Foxes Revised", "The fox librarians reopen their town library."
+			}
+		case "3000000002":
+			name, description = "Unknown Orchard", "An orchard with only a Storefront synopsis."
+		case "3000000003":
+			name, kind = "Orchard Demo", "demo"
+		case "3000000004":
+			name, kind = "Mysterious App", ""
+		case "3000000006":
+			name, description = "Before Intake", "A detail record with no change on the next job."
+		case "3000000007":
+			name, description = "After Outage", "A game collected after Harvest recovers."
+		}
+		_, _ = fmt.Fprintf(w, `{%q:{"success":true,"data":{"steam_appid":%s,"name":%q,"type":%q,"short_description":%q,%s}}}`,
+			app, app, name, kind, description, extra)
 	case "api.steampowered.com":
 		w.Header().Set("Content-Type", "application/json")
 		if strings.Contains(r.URL.Path, "GetNumberOfCurrentPlayers") {
@@ -489,6 +510,9 @@ type networkCut struct {
 	server         *httptest.Server
 	post, ack      atomic.Bool
 	schedulePosts  atomic.Int32
+	jobPosts       atomic.Int32
+	jobDrop        atomic.Bool
+	offline        atomic.Bool
 	pauseSnapshot  atomic.Bool
 	snapshotRead   chan struct{}
 	resumeSnapshot chan struct{}
@@ -502,6 +526,12 @@ func proxyLab(t *testing.T, l *lab) *networkCut {
 	proxy.Transport = &http.Transport{}
 	proxy.ModifyResponse = func(r *http.Response) error {
 		path := r.Request.URL.Path
+		if r.Request.Method == "POST" && path == "/api/v1/jobs" {
+			cut.jobPosts.Add(1)
+			if r.StatusCode == 202 && cut.jobDrop.CompareAndSwap(true, false) {
+				return errNetwork
+			}
+		}
 		if r.Request.Method == "POST" && path == "/api/v1/schedules" {
 			cut.schedulePosts.Add(1)
 			if r.StatusCode == 201 && cut.post.CompareAndSwap(true, false) {
@@ -521,7 +551,12 @@ func proxyLab(t *testing.T, l *lab) *networkCut {
 		return nil
 	}
 	proxy.ErrorHandler = func(http.ResponseWriter, *http.Request, error) { panic(http.ErrAbortHandler) }
-	cut.server = httptest.NewServer(proxy)
+	cut.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if cut.offline.Load() {
+			panic(http.ErrAbortHandler)
+		}
+		proxy.ServeHTTP(w, r)
+	}))
 	t.Cleanup(cut.server.Close)
 	return cut
 }

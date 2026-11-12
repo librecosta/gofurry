@@ -3,9 +3,10 @@ package catalog
 import (
 	"context"
 	"errors"
+	"uuid"
+
 	"github.com/jackc/pgx/v5"
 	"github.com/librecosta/gofurry/services/api/internal/database/dbgen"
-	"uuid"
 )
 
 func (s *Service) CreateGame(ctx context.Context, in GameInput) (dbgen.Game, error) {
@@ -19,18 +20,43 @@ func (s *Service) CreateGame(ctx context.Context, in GameInput) (dbgen.Game, err
 		return dbgen.Game{}, err
 	}
 	return write(ctx, s, func(ctx context.Context, q *dbgen.Queries) (dbgen.Game, error) {
-		id := uuid.NewV7()
-		row, err := create(s, func(publicID string) (dbgen.Game, error) {
-			return q.CreateGame(ctx, dbgen.CreateGameParams{ID: id, PublicID: publicID, Slug: in.Slug})
-		})
+		row, err := s.createGame(ctx, q, in.Slug, false)
 		if err != nil {
 			return row, err
 		}
-		return row, saveGameContent(ctx, q, row.ID, in)
+		return row, saveGameContent(ctx, q, row.ID, in, true)
 	})
 }
 
+func (s *Service) createGame(ctx context.Context, q *dbgen.Queries, slug string, managed bool) (dbgen.Game, error) {
+	id := uuid.NewV7()
+	return create(s, func(publicID string) (dbgen.Game, error) {
+		return q.CreateGame(ctx, dbgen.CreateGameParams{ID: id, PublicID: publicID, Slug: slug, IntakeManaged: managed})
+	})
+}
+
+// CreateIntakeGame is part of the caller's identity transaction. Display
+// data remains in the source projection and never enters editorial rows.
+func (s *Service) CreateIntakeGame(ctx context.Context, q *dbgen.Queries, name string) (dbgen.Game, error) {
+	ed, err := normalizeEditorial(Editorial{Localizations: []Localization{{Locale: "en", Name: name}}}, "")
+	if err != nil {
+		// Decorative slugs may repeat and must also work for titles with
+		// punctuation or no safe ASCII spelling.
+		ed.Slug = "game"
+	}
+	return s.createGame(ctx, q, ed.Slug, true)
+}
+
+func NormalizeGameSource(source Source) (Source, error) {
+	rows, err := normalizeSources([]Source{source})
+	if err != nil {
+		return Source{}, err
+	}
+	return rows[0], nil
+}
+
 func (s *Service) EditGame(ctx context.Context, id uuid.UUID, revision int64, in GameInput) (dbgen.Game, error) {
+	hasSources := in.Sources != nil
 	var err error
 	in.Sources, err = normalizeSources(in.Sources)
 	if err != nil {
@@ -48,7 +74,7 @@ func (s *Service) EditGame(ctx context.Context, id uuid.UUID, revision int64, in
 		if err != nil {
 			return row, err
 		}
-		if err = saveGameContent(ctx, q, id, in); err != nil {
+		if err = saveGameContent(ctx, q, id, in, hasSources || !row.IntakeManaged); err != nil {
 			return row, err
 		}
 		if row.Status == Published {
@@ -95,7 +121,7 @@ func requireGamePublication(ctx context.Context, q *dbgen.Queries, id uuid.UUID)
 	return nil
 }
 
-func saveGameContent(ctx context.Context, q *dbgen.Queries, id uuid.UUID, in GameInput) error {
+func saveGameContent(ctx context.Context, q *dbgen.Queries, id uuid.UUID, in GameInput, editSources bool) error {
 	if err := q.ClearGameLocalizations(ctx, id); err != nil {
 		return err
 	}
@@ -105,6 +131,9 @@ func saveGameContent(ctx context.Context, q *dbgen.Queries, id uuid.UUID, in Gam
 		}); err != nil {
 			return err
 		}
+	}
+	if !editSources {
+		return nil
 	}
 	if err := q.DisableGameSources(ctx, id); err != nil {
 		return err

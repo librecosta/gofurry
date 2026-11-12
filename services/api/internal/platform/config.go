@@ -91,7 +91,7 @@ func LoadConfig(path string) (Config, error) {
 	if err := validateWallpaperSource(v); err != nil {
 		return cfg, err
 	}
-	for _, key := range []string{"yearbook.enabled", "navigation.heat_enabled"} {
+	for _, key := range []string{"yearbook.enabled", "navigation.heat_enabled", "harvest.intake_enabled"} {
 		if v.IsSet(key) {
 			if _, ok := v.Get(key).(bool); !ok {
 				return cfg, fmt.Errorf("%s must be a YAML boolean", key)

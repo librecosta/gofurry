@@ -120,6 +120,11 @@ func (s *Service) project(ctx context.Context, q *dbgen.Queries, generation, epo
 		return err
 	}
 	if src.Provider == "steam" {
+		if r.Capability == intakeCapability && r.Scope.Dimensions["section"] == "details" {
+			if err := refreshIntakeProfiles(ctx, q, generation, &src.ID, r.ScopeKey); err != nil {
+				return err
+			}
+		}
 		if r.Withdrawn || r.Position <= prior.Position {
 			return nil
 		}
@@ -279,6 +284,20 @@ func (s *Service) applyPage(ctx context.Context, q *dbgen.Queries, epoch, genera
 
 func (s *Service) sweepPage(ctx context.Context, q *dbgen.Queries, generation, epoch uuid.UUID, rows []currentItem) error {
 	for _, item := range rows {
+		if item.Source == "steam" && item.Capability == intakeCapability && item.State == "present" &&
+			item.Scope.Dimensions["section"] == "details" {
+			if item.Confirmed.IsZero() || item.Confirmed.Before(item.ReceivedAt) {
+				return errProtocol
+			}
+			r := result{observation: item.observation, Position: item.Position, Confirmed: item.Confirmed}
+			if err := s.project(ctx, q, generation, epoch, r, true); err != nil {
+				return err
+			}
+			if err := refreshIntakeProfiles(ctx, q, generation, nil, r.ScopeKey); err != nil {
+				return err
+			}
+			continue
+		}
 		if item.Source != "web" || item.State != "present" && item.State != "confirmed_empty" {
 			continue
 		}

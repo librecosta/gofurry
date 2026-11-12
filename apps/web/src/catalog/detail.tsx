@@ -40,7 +40,7 @@ export async function loadDetail(kind: Kind, params: CatalogParams, pathname: st
 
 export function detailHeaders(data: DetailPageData | undefined): Record<string, string> {
   return data?.state === 'published' && data.canonical && (data.detail.kind !== 'sites' || data.detail.reviewed)
-    ? { 'Cache-Control': data.detail.kind === 'sites' ? 'public, max-age=0, must-revalidate' : 'public, max-age=60' }
+    ? { 'Cache-Control': 'public, max-age=0, must-revalidate' }
     : { 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex' }
 }
 

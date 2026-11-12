@@ -33,21 +33,25 @@ func (q *Queries) AddGameLocalization(ctx context.Context, arg AddGameLocalizati
 }
 
 const canPublishGame = `-- name: CanPublishGame :one
-SELECT EXISTS(SELECT 1 FROM game_localizations WHERE game_id=$1)
+SELECT EXISTS(
+ SELECT 1 FROM games g CROSS JOIN LATERAL (SELECT game_presentation(g.id,g.intake_display_source) AS profile OFFSET 0) p
+ WHERE g.id=$1 AND jsonb_array_length(p.profile->'localizations')>0
+   AND (NOT g.intake_managed OR (p.profile->>'approved')::boolean)
+)::boolean
 `
 
 func (q *Queries) CanPublishGame(ctx context.Context, id uuid.UUID) (bool, error) {
 	row := q.db.QueryRow(ctx, canPublishGame, id)
-	var exists bool
-	err := row.Scan(&exists)
-	return exists, err
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
 }
 
 const changeGameStatus = `-- name: ChangeGameStatus :one
 UPDATE games SET status=$1,revision=revision+1,updated_at=transaction_timestamp(),
  published_at=CASE WHEN $1::text='published' THEN transaction_timestamp() ELSE published_at END,
  archived_at=CASE WHEN $1::text='archived' THEN transaction_timestamp() ELSE archived_at END
-WHERE id=$2 RETURNING id, public_id, slug, status, revision, created_at, updated_at, published_at, archived_at
+WHERE id=$2 RETURNING id, public_id, slug, status, revision, created_at, updated_at, published_at, archived_at, intake_managed, intake_display_source
 `
 
 type ChangeGameStatusParams struct {
@@ -68,6 +72,8 @@ func (q *Queries) ChangeGameStatus(ctx context.Context, arg ChangeGameStatusPara
 		&i.UpdatedAt,
 		&i.PublishedAt,
 		&i.ArchivedAt,
+		&i.IntakeManaged,
+		&i.IntakeDisplaySource,
 	)
 	return i, err
 }
@@ -82,18 +88,24 @@ func (q *Queries) ClearGameLocalizations(ctx context.Context, gameID uuid.UUID) 
 }
 
 const createGame = `-- name: CreateGame :one
-INSERT INTO games (id,public_id,slug) VALUES ($1,$2,$3)
-ON CONFLICT (public_id) DO NOTHING RETURNING id, public_id, slug, status, revision, created_at, updated_at, published_at, archived_at
+INSERT INTO games (id,public_id,slug,intake_managed) VALUES ($1,$2,$3,$4)
+ON CONFLICT (public_id) DO NOTHING RETURNING id, public_id, slug, status, revision, created_at, updated_at, published_at, archived_at, intake_managed, intake_display_source
 `
 
 type CreateGameParams struct {
-	ID       uuid.UUID `json:"id"`
-	PublicID string    `json:"public_id"`
-	Slug     string    `json:"slug"`
+	ID            uuid.UUID `json:"id"`
+	PublicID      string    `json:"public_id"`
+	Slug          string    `json:"slug"`
+	IntakeManaged bool      `json:"intake_managed"`
 }
 
 func (q *Queries) CreateGame(ctx context.Context, arg CreateGameParams) (Game, error) {
-	row := q.db.QueryRow(ctx, createGame, arg.ID, arg.PublicID, arg.Slug)
+	row := q.db.QueryRow(ctx, createGame,
+		arg.ID,
+		arg.PublicID,
+		arg.Slug,
+		arg.IntakeManaged,
+	)
 	var i Game
 	err := row.Scan(
 		&i.ID,
@@ -105,6 +117,8 @@ func (q *Queries) CreateGame(ctx context.Context, arg CreateGameParams) (Game, e
 		&i.UpdatedAt,
 		&i.PublishedAt,
 		&i.ArchivedAt,
+		&i.IntakeManaged,
+		&i.IntakeDisplaySource,
 	)
 	return i, err
 }
@@ -119,7 +133,7 @@ func (q *Queries) DisableGameSources(ctx context.Context, gameID uuid.UUID) erro
 }
 
 const lockGame = `-- name: LockGame :one
-SELECT id, public_id, slug, status, revision, created_at, updated_at, published_at, archived_at FROM games WHERE id=$1 FOR UPDATE
+SELECT id, public_id, slug, status, revision, created_at, updated_at, published_at, archived_at, intake_managed, intake_display_source FROM games WHERE id=$1 FOR UPDATE
 `
 
 func (q *Queries) LockGame(ctx context.Context, id uuid.UUID) (Game, error) {
@@ -135,16 +149,18 @@ func (q *Queries) LockGame(ctx context.Context, id uuid.UUID) (Game, error) {
 		&i.UpdatedAt,
 		&i.PublishedAt,
 		&i.ArchivedAt,
+		&i.IntakeManaged,
+		&i.IntakeDisplaySource,
 	)
 	return i, err
 }
 
 const publishedGame = `-- name: PublishedGame :one
-SELECT e.public_id,e.slug,COALESCE((SELECT jsonb_agg(jsonb_build_object('locale',l.locale,'name',l.name,'summary',l.summary) ORDER BY l.locale)
- FROM game_localizations l WHERE l.game_id=e.id),'[]'::jsonb)::jsonb AS localizations,
+SELECT e.public_id,e.slug,(p.profile->'localizations')::jsonb AS localizations,
  COALESCE((SELECT jsonb_agg(jsonb_build_object('platform_code',x.platform_code,'external_key',x.external_key,'source_url',x.source_url) ORDER BY x.platform_code COLLATE "C",x.external_key COLLATE "C")
  FROM game_sources x WHERE x.game_id=e.id AND x.active),'[]'::jsonb)::jsonb AS sources
-FROM games e WHERE e.public_id=$1 AND e.status='published'
+FROM games e CROSS JOIN LATERAL (SELECT game_presentation(e.id,e.intake_display_source) AS profile OFFSET 0) p
+WHERE e.public_id=$1 AND e.status='published' AND (NOT e.intake_managed OR (p.profile->>'approved')::boolean)
 `
 
 type PublishedGameRow struct {
@@ -167,9 +183,9 @@ func (q *Queries) PublishedGame(ctx context.Context, publicID string) (Published
 }
 
 const publishedGamePage = `-- name: PublishedGamePage :many
-SELECT e.public_id,e.slug,COALESCE((SELECT jsonb_agg(jsonb_build_object('locale',l.locale,'name',l.name,'summary',l.summary) ORDER BY l.locale)
- FROM game_localizations l WHERE l.game_id=e.id),'[]'::jsonb)::jsonb AS localizations
-FROM games e WHERE e.status='published' AND e.public_id>$1
+SELECT e.public_id,e.slug,(p.profile->'localizations')::jsonb AS localizations
+FROM games e CROSS JOIN LATERAL (SELECT game_presentation(e.id,e.intake_display_source) AS profile OFFSET 0) p
+WHERE e.status='published' AND (NOT e.intake_managed OR (p.profile->>'approved')::boolean) AND e.public_id>$1
 ORDER BY e.public_id LIMIT $2
 `
 
@@ -233,7 +249,7 @@ func (q *Queries) SaveGameSource(ctx context.Context, arg SaveGameSourceParams) 
 
 const updateGame = `-- name: UpdateGame :one
 UPDATE games SET slug=$2,revision=revision+1,updated_at=transaction_timestamp()
-WHERE id=$1 RETURNING id, public_id, slug, status, revision, created_at, updated_at, published_at, archived_at
+WHERE id=$1 RETURNING id, public_id, slug, status, revision, created_at, updated_at, published_at, archived_at, intake_managed, intake_display_source
 `
 
 type UpdateGameParams struct {
@@ -254,6 +270,8 @@ func (q *Queries) UpdateGame(ctx context.Context, arg UpdateGameParams) (Game, e
 		&i.UpdatedAt,
 		&i.PublishedAt,
 		&i.ArchivedAt,
+		&i.IntakeManaged,
+		&i.IntakeDisplaySource,
 	)
 	return i, err
 }

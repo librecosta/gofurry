@@ -287,6 +287,12 @@ type steamProvenance struct {
 	Tier  string `json:"tier"`
 	URL   string `json:"source_url"`
 }
+type steamDetail struct {
+	steamProvenance
+	Name        string `json:"name"`
+	Type        string `json:"type,omitempty"`
+	Description string `json:"description,omitempty"`
+}
 type price struct {
 	steamProvenance
 	State   string `json:"state"`
@@ -339,15 +345,21 @@ func normalizeSteam(o observation, key string) (compact, error) {
 	var value any
 	switch o.Scope.Dimensions["section"] {
 	case "details":
-		var v struct {
-			steamProvenance
-			Name string `json:"name"`
-			Type string `json:"type,omitempty"`
-		}
+		var v steamDetail
 		if json.Unmarshal(o.Data, &v) != nil || v.Name == "" {
 			return c, errProtocol
 		}
-		v.Name, v.Type = clean(v.Name, 192), clean(v.Type, 64)
+		v.Name, v.Type = clean(v.Name, 160), clean(v.Type, 64)
+		// Harvest emits plain text. Treat residual angle brackets as invalid
+		// for the display projection, while retaining validated identity.
+		if !strings.ContainsAny(v.Description, "<>") {
+			v.Description = clean(v.Description, 1200)
+		} else {
+			v.Description = ""
+		}
+		if strings.ContainsAny(v.Name, "<>") {
+			v.Name = ""
+		}
 		value = v
 	case "media":
 		var v struct {

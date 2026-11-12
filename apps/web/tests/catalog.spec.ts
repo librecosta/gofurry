@@ -79,6 +79,29 @@ test('missing translation keeps the source name and suppresses translated SEO', 
   await expect(page.getByRole('link', { name: 'steam' })).toHaveAttribute('href', 'https://store.steampowered.com/app/42/')
 })
 
+test('approved automatic Game profiles render locally and revoked work is absent in both regions', async ({ request }) => {
+  const active = '000000000000000g'
+  const hidden = '000000000000000h'
+  const path = '/games/' + active + '/fixture-starlight'
+  for (const [web, api, english, chinese] of [[cn, cnAPI, '/en', ''], [intl, intlAPI, '', '/zh']]) {
+    const translated = await request.get(web + english + path)
+    expect(translated.status()).toBe(200)
+    expect(translated.headers()['cache-control']).toBe('public, max-age=0, must-revalidate')
+    const html = await translated.text()
+    expect(html).toContain('<title>Fixture Starlight</title>')
+    expect(html).toContain('content="Collected English synopsis."')
+    const fallback = await request.get(web + chinese + path)
+    expect(fallback.status()).toBe(200)
+    expect(fallback.headers()['x-robots-tag']).toBe('noindex')
+    expect(await fallback.text()).toContain('Fixture Starlight')
+    expect((await request.get(web + english + '/games/' + hidden + '/fixture-hidden')).status()).toBe(404)
+    expect((await request.get(api + '/api/v1/games/' + hidden)).status()).toBe(404)
+    const listing = await (await request.get(api + '/api/v1/games')).json()
+    expect(listing.items.map((item: { public_id: string }) => item.public_id)).toContain(active)
+    expect(listing.items.map((item: { public_id: string }) => item.public_id)).not.toContain(hidden)
+  }
+})
+
 test('real API exposes bounded published DTOs and preserves Start and read boundaries', async ({ request }) => {
   const rows = await request.get(cnAPI + '/api/v1/sites?limit=1')
   expect(rows.status()).toBe(200)

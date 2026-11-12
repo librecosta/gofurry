@@ -10,14 +10,16 @@ import (
 )
 
 type HarvestConfig struct {
-	URL          string        `mapstructure:"url" json:"-"`
-	Namespace    string        `mapstructure:"namespace"`
-	WriterToken  string        `mapstructure:"writer_token" json:"-"`
-	ReaderToken  string        `mapstructure:"reader_token" json:"-"`
-	ConsumerID   string        `mapstructure:"consumer_id"`
-	Consume      bool          `mapstructure:"consume"`
-	PollInterval time.Duration `mapstructure:"poll_interval" json:"-"`
-	PageSize     int           `mapstructure:"page_size"`
+	URL                string        `mapstructure:"url" json:"-"`
+	Namespace          string        `mapstructure:"namespace"`
+	WriterToken        string        `mapstructure:"writer_token" json:"-"`
+	ReaderToken        string        `mapstructure:"reader_token" json:"-"`
+	ConsumerID         string        `mapstructure:"consumer_id"`
+	Consume            bool          `mapstructure:"consume"`
+	PollInterval       time.Duration `mapstructure:"poll_interval" json:"-"`
+	PageSize           int           `mapstructure:"page_size"`
+	IntakeEnabled      bool          `mapstructure:"intake_enabled"`
+	IntakeEgressRegion string        `mapstructure:"intake_egress_region"`
 }
 
 var harvestNamespace = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,62}$`)
@@ -52,6 +54,11 @@ func (c *Config) validateHarvest() error {
 	}
 	if !h.Consume && h.WriterToken == "" {
 		return errors.New("harvest requires an enabled consumer or a writer credential")
+	}
+	if h.IntakeEnabled && h.IntakeEgressRegion == "" ||
+		h.IntakeEgressRegion != "" && (!harvestNamespace.MatchString(h.IntakeEgressRegion) || len(h.IntakeEgressRegion) > 35 ||
+			!h.Consume || h.WriterToken == "") {
+		return errors.New("harvest intake requires a writer, consumer and explicit intake_egress_region")
 	}
 	if h.PollInterval == 0 {
 		h.PollInterval = 5 * time.Second

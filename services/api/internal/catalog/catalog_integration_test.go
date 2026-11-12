@@ -19,6 +19,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/librecosta/gofurry/services/api/internal/database"
+	"github.com/librecosta/gofurry/services/api/internal/database/dbgen"
 	"github.com/librecosta/gofurry/services/api/internal/platform"
 )
 
@@ -248,6 +249,11 @@ func TestCatalogPostgreSQL(t *testing.T) {
 	_, err = projected.PublishedGame(ctx, otherGame)
 	want(t, err, ErrNotFound)
 
+	for _, editor := range []*Service{c, projected} {
+		seedIntakeBrowserGame(t, ctx, editor, "000000000000000g", "40001", "Fixture Starlight", false)
+		seedIntakeBrowserGame(t, ctx, editor, "000000000000000h", "40002", "Fixture Hidden", true)
+	}
+
 	_, err = cn.Exec(ctx, "UPDATE sites SET public_id='000000000000000z' WHERE id=$1", site.ID)
 	pgCode(t, err, "23514")
 	_, err = cn.Exec(ctx, "UPDATE games SET id=$2 WHERE id=$1", game.ID, uuid.NewV7())
@@ -258,6 +264,33 @@ func TestCatalogPostgreSQL(t *testing.T) {
 	pgCode(t, err, "23503")
 	_, err = cn.Exec(ctx, "DELETE FROM games WHERE id=$1", game.ID)
 	pgCode(t, err, "23001")
+}
+
+// Seed only the final local projection for the independent CN and INTL SSR
+// fixtures. The real preflight-to-public path runs in TestGameIntakeHarvestD.
+func seedIntakeBrowserGame(t *testing.T, ctx context.Context, s *Service, publicID, key, name string, revoked bool) {
+	t.Helper()
+	s.publicID = func() string { return publicID }
+	game, err := write(ctx, s, func(ctx context.Context, q *dbgen.Queries) (dbgen.Game, error) {
+		return s.CreateIntakeGame(ctx, q, name)
+	})
+	ok(t, err)
+	source := uuid.NewV7()
+	_, err = s.pool.Exec(ctx, "INSERT INTO game_sources (id,game_id,platform_code,external_key,source_url) VALUES ($1,$2,'steam',$3,$4)",
+		source, game.ID, key, "https://store.steampowered.com/app/"+key+"/")
+	ok(t, err)
+	_, err = s.pool.Exec(ctx, `INSERT INTO game_intake_candidates (id,platform_code,external_key,discovered_via,state,game_id,game_source_id,
+ profile,profile_at,profile_observation_id,decision_version,review,review_until,next_at)
+ VALUES ($1,'steam',$2,'operator','accepted',$3,$4,jsonb_build_object('locale','en','name',$5::text,'summary','Collected English synopsis.'),
+ now(),$6,1,'{"furry_ref":"fixture.synopsis","sfw_ref":"fixture.review","policy":"furry-and-sfw-1"}',now()+interval '1 day',NULL)`,
+		uuid.NewV7(), key, game.ID, source, name, uuid.NewV7())
+	ok(t, err)
+	_, err = s.SetGameStatus(ctx, game.ID, game.Revision, Published)
+	ok(t, err)
+	if revoked {
+		_, err = s.pool.Exec(ctx, "UPDATE game_intake_candidates SET review_until=NULL WHERE game_id=$1", game.ID)
+		ok(t, err)
+	}
 }
 
 func openFixture(t *testing.T, ctx context.Context, path, region string) *pgxpool.Pool {
