@@ -14,7 +14,7 @@ UPDATE sites SET status=sqlc.arg(new_status),revision=revision+1,updated_at=tran
  published_at=CASE WHEN sqlc.arg(new_status)::text='published' THEN transaction_timestamp() ELSE published_at END,
  first_published_at=CASE WHEN sqlc.arg(new_status)::text='published' AND published_at IS NULL
   THEN coalesce(first_published_at,transaction_timestamp()) ELSE first_published_at END,
- archived_at=CASE WHEN sqlc.arg(new_status)::text='archived' THEN transaction_timestamp() ELSE archived_at END
+ archived_at=CASE WHEN sqlc.arg(new_status)::text='archived' THEN transaction_timestamp() ELSE NULL END
 WHERE id=sqlc.arg(id) RETURNING *;
 
 -- name: RemoveOmittedSiteLocalizations :exec
@@ -28,9 +28,13 @@ ON CONFLICT (site_id,locale) DO UPDATE SET name=excluded.name,summary=excluded.s
 UPDATE site_addresses SET active=false WHERE site_id=$1 AND active;
 
 -- name: CanPublishSite :one
-SELECT (EXISTS(SELECT 1 FROM sites s WHERE s.id=sqlc.arg(id) AND s.content_rating='sfw' AND s.primary_category IS NOT NULL)
+SELECT (EXISTS(SELECT 1 FROM sites s WHERE s.id=sqlc.arg(id) AND s.content_rating='sfw')
  AND EXISTS(SELECT 1 FROM site_localizations l WHERE l.site_id=sqlc.arg(id))
  AND EXISTS(SELECT 1 FROM site_addresses a WHERE a.site_id=sqlc.arg(id) AND active AND kind='primary'))::boolean;
+
+-- name: HasSitePresentation :one
+SELECT (EXISTS(SELECT 1 FROM site_localizations l WHERE l.site_id=sqlc.arg(id)::uuid)
+ AND EXISTS(SELECT 1 FROM site_addresses a WHERE a.site_id=sqlc.arg(id)::uuid AND active AND kind='primary'))::boolean;
 
 -- name: SaveSiteAddress :exec
 INSERT INTO site_addresses (id,site_id,url,kind) VALUES ($1,$2,$3,$4)

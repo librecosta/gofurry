@@ -492,6 +492,10 @@ func (l *lab) feed(w http.ResponseWriter, r *http.Request) {
 		}
 		_, _ = fmt.Fprintf(w, `{"appnews":{"appid":%s,"newsitems":%s,"count":1}}`, q.Get("appid"), items)
 	default:
+		if l.mode.Load() == 2 {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
 		if r.Method == "HEAD" {
 			w.WriteHeader(204)
 			return

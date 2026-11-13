@@ -1,5 +1,6 @@
 export const copy = {
   zh: {
+    uncategorized: '未分类',
     homeTitle: '网站发现', intro: '探索兽圈社区、创作、工具与活动，找到值得再访的网站。', directory: '网站目录',
     directoryDescription: '按分类、标签和网站支持语言查找已收录的兽圈网站。', search: '搜索网站', placeholder: '输入站点名称、简介或标签',
     browse: '浏览全部网站', editorial: '编辑精选', recent: '最新收录', trending: '本周热门', topics: '按分类探索',
@@ -14,6 +15,7 @@ export const copy = {
     language: 'English', languageHint: '同一组条件中匹配任一项即可，不同组条件需同时满足。',
   },
   en: {
+    uncategorized: 'Uncategorized',
     homeTitle: 'Discover furry sites', intro: 'Find communities, artwork, tools and events across the furry web.', directory: 'Site directory',
     directoryDescription: 'Search the furry web by category, tag and supported language.', search: 'Search sites', placeholder: 'Name, description or tag',
     browse: 'Browse all sites', editorial: 'Editor’s picks', recent: 'Latest arrivals', trending: 'Trending this week', topics: 'Explore by category',

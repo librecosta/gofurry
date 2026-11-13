@@ -18,7 +18,7 @@ const copy = {
   zh: {
     breadcrumb: '当前位置', profile: '查看站点资料', about: '关于网站', information: '站点信息', primary: '主分类', secondary: '补充分类',
     primaryAddress: '主要地址', alternates: '备用地址', attention: '近期关注', views: '有效浏览', clicks: '外链点击',
-    related: '相关网站', technology: '技术概览', recorded: 'Harvest 上次确认', observed: '首次记录',
+    related: '相关网站', technology: '技术概览', recorded: 'Harvest 上次确认', historical: '历史观察', observed: '首次记录',
     status: '记录的 HTTP 响应', tls: '当时通过 TLS 验证', fingerprint: '被动识别',
     high: '高置信度', medium: '中等置信度', yearbooks: '已发布年鉴', year: (year: number) => `${year} 年站点年鉴`,
     untranslated: '此页面暂无中文译文，以下为现有资料。', unavailable: '站点资料暂时无法加载。',
@@ -26,7 +26,7 @@ const copy = {
   en: {
     breadcrumb: 'Breadcrumb', profile: 'Explore this profile', about: 'About this site', information: 'Site information', primary: 'Primary category', secondary: 'Additional categories',
     primaryAddress: 'Primary address', alternates: 'Alternate addresses', attention: 'Recent activity', views: 'Qualified detail views', clicks: 'Outbound clicks',
-    related: 'Related sites', technology: 'Technology overview', recorded: 'Last confirmed by Harvest', observed: 'First recorded',
+    related: 'Related sites', technology: 'Technology overview', recorded: 'Last confirmed by Harvest', historical: 'Last observed', observed: 'First recorded',
     status: 'Recorded HTTP response', tls: 'TLS verified at observation', fingerprint: 'Passively identified',
     high: 'High confidence', medium: 'Medium confidence', yearbooks: 'Published yearbooks', year: (year: number) => `${year} Site Yearbook`,
     untranslated: 'An English translation is unavailable. The available profile is shown below.', unavailable: 'This site profile is temporarily unavailable.',
@@ -52,7 +52,7 @@ function Fact({ fact, locale }: { fact: Technology; locale: Locale }) {
     <strong>{name}</strong>
     {fact.confidence && <small>{m.fingerprint} · {m[fact.confidence]}</small>}
     <small>{fact.source}</small>
-    <small>{m.recorded} <time dateTime={fact.latest_confirmed_at}>{dateLabel(fact.latest_confirmed_at, locale)}</time></small>
+    <small>{fact.observation_state === 'last_observed' ? m.historical : m.recorded} <time dateTime={fact.last_observed_at}>{dateLabel(fact.last_observed_at, locale)}</time></small>
     {fact.first_observed_at && <small>{m.observed} <time dateTime={fact.first_observed_at}>{dateLabel(fact.first_observed_at, locale)}</time></small>}
   </li>
 }
@@ -74,7 +74,7 @@ export function SiteProfile({ data }: { data: DetailPageData }) {
   const alternates = detail.addresses.filter(address => address.kind === 'alternate')
   const visit = detail.interactions ? (event: Parameters<typeof siteOutbound>[1]) => siteOutbound(detail.public_id, event) : undefined
   const to = (filter: Partial<Criteria>) => criteriaParams({ ...emptyCriteria, ...filter })
-  const hasInformation = Boolean(detail.primaryCategory || primary || alternates.length)
+  const hasInformation = detail.reviewed
   const hasMain = Boolean(display.body || hasInformation || detail.stats)
   const hasAside = Boolean(detail.related.length || detail.technology.length || detail.yearbooks.length)
   const alternatePath = alternatives.find(item => item.locale !== locale)?.path
@@ -94,8 +94,9 @@ export function SiteProfile({ data }: { data: DetailPageData }) {
           {primary && <p className={styles.domain}>{host(primary.url)}</p>}
           {!translation && <p className={styles.translation}>{m.untranslated}</p>}
           {display.summary && <p className={styles.intro} lang={display.locale}>{display.summary}</p>}
-          {detail.primaryCategory && <ul className={styles.chips}>
-            <li><Link data-primary-category to={directory} search={to({ category: [detail.primaryCategory] })}>{categories[detail.primaryCategory][locale]}</Link></li>
+          {detail.reviewed && <ul className={styles.chips}>
+            {detail.primaryCategory ? <li><Link data-primary-category to={directory} search={to({ category: [detail.primaryCategory] })}>{categories[detail.primaryCategory][locale]}</Link></li>
+              : <li>{channel.uncategorized}</li>}
             {detail.secondaryCategories.map(category => <li key={category}>
               <Link to={directory} search={to({ category: [category] })}>{categories[category][locale]}</Link></li>)}
             {detail.tags.slice(0, 3).map(tag => <li key={tag.code}><Link to={directory} search={to({ tags: [tag.code] })}>{tag[locale]}</Link></li>)}
@@ -117,8 +118,8 @@ export function SiteProfile({ data }: { data: DetailPageData }) {
           {hasInformation && <section aria-labelledby="site-information">
             <h2 id="site-information">{m.information}</h2>
             <dl className={styles.information}>
-              {detail.primaryCategory && <div><dt>{m.primary}</dt><dd><Link to={directory} search={to({ category: [detail.primaryCategory] })}>
-                {categories[detail.primaryCategory][locale]}</Link></dd></div>}
+              <div><dt>{m.primary}</dt><dd>{detail.primaryCategory ? <Link to={directory} search={to({ category: [detail.primaryCategory] })}>
+                {categories[detail.primaryCategory][locale]}</Link> : channel.uncategorized}</dd></div>
               {detail.secondaryCategories.length > 0 && <div><dt>{m.secondary}</dt><dd>{detail.secondaryCategories.map(category =>
                 <Link key={category} to={directory} search={to({ category: [category] })}>{categories[category][locale]}</Link>)}</dd></div>}
               {detail.tags.length > 0 && <div><dt>{channel.tags}</dt><dd>{detail.tags.map(tag =>

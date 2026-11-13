@@ -296,14 +296,22 @@ func intakeSchedule(ctx context.Context, q *dbgen.Queries, c dbgen.GameIntakeCan
 }
 
 func publishIntake(ctx context.Context, q *dbgen.Queries, candidate uuid.UUID, game dbgen.Game) error {
-	if !game.IntakeManaged || game.Status != catalog.Draft {
+	if !game.IntakeManaged || game.PublicationBlocked || game.Status != catalog.Draft || game.PublishedAt.Valid {
 		return nil
+	}
+	if err := q.SaveApprovedGamePresentation(ctx, game.ID); err != nil {
+		return err
 	}
 	ready, err := q.CanPublishGame(ctx, game.ID)
 	if err != nil || !ready {
 		return err
 	}
-	if _, err := q.ChangeGameStatus(ctx, dbgen.ChangeGameStatusParams{ID: game.ID, NewStatus: catalog.Published}); err != nil {
+	published, err := q.ChangeGameStatus(ctx, dbgen.ChangeGameStatusParams{ID: game.ID, NewStatus: catalog.Published})
+	if err != nil {
+		return err
+	}
+	decision := catalog.PublicationDecision{Actor: "game-intake", Reason: "Verified furry relevance and SFW evidence retained with approved presentation"}
+	if err := decision.Save(ctx, q, "game", game.ID, published.Revision, "publish"); err != nil {
 		return err
 	}
 	return q.MarkIntakePublished(ctx, candidate)
@@ -324,7 +332,11 @@ func refreshIntakeProfiles(ctx context.Context, q *dbgen.Queries, generation uui
 		if err != nil {
 			return err
 		}
-		if err := publishIntake(ctx, q, row.ID, game); err != nil {
+		if game.Status == catalog.Published && !game.PublicationBlocked {
+			if err := q.SaveApprovedGamePresentation(ctx, game.ID); err != nil {
+				return err
+			}
+		} else if err := publishIntake(ctx, q, row.ID, game); err != nil {
 			return err
 		}
 	}

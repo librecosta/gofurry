@@ -25,7 +25,7 @@ UPDATE game_intake_candidates i SET state='resolving',lease_id=$1,
  namespace=CASE WHEN i.namespace='' AND i.platform_code='steam' THEN $2 ELSE i.namespace END,
  egress_region=CASE WHEN i.egress_region='' AND i.platform_code='steam' THEN $3 ELSE i.egress_region END,
  updated_at=statement_timestamp()
-FROM due WHERE i.id=due.id RETURNING i.id, i.platform_code, i.external_key, i.discovered_via, i.state, i.reason, i.next_at, i.lease_id, i.lease_until, i.failures, i.namespace, i.egress_region, i.target_id, i.job_started_at, i.job_writer_binding, i.job_round, i.job_id, i.attempt_id, i.observation_id, i.observation_hash, i.game_id, i.game_source_id, i.profile_scope_key, i.profile, i.profile_at, i.profile_observation_id, i.work_title, i.relation, i.relation_attached, i.decision_version, i.review, i.review_until, i.published_at, i.decided_at, i.created_at, i.updated_at
+FROM due WHERE i.id=due.id RETURNING i.id, i.platform_code, i.external_key, i.discovered_via, i.state, i.reason, i.next_at, i.lease_id, i.lease_until, i.failures, i.namespace, i.egress_region, i.target_id, i.job_started_at, i.job_writer_binding, i.job_round, i.job_id, i.attempt_id, i.observation_id, i.observation_hash, i.game_id, i.game_source_id, i.profile_scope_key, i.profile, i.profile_at, i.profile_observation_id, i.work_title, i.relation, i.relation_attached, i.decision_version, i.review, i.review_until, i.published_at, i.decided_at, i.created_at, i.updated_at, i.review_revoked
 `
 
 type ClaimIntakeParams struct {
@@ -74,6 +74,7 @@ func (q *Queries) ClaimIntake(ctx context.Context, arg ClaimIntakeParams) (GameI
 		&i.DecidedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ReviewRevoked,
 	)
 	return i, err
 }
@@ -184,7 +185,7 @@ INSERT INTO game_intake_candidates (id,platform_code,external_key,discovered_via
 SELECT $1,$2,$3,$4 WHERE (
  SELECT count(*) FROM game_intake_candidates WHERE state IN ('discovered','resolving','deferred')
 )<10000
-RETURNING id, platform_code, external_key, discovered_via, state, reason, next_at, lease_id, lease_until, failures, namespace, egress_region, target_id, job_started_at, job_writer_binding, job_round, job_id, attempt_id, observation_id, observation_hash, game_id, game_source_id, profile_scope_key, profile, profile_at, profile_observation_id, work_title, relation, relation_attached, decision_version, review, review_until, published_at, decided_at, created_at, updated_at
+RETURNING id, platform_code, external_key, discovered_via, state, reason, next_at, lease_id, lease_until, failures, namespace, egress_region, target_id, job_started_at, job_writer_binding, job_round, job_id, attempt_id, observation_id, observation_hash, game_id, game_source_id, profile_scope_key, profile, profile_at, profile_observation_id, work_title, relation, relation_attached, decision_version, review, review_until, published_at, decided_at, created_at, updated_at, review_revoked
 `
 
 type InsertIntakeCandidateParams struct {
@@ -239,6 +240,7 @@ func (q *Queries) InsertIntakeCandidate(ctx context.Context, arg InsertIntakeCan
 		&i.DecidedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ReviewRevoked,
 	)
 	return i, err
 }
@@ -277,7 +279,7 @@ func (q *Queries) InsertIntakeSource(ctx context.Context, arg InsertIntakeSource
 }
 
 const intakeCandidate = `-- name: IntakeCandidate :one
-SELECT id, platform_code, external_key, discovered_via, state, reason, next_at, lease_id, lease_until, failures, namespace, egress_region, target_id, job_started_at, job_writer_binding, job_round, job_id, attempt_id, observation_id, observation_hash, game_id, game_source_id, profile_scope_key, profile, profile_at, profile_observation_id, work_title, relation, relation_attached, decision_version, review, review_until, published_at, decided_at, created_at, updated_at FROM game_intake_candidates WHERE platform_code=$1 AND external_key=$2
+SELECT id, platform_code, external_key, discovered_via, state, reason, next_at, lease_id, lease_until, failures, namespace, egress_region, target_id, job_started_at, job_writer_binding, job_round, job_id, attempt_id, observation_id, observation_hash, game_id, game_source_id, profile_scope_key, profile, profile_at, profile_observation_id, work_title, relation, relation_attached, decision_version, review, review_until, published_at, decided_at, created_at, updated_at, review_revoked FROM game_intake_candidates WHERE platform_code=$1 AND external_key=$2
 `
 
 type IntakeCandidateParams struct {
@@ -325,26 +327,28 @@ func (q *Queries) IntakeCandidate(ctx context.Context, arg IntakeCandidateParams
 		&i.DecidedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ReviewRevoked,
 	)
 	return i, err
 }
 
 const intakeGameStatus = `-- name: IntakeGameStatus :one
-SELECT g.public_id,
- (CASE WHEN g.intake_managed AND g.status='published' AND NOT (game_presentation(g.id,g.intake_display_source)->>'approved')::boolean
+SELECT g.public_id,g.revision,
+ (CASE WHEN g.status='published' AND g.publication_blocked
    THEN 'hidden' ELSE g.status END)::text AS game_status
 FROM games g WHERE g.id=$1
 `
 
 type IntakeGameStatusRow struct {
 	PublicID   string `json:"public_id"`
+	Revision   int64  `json:"revision"`
 	GameStatus string `json:"game_status"`
 }
 
 func (q *Queries) IntakeGameStatus(ctx context.Context, id uuid.UUID) (IntakeGameStatusRow, error) {
 	row := q.db.QueryRow(ctx, intakeGameStatus, id)
 	var i IntakeGameStatusRow
-	err := row.Scan(&i.PublicID, &i.GameStatus)
+	err := row.Scan(&i.PublicID, &i.Revision, &i.GameStatus)
 	return i, err
 }
 
@@ -421,7 +425,7 @@ func (q *Queries) LockIntakeAdmission(ctx context.Context) error {
 }
 
 const lockIntakeCandidate = `-- name: LockIntakeCandidate :one
-SELECT id, platform_code, external_key, discovered_via, state, reason, next_at, lease_id, lease_until, failures, namespace, egress_region, target_id, job_started_at, job_writer_binding, job_round, job_id, attempt_id, observation_id, observation_hash, game_id, game_source_id, profile_scope_key, profile, profile_at, profile_observation_id, work_title, relation, relation_attached, decision_version, review, review_until, published_at, decided_at, created_at, updated_at FROM game_intake_candidates WHERE platform_code=$1 AND external_key=$2 FOR UPDATE
+SELECT id, platform_code, external_key, discovered_via, state, reason, next_at, lease_id, lease_until, failures, namespace, egress_region, target_id, job_started_at, job_writer_binding, job_round, job_id, attempt_id, observation_id, observation_hash, game_id, game_source_id, profile_scope_key, profile, profile_at, profile_observation_id, work_title, relation, relation_attached, decision_version, review, review_until, published_at, decided_at, created_at, updated_at, review_revoked FROM game_intake_candidates WHERE platform_code=$1 AND external_key=$2 FOR UPDATE
 `
 
 type LockIntakeCandidateParams struct {
@@ -469,12 +473,13 @@ func (q *Queries) LockIntakeCandidate(ctx context.Context, arg LockIntakeCandida
 		&i.DecidedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ReviewRevoked,
 	)
 	return i, err
 }
 
 const lockIntakeLease = `-- name: LockIntakeLease :one
-SELECT id, platform_code, external_key, discovered_via, state, reason, next_at, lease_id, lease_until, failures, namespace, egress_region, target_id, job_started_at, job_writer_binding, job_round, job_id, attempt_id, observation_id, observation_hash, game_id, game_source_id, profile_scope_key, profile, profile_at, profile_observation_id, work_title, relation, relation_attached, decision_version, review, review_until, published_at, decided_at, created_at, updated_at FROM game_intake_candidates WHERE id=$1 AND lease_id=$2 AND lease_until>statement_timestamp() FOR UPDATE
+SELECT id, platform_code, external_key, discovered_via, state, reason, next_at, lease_id, lease_until, failures, namespace, egress_region, target_id, job_started_at, job_writer_binding, job_round, job_id, attempt_id, observation_id, observation_hash, game_id, game_source_id, profile_scope_key, profile, profile_at, profile_observation_id, work_title, relation, relation_attached, decision_version, review, review_until, published_at, decided_at, created_at, updated_at, review_revoked FROM game_intake_candidates WHERE id=$1 AND lease_id=$2 AND lease_until>statement_timestamp() FOR UPDATE
 `
 
 type LockIntakeLeaseParams struct {
@@ -522,6 +527,7 @@ func (q *Queries) LockIntakeLease(ctx context.Context, arg LockIntakeLeaseParams
 		&i.DecidedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ReviewRevoked,
 	)
 	return i, err
 }
@@ -607,7 +613,7 @@ func (q *Queries) PruneIntakeAbandoned(ctx context.Context) (int64, error) {
 }
 
 const putIntakeReview = `-- name: PutIntakeReview :exec
-UPDATE game_intake_candidates SET review=$2,review_until=statement_timestamp()+interval '180 days',updated_at=statement_timestamp()
+UPDATE game_intake_candidates SET review=$2,review_revoked=false,updated_at=statement_timestamp()
 WHERE id=$1
 `
 
@@ -749,7 +755,7 @@ func (q *Queries) RevokeIntakeRelation(ctx context.Context, id uuid.UUID) error 
 }
 
 const revokeIntakeReview = `-- name: RevokeIntakeReview :exec
-UPDATE game_intake_candidates SET review_until=NULL,updated_at=statement_timestamp() WHERE id=$1
+UPDATE game_intake_candidates SET review_revoked=true,updated_at=statement_timestamp() WHERE id=$1
 `
 
 func (q *Queries) RevokeIntakeReview(ctx context.Context, id uuid.UUID) error {

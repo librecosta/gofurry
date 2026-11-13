@@ -78,7 +78,7 @@ func (s *Service) EditGame(ctx context.Context, id uuid.UUID, revision int64, in
 			return row, err
 		}
 		if row.Status == Published {
-			if err = requireGamePublication(ctx, q, id); err != nil {
+			if err = requireGamePresentation(ctx, q, id); err != nil {
 				return row, err
 			}
 		}
@@ -101,13 +101,33 @@ func (s *Service) SetGameStatus(ctx context.Context, id uuid.UUID, revision int6
 		if err = canChange(row.Status, desired); err != nil {
 			return row, err
 		}
-		if desired == Published {
-			if err = requireGamePublication(ctx, q, id); err != nil {
-				return row, err
-			}
+		d := PublicationDecision{Actor: "catalog", Reason: "Explicit editorial status change"}
+		if desired == Archived {
+			return changeGameVisibility(ctx, q, row, "archive", d)
 		}
-		return q.ChangeGameStatus(ctx, dbgen.ChangeGameStatusParams{ID: id, NewStatus: desired})
+		if row.PublishedAt.Valid {
+			return changeGameVisibility(ctx, q, row, "restore", d)
+		}
+		if err = q.SaveApprovedGamePresentation(ctx, id); err != nil {
+			return row, err
+		}
+		if err = requireGamePublication(ctx, q, id); err != nil {
+			return row, err
+		}
+		next, err := q.ChangeGameStatus(ctx, dbgen.ChangeGameStatusParams{ID: id, NewStatus: desired})
+		if err == nil {
+			err = d.Save(ctx, q, "game", id, next.Revision, "publish")
+		}
+		return next, err
 	})
+}
+
+func requireGamePresentation(ctx context.Context, q *dbgen.Queries, id uuid.UUID) error {
+	ready, err := q.HasGamePresentation(ctx, id)
+	if err == nil && !ready {
+		return ErrInvalid
+	}
+	return err
 }
 
 func requireGamePublication(ctx context.Context, q *dbgen.Queries, id uuid.UUID) error {

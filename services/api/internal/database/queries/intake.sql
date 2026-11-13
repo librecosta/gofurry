@@ -99,11 +99,11 @@ SELECT (
 )::boolean;
 
 -- name: PutIntakeReview :exec
-UPDATE game_intake_candidates SET review=$2,review_until=statement_timestamp()+interval '180 days',updated_at=statement_timestamp()
+UPDATE game_intake_candidates SET review=$2,review_revoked=false,updated_at=statement_timestamp()
 WHERE id=$1;
 
 -- name: RevokeIntakeReview :exec
-UPDATE game_intake_candidates SET review_until=NULL,updated_at=statement_timestamp() WHERE id=$1;
+UPDATE game_intake_candidates SET review_revoked=true,updated_at=statement_timestamp() WHERE id=$1;
 
 -- name: WakeIntake :exec
 UPDATE game_intake_candidates SET state='discovered',reason='',next_at=statement_timestamp(),failures=0,updated_at=statement_timestamp()
@@ -141,8 +141,8 @@ FROM game_intake_candidates i LEFT JOIN games g ON g.id=i.game_id
 GROUP BY i.state,i.reason,g.status ORDER BY i.state,i.reason,g.status;
 
 -- name: IntakeGameStatus :one
-SELECT g.public_id,
- (CASE WHEN g.intake_managed AND g.status='published' AND NOT (game_presentation(g.id,g.intake_display_source)->>'approved')::boolean
+SELECT g.public_id,g.revision,
+ (CASE WHEN g.status='published' AND g.publication_blocked
    THEN 'hidden' ELSE g.status END)::text AS game_status
 FROM games g WHERE g.id=$1;
 

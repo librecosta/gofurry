@@ -252,8 +252,36 @@ func TestCatalogPostgreSQL(t *testing.T) {
 	for _, editor := range []*Service{c, projected} {
 		seedIntakeBrowserGame(t, ctx, editor, "000000000000000g", "40001", "Fixture Starlight", false)
 		seedIntakeBrowserGame(t, ctx, editor, "000000000000000h", "40002", "Fixture Hidden", true)
+		editor.publicID = func() string { return "000000000000000j" }
+		input := SiteInput{
+			Editorial: Editorial{Localizations: []Localization{
+				{Locale: "en", Name: "Unsorted Almanac", Summary: "A bilingual index."},
+				{Locale: "zh", Name: "无类手册", Summary: "双语索引。"},
+			}},
+			Addresses: []Address{{Kind: "primary", URL: "https://unsorted.example.com"}},
+		}
+		pending, err := editor.CreateSite(ctx, input)
+		ok(t, err)
+		decision := PublicationDecision{Actor: "fixture", Reason: "Reviewed ordinary reference material"}
+		_, err = editor.ChangeSitePublication(ctx, pending.PublicID, pending.Revision, "publish", false, decision)
+		want(t, err, ErrInvalid)
+		published, err := editor.ChangeSitePublication(ctx, pending.PublicID, pending.Revision, "publish", true, decision)
+		ok(t, err)
+		if published.PrimaryCategory.Valid || len(published.NavigationTags) != 0 {
+			t.Fatal("publishing invented optional taxonomy")
+		}
+		_, err = editor.SetNavigationFeature(ctx, "secondary_2", published.PublicID, 0, decision.Actor, decision.Reason)
+		ok(t, err)
+		archived, err := editor.ChangeSitePublication(ctx, published.PublicID, published.Revision, "archive", false, decision)
+		ok(t, err)
+		_, err = editor.PublishedSite(ctx, published.PublicID)
+		want(t, err, ErrNotFound)
+		restored, err := editor.ChangeSitePublication(ctx, published.PublicID, archived.Revision, "restore", false, decision)
+		ok(t, err)
+		if restored.PublicID != published.PublicID || !restored.FirstPublishedAt.Time.Equal(published.FirstPublishedAt.Time) {
+			t.Fatal("Site restore changed its identity or first publication date")
+		}
 	}
-
 	_, err = cn.Exec(ctx, "UPDATE sites SET public_id='000000000000000z' WHERE id=$1", site.ID)
 	pgCode(t, err, "23514")
 	_, err = cn.Exec(ctx, "UPDATE games SET id=$2 WHERE id=$1", game.ID, uuid.NewV7())
@@ -285,10 +313,11 @@ func seedIntakeBrowserGame(t *testing.T, ctx context.Context, s *Service, public
  now(),$6,1,'{"furry_ref":"fixture.synopsis","sfw_ref":"fixture.review","policy":"furry-and-sfw-1"}',now()+interval '1 day',NULL)`,
 		uuid.NewV7(), key, game.ID, source, name, uuid.NewV7())
 	ok(t, err)
-	_, err = s.SetGameStatus(ctx, game.ID, game.Revision, Published)
+	ok(t, dbgen.New(s.pool).SaveApprovedGamePresentation(ctx, game.ID))
+	game, err = s.SetGameStatus(ctx, game.ID, game.Revision, Published)
 	ok(t, err)
 	if revoked {
-		_, err = s.pool.Exec(ctx, "UPDATE game_intake_candidates SET review_until=NULL WHERE game_id=$1", game.ID)
+		_, err = s.ChangeGamePublication(ctx, publicID, game.Revision, "block", PublicationDecision{Actor: "fixture", Reason: "Adult content fixture"})
 		ok(t, err)
 	}
 }

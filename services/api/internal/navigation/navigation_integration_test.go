@@ -190,8 +190,6 @@ func TestNavigationPostgreSQLRedis(t *testing.T) {
 		{Rating: "sfw", Primary: "gallery", Tags: []string{"forum", "forum"}, Actor: "fixture", Reason: "invalid"},
 		{Rating: "sfw", Primary: "gallery", Tags: []string{"unknown"}, Actor: "fixture", Reason: "invalid"},
 		{Rating: "sfw", Primary: "gallery", Languages: []string{"zh-CN"}, Actor: "fixture", Reason: "invalid"},
-		{Rating: "adult", Primary: "gallery", Actor: "fixture", Reason: "invalid CN"},
-		{Rating: "mixed", Primary: "gallery", Actor: "fixture", Reason: "invalid CN"},
 	} {
 		_, err := editor.ReviewSiteNavigation(ctx, "CN", a.PublicID, a.Revision, invalid)
 		mustError(t, err, catalog.ErrInvalid)

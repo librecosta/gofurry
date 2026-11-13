@@ -9,6 +9,17 @@ import (
 	"uuid"
 )
 
+type CatalogPublicationDecision struct {
+	ID         uuid.UUID          `json:"id"`
+	EntityKind string             `json:"entity_kind"`
+	EntityID   uuid.UUID          `json:"entity_id"`
+	Revision   int64              `json:"revision"`
+	Action     string             `json:"action"`
+	Actor      string             `json:"actor"`
+	Reason     string             `json:"reason"`
+	DecidedAt  pgtype.Timestamptz `json:"decided_at"`
+}
+
 type CollectionBinding struct {
 	ID             uuid.UUID          `json:"id"`
 	SourceID       uuid.UUID          `json:"source_id"`
@@ -109,6 +120,18 @@ type Game struct {
 	ArchivedAt          pgtype.Timestamptz `json:"archived_at"`
 	IntakeManaged       bool               `json:"intake_managed"`
 	IntakeDisplaySource *uuid.UUID         `json:"intake_display_source"`
+	PublicationBlocked  bool               `json:"publication_blocked"`
+}
+
+type GameApprovedPresentation struct {
+	GameID        uuid.UUID          `json:"game_id"`
+	Locale        string             `json:"locale"`
+	Name          string             `json:"name"`
+	Summary       string             `json:"summary"`
+	GameSourceID  uuid.UUID          `json:"game_source_id"`
+	ObservationID uuid.UUID          `json:"observation_id"`
+	ObservedAt    pgtype.Timestamptz `json:"observed_at"`
+	Approval      []byte             `json:"approval"`
 }
 
 type GameEvidenceNews struct {
@@ -167,6 +190,7 @@ type GameIntakeCandidate struct {
 	DecidedAt            pgtype.Timestamptz `json:"decided_at"`
 	CreatedAt            pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+	ReviewRevoked        bool               `json:"review_revoked"`
 }
 
 type GameLocalization struct {
@@ -354,6 +378,20 @@ type SitePublicNavigation struct {
 	SecondaryCategories []string           `json:"secondary_categories"`
 	NavigationTags      []string           `json:"navigation_tags"`
 	SupportedLanguages  []string           `json:"supported_languages"`
+}
+
+type SiteTechnologySnapshot struct {
+	BindingID      uuid.UUID          `json:"binding_id"`
+	Generation     uuid.UUID          `json:"generation"`
+	Capability     string             `json:"capability"`
+	ScopeKey       string             `json:"scope_key"`
+	Section        string             `json:"section"`
+	Position       int64              `json:"position"`
+	State          string             `json:"state"`
+	ObservedAt     pgtype.Timestamptz `json:"observed_at"`
+	LastObservedAt pgtype.Timestamptz `json:"last_observed_at"`
+	Ruleset        string             `json:"ruleset"`
+	Facts          []byte             `json:"facts"`
 }
 
 type SiteYearbook struct {

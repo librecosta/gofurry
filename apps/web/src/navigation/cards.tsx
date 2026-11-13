@@ -59,7 +59,7 @@ export function SiteCard({ site, ctx, recent, compact }: { site: Card; ctx: Card
     ...site.languages.slice(0, 2).map(code => languageLabel(code, ctx.locale))]
   return <article className={compact ? styles.compactCard : styles.card} data-site-id={site.public_id}>
     <div className={styles.identity}><SiteLogo name={label.name} locale={label.locale} src={site.logo_url} />
-      <div><h3><SiteName site={site} ctx={ctx} /></h3><div className={styles.muted}>{categories[site.primary_category][ctx.locale]}</div></div>
+      <div><h3><SiteName site={site} ctx={ctx} /></h3><div className={styles.muted}>{categoryLabel(site, ctx.locale)}</div></div>
     </div>
     {!compact && <>
       {label.summary && <p className={styles.summary} lang={label.locale}>{label.summary}</p>}
@@ -74,7 +74,7 @@ export function FeaturedCard({ site, ctx, primary }: { site: Card; ctx: CardCont
   return <article className={`${styles.feature} ${primary ? styles.featurePrimary : ''}`} data-site-id={site.public_id}>
     <div className={styles.featureCopy}>
       <SiteLogo name={label.name} locale={label.locale} src={site.logo_url} />
-      <div className={styles.featureLabel}>{categories[site.primary_category][ctx.locale]}</div>
+      <div className={styles.featureLabel}>{categoryLabel(site, ctx.locale)}</div>
       <h3><SiteName site={site} ctx={ctx} /></h3>
       {label.summary && <p className={styles.summary} lang={label.locale}>{label.summary}</p>}
       <Visit site={site} ctx={ctx} />
@@ -88,7 +88,11 @@ export function TrendingRow({ site, ctx }: { site: Card; ctx: CardContext }) {
   return <li className={styles.rankRow} value={site.rank} data-site-id={site.public_id}>
     <span className={styles.rank} aria-hidden="true">{site.rank ?? '–'}</span>
     <SiteLogo name={label.name} locale={label.locale} src={site.logo_url} />
-    <div className={styles.rankName}><SiteName site={site} ctx={ctx} /><div className={styles.muted}>{categories[site.primary_category][ctx.locale]}</div></div>
+    <div className={styles.rankName}><SiteName site={site} ctx={ctx} /><div className={styles.muted}>{categoryLabel(site, ctx.locale)}</div></div>
     <Visit site={site} ctx={ctx} />
   </li>
+}
+
+function categoryLabel(site: Card, locale: Locale) {
+  return site.primary_category ? categories[site.primary_category][locale] : copy[locale].uncategorized
 }

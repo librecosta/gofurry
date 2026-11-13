@@ -339,6 +339,22 @@ func TestCollectionHarvestD(t *testing.T) {
 	count(t, pool, 0, "SELECT count(*) FROM site_evidence_changes WHERE site_id=$1 AND binding_id=$2", siteB.ID, moved[0].ID)
 	assertProfileFacts(t, editor, siteA.PublicID, "new.example.com", "ghost")
 
+	l.mode.Store(2)
+	l.job(req(movedPlan))
+	must(t, svc.Tick(ctx))
+	degraded, err := editor.PublishedSite(ctx, siteA.PublicID)
+	must(t, err)
+	has500 := false
+	for _, fact := range degraded.Technology {
+		has500 = has500 || fact.Source == "new.example.com" && fact.HTTPStatus == 500
+	}
+	if !has500 {
+		t.Fatal("upstream HTTP 500 did not remain an attributable observation")
+	}
+	l.mode.Store(1)
+	l.job(req(movedPlan))
+	must(t, svc.Tick(ctx))
+
 	// Force the real 14/30-day retention paths to age only disposable data.
 	l.dns.Store(0)
 	l.job(dns)
@@ -374,7 +390,14 @@ func TestCollectionHarvestD(t *testing.T) {
 	case <-time.After(12 * time.Second):
 		t.Fatal("snapshot did not reach its first page")
 	}
-	assertProfileFacts(t, editor, siteA.PublicID, "", "")
+	assertProfileFacts(t, editor, siteA.PublicID, "new.example.com", "ghost")
+	historical, err := editor.PublishedSite(ctx, siteA.PublicID)
+	must(t, err)
+	for _, fact := range historical.Technology {
+		if fact.ObservationState != "last_observed" {
+			t.Fatalf("Consumer gap published a current fact: %+v", fact)
+		}
+	}
 	l.mode.Store(0)
 	l.job(req(movedPlan))
 	l.job(req(movedDNS))

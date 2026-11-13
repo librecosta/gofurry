@@ -135,7 +135,18 @@ func (s *Service) project(ctx context.Context, q *dbgen.Queries, generation, epo
 			return err
 		}
 	}
+	if r.Capability == "web.http" || r.Capability == "web.tls" {
+		if err := saveSiteTechnology(ctx, q, generation, &src.ID, r.ScopeKey); err != nil {
+			return err
+		}
+	}
 	return siteCoverage(ctx, q, src.ID, r, semantic)
+}
+
+func saveSiteTechnology(ctx context.Context, q *dbgen.Queries, generation uuid.UUID, source *uuid.UUID, scopeKey string) error {
+	return q.SaveSiteTechnology(ctx, dbgen.SaveSiteTechnologyParams{
+		Generation: generation, SourceID: source, ScopeKey: pgtype.Text{String: scopeKey, Valid: scopeKey != ""},
+	})
 }
 
 func siteFacts(ctx context.Context, q *dbgen.Queries, sourceID, epoch uuid.UUID, r result, scopeJSON, semantic []byte,
@@ -330,6 +341,11 @@ func (s *Service) sweepPage(ctx context.Context, q *dbgen.Queries, generation, e
 				Generation: generation, Epoch: epoch, SourceID: &source.ID, ScopeKey: pgtype.Text{String: r.ScopeKey, Valid: true},
 			}); err != nil {
 				return err
+			}
+			if r.Capability == "web.http" || r.Capability == "web.tls" {
+				if err = saveSiteTechnology(ctx, q, generation, &source.ID, r.ScopeKey); err != nil {
+					return err
+				}
 			}
 		}
 		if err = siteCoverage(ctx, q, source.ID, r, semantic); err != nil {

@@ -120,14 +120,16 @@ func (s *Service) PublishedSite(ctx context.Context, publicID string) (out SiteD
 }
 
 type SiteTechnology struct {
-	Kind            string     `json:"kind"`
-	Technology      string     `json:"technology,omitempty"`
-	HTTPStatus      int        `json:"http_status,omitempty"`
-	Source          string     `json:"source"`
-	Ruleset         string     `json:"ruleset"`
-	Confidence      string     `json:"confidence,omitempty"`
-	FirstObserved   *time.Time `json:"first_observed_at,omitempty"`
-	LatestConfirmed time.Time  `json:"latest_confirmed_at"`
+	Kind             string     `json:"kind"`
+	Technology       string     `json:"technology,omitempty"`
+	HTTPStatus       int        `json:"http_status,omitempty"`
+	Source           string     `json:"source"`
+	Ruleset          string     `json:"ruleset"`
+	Confidence       string     `json:"confidence,omitempty"`
+	FirstObserved    *time.Time `json:"first_observed_at,omitempty"`
+	LatestConfirmed  time.Time  `json:"latest_confirmed_at"`
+	LastObserved     time.Time  `json:"last_observed_at"`
+	ObservationState string     `json:"observation_state"`
 }
 
 var publicTechnologies = []string{
@@ -155,7 +157,7 @@ func readSiteTechnology(ctx context.Context, q *dbgen.Queries, id, address strin
 	var out []SiteTechnology
 	seen := make(map[string]bool)
 	for _, row := range rows {
-		if row.ExternalKey != primary.Scheme+"://"+primary.Host || seen[row.FactKey] || !row.ConfirmedAt.Valid || !row.ObservedAt.Valid {
+		if row.ExternalKey != primary.Scheme+"://"+primary.Host || seen[row.FactKey] || !row.LastObservedAt.Valid || !row.ObservedAt.Valid {
 			continue
 		}
 		fact, ok := publicTechnology(row, primary.Hostname())
@@ -172,7 +174,11 @@ func readSiteTechnology(ctx context.Context, q *dbgen.Queries, id, address strin
 }
 
 func publicTechnology(row dbgen.SiteTechnologyRow, host string) (SiteTechnology, bool) {
-	fact := SiteTechnology{Source: host, Ruleset: row.Ruleset, LatestConfirmed: row.ConfirmedAt.Time.UTC()}
+	fact := SiteTechnology{Source: host, Ruleset: row.Ruleset, LatestConfirmed: row.LastObservedAt.Time.UTC(),
+		LastObserved: row.LastObservedAt.Time.UTC(), ObservationState: "recent_observation"}
+	if row.Historical {
+		fact.ObservationState = "last_observed"
+	}
 	if row.FirstObservedAt.Valid {
 		at := row.FirstObservedAt.Time.UTC()
 		fact.FirstObserved = &at
@@ -205,6 +211,9 @@ func publicTechnology(row dbgen.SiteTechnologyRow, host string) (SiteTechnology,
 			value.NotBefore.After(row.ObservedAt.Time) || !value.NotAfter.After(fact.LatestConfirmed) ||
 			!digestHex.MatchString(value.Certificate) || !digestHex.MatchString(value.SPKI) {
 			return fact, false
+		}
+		if !value.NotAfter.After(time.Now()) {
+			fact.ObservationState = "last_observed"
 		}
 	default:
 		var value struct {

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/librecosta/gofurry/services/api/internal/catalog"
 	"github.com/librecosta/gofurry/services/api/internal/collection"
 	"github.com/librecosta/gofurry/services/api/internal/database"
 	"github.com/librecosta/gofurry/services/api/internal/platform"
@@ -82,10 +83,13 @@ func gameIntakeCommand(cfg *platform.Config) *cobra.Command {
 		})
 	review.Flags().BoolVar(&furry, "confirm-furry", false, "The cited work synopsis positively establishes anthropomorphic subject matter")
 	review.Flags().BoolVar(&sfw, "confirm-sfw", false, "The cited separate assessment positively establishes SFW content")
-	add("revoke-review APP_ID", "Revoke auto-publication eligibility without removing identity", 1,
+	var withdrawal catalog.PublicationDecision
+	revoke := add("revoke-review APP_ID", "Record a persistent content-policy block", 1,
 		func(cmd *cobra.Command, a []string, s *collection.Intake) (any, error) {
-			return nil, s.RevokeSteamReview(cmd.Context(), a[0])
+			return nil, s.RevokeSteamReview(cmd.Context(), a[0], withdrawal)
 		})
+	revoke.Flags().StringVar(&withdrawal.Actor, "actor", "", "Operator assertion")
+	revoke.Flags().StringVar(&withdrawal.Reason, "reason", "", "Content policy finding and evidence reference")
 	var reciprocal bool
 	relate := add("relate PLATFORM KEY OTHER_PLATFORM OTHER_KEY FORWARD_REF REVERSE_REF", "Record reviewed reciprocal official links between two full-game products", 6,
 		func(cmd *cobra.Command, a []string, s *collection.Intake) (any, error) {

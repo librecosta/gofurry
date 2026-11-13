@@ -88,7 +88,9 @@ async function fixtureEdge(port, fixture) {
 async function observedAPI(port, fixture) {
   const listener = createHTTPServer((incoming, response) => {
     fixture.ssrPaths?.push(incoming.url?.split('?')[0])
-    const upstream = proxyRequest(fixture.api, { path: incoming.url, method: incoming.method, headers: incoming.headers }, result => {
+    const headers = { ...incoming.headers }
+    if (fixture.ssrClient) headers['x-forwarded-for'] = fixture.ssrClient
+    const upstream = proxyRequest(fixture.api, { path: incoming.url, method: incoming.method, headers }, result => {
       response.writeHead(result.statusCode, result.headers)
       result.pipe(response)
     })
@@ -295,6 +297,70 @@ navigation:
   console.log('PostgreSQL outage returned API/SSR 503 for Site and Yearbook, Start remained 200, and both recovered.')
   const fixtureSQL = (region, sql) => run('docker', ['exec', container, 'psql', '-Xq', '-v', 'ON_ERROR_STOP=1', '-U', 'postgres',
     '-d', 'gofurry_d1_' + region.toLowerCase() + '_test', '-c', sql])
+  async function catalogProjection(region, fixture) {
+    const categorized = '000000000000000a'
+    const uncategorized = '000000000000000j'
+    const game = '000000000000000g'
+    const api = fixture.api + '/api/v1'
+    const read = async path => {
+      const response = await fetch(api + path, { headers: { 'X-Forwarded-For': fixture.ssrClient } })
+      if (!response.ok) throw new Error(region + ' ' + path + ': ' + response.status)
+      return response.json()
+    }
+    const [site, unclassified, games, sites, directory, annual] = await Promise.all([
+      read('/sites/' + categorized), read('/sites/' + uncategorized), read('/games'),
+      read('/sites'), read('/sites/directory?sort=heat_7d'), read('/sites/' + categorized + '/yearbooks/2025'),
+    ])
+    for (const id of [categorized, uncategorized]) {
+      if (![sites, directory].every(page => page.items.some(row => row.public_id === id))) throw new Error('Site missing from catalog')
+    }
+    const listing = games.items.find(row => row.public_id === game)
+    if (!listing || !site.primary_category || unclassified.primary_category) throw new Error('Catalog taxonomy or Game identity changed')
+    const presentation = await read('/games/' + game)
+    const english = region === 'CN' ? '/en' : ''
+    const chinese = region === 'CN' ? '' : '/zh'
+    const details = [
+      [site, 'sites', english, 'Example Community', 'A curated English summary.'],
+      [unclassified, 'sites', chinese, '无类手册', '双语索引。'],
+      [presentation, 'games', english, 'Fixture Starlight', 'Collected English synopsis.'],
+    ]
+    for (const [row, kind, prefix, name, summary] of details) {
+      const path = prefix + '/' + kind + '/' + row.public_id + '/' + row.slug
+      const response = await fetch(fixture.web + path, { redirect: 'manual' })
+      const html = await response.text()
+      const canonical = 'https://' + region.toLowerCase() + '.catalog.example' + path
+      if (response.status !== 200 || !html.includes('<title>' + name + '</title>') ||
+          !html.includes('content="' + summary + '"') || !html.includes('rel="canonical" href="' + canonical + '"')) {
+        throw new Error('Time-forward SSR changed identity, locale or content at ' + path)
+      }
+    }
+    if (!await status(fixture.web + english + '/sites/' + categorized + '/example-community/yearbook/2025', 200)) {
+      throw new Error('Published yearbook lost its URL')
+    }
+    return { directory, stable: [site, unclassified, listing, presentation.localizations, annual] }
+  }
+  for (const [region, fixture] of Object.entries(fixtures)) {
+    // A separate simulated client keeps the time-forward batch and browser
+    // suite within their normal per-client catalog budgets.
+    fixture.ssrClient = '192.0.2.43'
+    const baseline = await catalogProjection(region, fixture)
+    for (const days of [31, 181, 365]) {
+      const age = "now()-interval '" + days + " days'"
+      fixtureSQL(region, "UPDATE sites SET published_at=" + age + ", first_published_at=" + age +
+        " WHERE public_id IN ('000000000000000a','000000000000000j'); UPDATE games SET published_at=" + age +
+        " WHERE public_id='000000000000000g'; UPDATE game_intake_candidates SET profile_at=" + age +
+        ",review_until=" + age + " WHERE external_key='40001'; UPDATE site_navigation_heat_state SET computed_at=" + age)
+      const result = await catalogProjection(region, fixture)
+      if (JSON.stringify(result.stable) !== JSON.stringify(baseline.stable) || result.directory.effective_sort === 'heat_7d') {
+        throw new Error(region + ' published content or Heat fallback changed at day ' + days)
+      }
+    }
+    fixtureSQL(region, "UPDATE game_sources SET active=false WHERE external_key='40001'; DELETE FROM game_intake_candidates WHERE external_key='40001'")
+    const after = await catalogProjection(region, fixture)
+    if (JSON.stringify(after.stable) !== JSON.stringify(baseline.stable)) throw new Error('Game depended on an active source or Candidate')
+    fixture.ssrClient = undefined
+  }
+  console.log('R1: CN/INTL catalog, SSR, canonical URLs and published yearbook survive 31/181/365 days; Game survives disabled source and removed Candidate.')
   fixtureSQL('CN', "UPDATE sites SET content_rating='unreviewed',legacy_detail=true WHERE public_id='000000000000000a'")
   const legacy = await fetch(webDetail)
   if (legacy.status !== 200 || legacy.headers.get('x-robots-tag') !== 'noindex' ||
@@ -306,8 +372,8 @@ navigation:
     const nav = ['--config', fixture.config, 'navigation']
     const id = '000000000000000a'
     const profile = JSON.parse(run(binary, [...nav, 'inspect', id], root, process.env, true))
-    run(binary, [...nav, 'review', id, String(profile.revision), '--rating', region === 'CN' ? 'unreviewed' : 'adult',
-      '--actor', 'fixture', '--reason', 'Withdraw public visibility'], root, process.env, true)
+    const withdrawn = JSON.parse(run(binary, [...nav, 'review', id, String(profile.revision), '--rating', 'adult', '--keep-taxonomy',
+      '--actor', 'fixture', '--reason', 'Withdraw public visibility'], root, process.env, true))
     const base = fixture.api + '/api/v1/sites/'
     for (const path of [id, id + '/stats', id + '/related', id + '/yearbooks', id + '/yearbooks/2025']) {
       if (!await status(base + path, 404)) throw new Error(region + ' rating withdrawal leaked through an API')
@@ -320,6 +386,14 @@ navigation:
     const listing = await (await fetch(base + 'directory')).json()
     if (JSON.stringify(discovery).includes(id) || JSON.stringify(listing).includes(id)) {
       throw new Error(region + ' rating withdrawal leaked through discovery or directory')
+    }
+    run(binary, [...nav, 'review', id, String(withdrawn.revision), '--rating', 'sfw', '--keep-taxonomy',
+      '--actor', 'fixture', '--reason', 'Reverse fixture policy disposition'], root, process.env, true)
+    if (!await status(fixture.web + page, 200) || !await status(base + id + '/yearbooks/2025', 200)) {
+      throw new Error(region + ' explicit reversal lost the original identity or yearbook')
+    }
+    if (region === 'CN' && (await (await fetch(base + 'discovery')).json()).featured.primary?.public_id !== id) {
+      throw new Error('Rating disposition erased the editorial assignment')
     }
   }
   console.log('Navigation: trusted edge dedup, failed-write reservation, Redis/PG outage and both regions’ withdrawal verified.')
@@ -334,7 +408,11 @@ navigation:
   }
   const cn = fixtures.CN
   const profileURL = cn.api + '/api/v1/sites/' + profileID
-  const readProfile = async () => (await fetch(profileURL)).json()
+  const readProfile = async () => {
+    const response = await fetch(profileURL, { headers: { 'X-Forwarded-For': '192.0.2.44' } })
+    if (!response.ok) throw new Error('Site profile returned ' + response.status)
+    return response.json()
+  }
   const before = await readProfile()
   const options = ['--config', cn.config]
   const op = ['site-profile', 'set-description', profileID]
@@ -363,19 +441,38 @@ navigation:
   if (!ssr.ok || actual.length !== 1 || actual[0] !== '/api/v1/sites/' + profileID) throw new Error('Unexpected detail SSR API fan-out: ' + actual)
   console.log(`Site profile: ${bytes} B SSR HTML, ${(performance.now() - begin).toFixed(1)} ms local, 1 regional API read; bilingual CLI CAS verified.`)
   run(binary, ['--config', fixtures.CN.config, 'navigation', 'refresh-heat'])
+  cn.ssrClient = '192.0.2.45'
   await runAsync(process.execPath, ['node_modules/@playwright/test/cli.js', 'test', '--config', 'playwright.sites.config.ts'], webDir, {
     ...process.env, CATALOG_CN_WEB: fixtures.CN.web, CATALOG_INTL_WEB: fixtures.INTL.web,
     CATALOG_CN_API: fixtures.CN.api, CATALOG_INTL_API: fixtures.INTL.api, CATALOG_CN_EDGE: fixtures.CN.edge,
   })
+  cn.ssrClient = '192.0.2.44'
   const evidence = " FROM collection_sources s WHERE c.source_id=s.id AND s.namespace='profile-fixture'"
   fixtureSQL('CN', "UPDATE collection_current c SET ruleset='web-passive-2'" + evidence + " AND c.facts ? 'tech.detected.astro'")
   const revised = (await readProfile()).technology
   if (!revised || revised.length !== 2 || revised.some(fact => fact.technology)) throw new Error('Unknown detector ruleset reached the public profile')
-  fixtureSQL('CN', "UPDATE collection_current c SET observed_at=now()-interval '32 days',confirmed_at=now()-interval '31 days'" + evidence +
-    " AND c.facts ? 'http.response'")
+  fixtureSQL('CN', "UPDATE collection_bindings SET effective_from=now()-interval '400 days' WHERE source_id IN " +
+    "(SELECT id FROM collection_sources WHERE namespace='profile-fixture'); UPDATE collection_plan_bindings SET attached_at=now()-interval '400 days'" +
+    " WHERE source_id IN (SELECT id FROM collection_sources WHERE namespace='profile-fixture')")
   fixtureSQL('CN', "UPDATE collection_current c SET state='withdrawn',observation_id=NULL" + evidence + " AND c.facts ? 'tls.certificate'")
-  if ((await readProfile()).technology !== undefined) throw new Error('Expired or withdrawn evidence reached the public profile')
-  console.log('Site profile: expired confirmation, unknown detector ruleset and withdrawal omitted from public output.')
+  for (const days of [31, 181, 365]) {
+    fixtureSQL('CN', "UPDATE collection_current c SET observed_at=current_date-interval '" + days + " days',confirmed_at=current_date-interval '" + days +
+      " days'" + evidence + " AND c.facts ? 'http.response'")
+    const historical = (await readProfile()).technology
+    const fact = historical?.[0]
+    if (historical?.length !== 1 || fact?.kind !== 'http' || fact.observation_state !== 'last_observed' ||
+        Math.abs((Date.now() - Date.parse(fact.last_observed_at)) / 86400000 - days) >= 2 ||
+        fact.source !== 'field-guide.example' || fact.http_status !== 200) throw new Error('Historical evidence lost attribution or claimed freshness')
+  }
+  fixtureSQL('CN', "SELECT save_site_technology(generation,NULL,NULL) FROM collection_consumer WHERE namespace='profile-fixture'; " +
+    "DELETE FROM collection_current c USING collection_sources s WHERE c.source_id=s.id AND s.namespace='profile-fixture'")
+  const retained = (await readProfile()).technology
+  if (retained?.length !== 1 || retained[0].observation_state !== 'last_observed' || retained[0].kind !== 'http') {
+    throw new Error('Pruning the live projection erased historical evidence or resurrected withdrawn evidence')
+  }
+  const historicalHTML = await (await fetch(cn.web + '/en/sites/' + profileID + '/field-guide-1')).text()
+  if (!historicalHTML.includes('Last observed')) throw new Error('Site SSR failed to label old evidence')
+  console.log('Site profile: attributed 31/181/365-day HTTP history; unknown detector rules and withdrawn TLS omitted.')
 } finally {
   if (container && paused) run('docker', ['unpause', container])
   if (redisContainer && redisPaused) run('docker', ['unpause', redisContainer])

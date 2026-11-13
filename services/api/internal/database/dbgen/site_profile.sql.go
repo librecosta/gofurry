@@ -39,45 +39,48 @@ WITH binding AS MATERIALIZED (
  JOIN collection_bindings b ON b.site_id=n.id AND b.address_id=a.id AND b.purpose='primary'
   AND b.resource_type='origin' AND b.effective_until IS NULL AND b.effective_from<=statement_timestamp()
  JOIN collection_sources src ON src.id=b.source_id AND src.provider='web' AND src.resource_type='origin'
- JOIN collection_consumer consumer ON consumer.namespace=src.namespace
+ LEFT JOIN collection_consumer consumer ON consumer.namespace=src.namespace
  WHERE n.public_id=$1 AND src.target_id IS NOT NULL
  ORDER BY b.effective_from DESC,b.id DESC LIMIT 1
-), scopes AS MATERIALIZED (
- SELECT b.id, b.site_id, b.effective_from, b.source_id, b.target_id, b.external_key, b.namespace, b.epoch, b.generation,c.scope,c.scope_key,c.capability,c.output_schema,c.position,c.observed_at,c.confirmed_at,c.ruleset,c.facts
- FROM binding b
- JOIN collection_current c ON c.source_id=b.source_id AND c.generation=b.generation
- WHERE c.state='present' AND c.observation_id IS NOT NULL AND c.output_schema=1
-  AND c.scope->>'namespace'=b.namespace AND c.scope->>'egress_region'~'^[a-z0-9][a-z0-9_-]{0,34}$'
-  AND c.observed_at<=c.confirmed_at AND c.confirmed_at BETWEEN statement_timestamp()-interval '30 days' AND statement_timestamp()
-  AND ((c.capability='web.http' AND c.scope#>>'{dimensions,section}' IN ('http','html','tls'))
-   OR (c.capability='web.tls' AND c.scope#>>'{dimensions,section}'='tls'))
-  AND NOT EXISTS (SELECT 1 FROM collection_gaps g WHERE g.namespace=b.namespace AND g.prior_epoch=b.epoch
+), live AS MATERIALIZED (
+ SELECT c.binding_id,c.generation,c.capability,c.scope_key,c.section,c.position,c.state,
+  c.observed_at,c.last_observed_at,c.ruleset,c.facts
+ FROM binding b CROSS JOIN LATERAL site_technology_scopes(b.generation,b.source_id,NULL,b.id)
+  AS c(binding_id,generation,capability,scope_key,section,position,state,observed_at,last_observed_at,ruleset,facts)
+ WHERE NOT EXISTS (SELECT 1 FROM collection_gaps g WHERE g.namespace=b.namespace AND g.prior_epoch=b.epoch
    AND g.prior_generation=b.generation)
-  AND EXISTS (
-   SELECT 1 FROM collection_plan_bindings m JOIN collection_plans p ON p.id=m.plan_id AND p.source_id=m.source_id
-   WHERE m.binding_id=b.id AND m.source_id=b.source_id AND p.capability=c.capability AND p.request_schema=1
-    AND p.scope=c.scope-'namespace'-'dimensions' AND c.scope->'dimensions'=jsonb_build_object('section',c.scope#>>'{dimensions,section}')
-    AND c.confirmed_at>=greatest(b.effective_from,m.attached_at)
-  )
- ORDER BY c.confirmed_at DESC,c.capability,c.scope_key LIMIT 16
+), scopes AS MATERIALIZED (
+ SELECT l.binding_id, l.generation, l.capability, l.scope_key, l.section, l.position, l.state, l.observed_at, l.last_observed_at, l.ruleset, l.facts,true AS verified_current FROM live l
+ WHERE NOT EXISTS (
+  SELECT 1 FROM site_technology_snapshots h
+  WHERE h.binding_id=l.binding_id AND h.capability=l.capability AND h.scope_key=l.scope_key
+   AND h.last_observed_at>l.last_observed_at)
+ UNION ALL
+ SELECT h.binding_id, h.generation, h.capability, h.scope_key, h.section, h.position, h.state, h.observed_at, h.last_observed_at, h.ruleset, h.facts,false AS verified_current FROM site_technology_snapshots h JOIN binding b ON h.binding_id=b.id
+ WHERE NOT EXISTS (SELECT 1 FROM live l WHERE l.capability=h.capability AND l.scope_key=h.scope_key
+  AND l.last_observed_at>=h.last_observed_at)
+  AND h.last_observed_at BETWEEN b.effective_from AND statement_timestamp()
+), recent AS MATERIALIZED (
+ SELECT binding_id, generation, capability, scope_key, section, position, state, observed_at, last_observed_at, ruleset, facts, verified_current FROM scopes ORDER BY last_observed_at DESC,capability,scope_key LIMIT 16
 )
-SELECT s.external_key,s.ruleset,s.observed_at,s.confirmed_at,
+SELECT b.external_key,s.ruleset,s.observed_at,s.last_observed_at,
+ (NOT s.verified_current OR s.last_observed_at<statement_timestamp()-interval '30 days')::boolean AS historical,
  f.fact_key::text AS fact_key,(s.facts->f.fact_key)::jsonb AS value,history.first_observed_at
-FROM scopes s
+FROM recent s JOIN binding b ON b.id=s.binding_id
 CROSS JOIN LATERAL unnest($2::text[]) AS f(fact_key)
 LEFT JOIN LATERAL (
  SELECT e.first_observed_at FROM site_evidence_changes e
- WHERE e.site_id=s.site_id AND e.binding_id=s.id AND e.target_id=s.target_id AND e.capability=s.capability
-  AND e.output_schema=s.output_schema AND e.scope_key=s.scope_key AND e.fact_key=f.fact_key
-  AND e.epoch=s.epoch AND e.event_kind IN ('baseline','change') AND e.ruleset=s.ruleset AND e.value=s.facts->f.fact_key
-  AND e.first_observed_at BETWEEN s.effective_from AND s.confirmed_at
+ WHERE e.site_id=b.site_id AND e.binding_id=b.id AND e.target_id=b.target_id AND e.capability=s.capability
+  AND e.output_schema=1 AND e.scope_key=s.scope_key AND e.fact_key=f.fact_key
+  AND e.event_kind IN ('baseline','change') AND e.ruleset=s.ruleset AND e.value=s.facts->f.fact_key
+  AND e.first_observed_at BETWEEN b.effective_from AND s.last_observed_at
  ORDER BY e.first_observed_at DESC,e.id DESC LIMIT 1
 ) history ON true
-WHERE s.facts ? f.fact_key AND (
- (s.scope#>>'{dimensions,section}'='http' AND f.fact_key='http.response')
- OR (s.scope#>>'{dimensions,section}'='tls' AND f.fact_key='tls.certificate')
- OR (s.scope#>>'{dimensions,section}' IN ('http','html') AND f.fact_key LIKE 'tech.detected.%'))
-ORDER BY s.confirmed_at DESC,s.capability,s.scope_key,fact_key
+WHERE s.state='present' AND s.facts ? f.fact_key AND (
+ (s.section='http' AND f.fact_key='http.response')
+ OR (s.section='tls' AND f.fact_key='tls.certificate')
+ OR (s.section IN ('http','html') AND f.fact_key LIKE 'tech.detected.%'))
+ORDER BY s.last_observed_at DESC,s.capability,s.scope_key,fact_key
 `
 
 type SiteTechnologyParams struct {
@@ -89,7 +92,8 @@ type SiteTechnologyRow struct {
 	ExternalKey     string             `json:"external_key"`
 	Ruleset         string             `json:"ruleset"`
 	ObservedAt      pgtype.Timestamptz `json:"observed_at"`
-	ConfirmedAt     pgtype.Timestamptz `json:"confirmed_at"`
+	LastObservedAt  pgtype.Timestamptz `json:"last_observed_at"`
+	Historical      bool               `json:"historical"`
 	FactKey         string             `json:"fact_key"`
 	Value           []byte             `json:"value"`
 	FirstObservedAt pgtype.Timestamptz `json:"first_observed_at"`
@@ -108,7 +112,8 @@ func (q *Queries) SiteTechnology(ctx context.Context, arg SiteTechnologyParams) 
 			&i.ExternalKey,
 			&i.Ruleset,
 			&i.ObservedAt,
-			&i.ConfirmedAt,
+			&i.LastObservedAt,
+			&i.Historical,
 			&i.FactKey,
 			&i.Value,
 			&i.FirstObservedAt,

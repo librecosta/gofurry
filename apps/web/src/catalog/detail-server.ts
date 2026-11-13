@@ -29,7 +29,7 @@ function decode(input: unknown, kind: Kind, id: string): Detail {
   if (!input || typeof input !== 'object') throw new Error('Invalid API payload')
   const item = input as Record<string, unknown>
   if (item.public_id !== id || typeof item.slug !== 'string' || item.slug.length > 80 || slug.exec(item.slug)?.[0] !== item.slug ||
-    !Array.isArray(item.localizations) || item.localizations.length === 0 || item.localizations.length > 2) throw new Error('Invalid API identity')
+    !Array.isArray(item.localizations) || kind === 'sites' && item.localizations.length === 0 || item.localizations.length > 2) throw new Error('Invalid API identity')
   const localizations: Localized[] = item.localizations.map(value => {
     if (!value || (value.locale !== 'zh' && value.locale !== 'en') || typeof value.name !== 'string' || !value.name.trim() ||
       (value.summary !== undefined && typeof value.summary !== 'string')) throw new Error('Invalid API localization')

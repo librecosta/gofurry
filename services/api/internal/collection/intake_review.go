@@ -17,30 +17,31 @@ import (
 var intakeEvidenceRef = regexp.MustCompile(`^[a-z][a-z0-9_.-]{2,95}$`)
 
 type CandidateStatus struct {
-	ID          uuid.UUID       `json:"id,omitzero"`
-	Platform    string          `json:"platform,omitempty"`
-	Key         string          `json:"key,omitempty"`
-	Via         string          `json:"discovered_via,omitempty"`
-	State       string          `json:"state,omitempty"`
-	Reason      string          `json:"reason,omitempty"`
-	NextAt      *time.Time      `json:"next_at,omitempty"`
-	Target      *uuid.UUID      `json:"target_id,omitempty"`
-	Job         *uuid.UUID      `json:"job_id,omitempty"`
-	Attempt     *uuid.UUID      `json:"attempt_id,omitempty"`
-	Observation *uuid.UUID      `json:"observation_id,omitempty"`
-	Game        *uuid.UUID      `json:"game_id,omitempty"`
-	Source      *uuid.UUID      `json:"game_source_id,omitempty"`
-	PublicID    string          `json:"public_id,omitempty"`
-	GameState   string          `json:"game_state,omitempty"`
-	Version     int32           `json:"decision_version,omitempty"`
-	Evidence    *IntakeEvidence `json:"evidence,omitempty"`
+	ID           uuid.UUID       `json:"id,omitzero"`
+	Platform     string          `json:"platform,omitempty"`
+	Key          string          `json:"key,omitempty"`
+	Via          string          `json:"discovered_via,omitempty"`
+	State        string          `json:"state,omitempty"`
+	Reason       string          `json:"reason,omitempty"`
+	NextAt       *time.Time      `json:"next_at,omitempty"`
+	Target       *uuid.UUID      `json:"target_id,omitempty"`
+	Job          *uuid.UUID      `json:"job_id,omitempty"`
+	Attempt      *uuid.UUID      `json:"attempt_id,omitempty"`
+	Observation  *uuid.UUID      `json:"observation_id,omitempty"`
+	Game         *uuid.UUID      `json:"game_id,omitempty"`
+	Source       *uuid.UUID      `json:"game_source_id,omitempty"`
+	PublicID     string          `json:"public_id,omitempty"`
+	GameState    string          `json:"game_state,omitempty"`
+	GameRevision int64           `json:"game_revision,omitempty"`
+	Version      int32           `json:"decision_version,omitempty"`
+	Evidence     *IntakeEvidence `json:"evidence,omitempty"`
 }
 
 type IntakeEvidence struct {
 	ObservationHash string         `json:"observation_hash,omitempty"`
 	ScopeKey        string         `json:"scope_key,omitempty"`
 	Review          jsontext.Value `json:"review,omitzero"`
-	ReviewUntil     *time.Time     `json:"review_until,omitempty"`
+	ReviewRevoked   bool           `json:"review_revoked,omitempty"`
 	Relation        jsontext.Value `json:"relation,omitzero"`
 }
 
@@ -73,9 +74,7 @@ func (s *Intake) Inspect(ctx context.Context, platform, key string) (CandidateSt
 		if string(row.Review) != "{}" {
 			out.Evidence.Review = row.Review
 		}
-		if row.ReviewUntil.Valid {
-			out.Evidence.ReviewUntil = &row.ReviewUntil.Time
-		}
+		out.Evidence.ReviewRevoked = row.ReviewRevoked
 		if string(row.Relation) != "{}" {
 			out.Evidence.Relation = row.Relation
 		}
@@ -84,7 +83,7 @@ func (s *Intake) Inspect(ctx context.Context, platform, key string) (CandidateSt
 		return out, nil
 	}
 	game, err := s.queries.IntakeGameStatus(ctx, *row.GameID)
-	out.PublicID, out.GameState = game.PublicID, game.GameStatus
+	out.PublicID, out.GameState, out.GameRevision = game.PublicID, game.GameStatus, game.Revision
 	return out, err
 }
 
@@ -131,18 +130,26 @@ func evidencePair(a, b string) bool {
 	return a != b && intakeEvidenceRef.MatchString(a) && intakeEvidenceRef.MatchString(b)
 }
 
-func (s *Intake) RevokeSteamReview(ctx context.Context, key string) error {
+func (s *Intake) RevokeSteamReview(ctx context.Context, key string, decision catalog.PublicationDecision) error {
 	source, err := intakeSource("steam", key)
-	if err != nil {
-		return err
+	if err != nil || !decision.Valid() {
+		return ErrIntakeInput
 	}
 	return s.transact(ctx, func(ctx context.Context, q *dbgen.Queries) error {
 		c, err := lockIntakeCandidate(ctx, q, source)
 		if err != nil {
 			return err
 		}
-		// The public read gate takes effect in this same commit and leaves
-		// the original decision and first publication time available.
+		if c.GameID == nil {
+			return ErrIntakeState
+		}
+		game, err := q.LockGame(ctx, *c.GameID)
+		if err != nil {
+			return err
+		}
+		if _, err = catalog.SetGameBlock(ctx, q, game, true, decision); err != nil {
+			return err
+		}
 		return q.RevokeIntakeReview(ctx, c.ID)
 	})
 }

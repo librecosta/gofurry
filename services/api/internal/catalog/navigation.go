@@ -78,6 +78,7 @@ func reviewText(actor, reason string) bool {
 type NavigationEdit struct {
 	Rating, Primary, Actor, Reason string
 	Secondary, Tags, Languages     []string
+	KeepTaxonomy                   bool
 }
 
 type NavigationProfile struct {
@@ -110,11 +111,7 @@ func (s *Service) ReviewSiteNavigation(ctx context.Context, region, id string, r
 		return invalid, ErrInvalid
 	}
 	switch in.Rating {
-	case "sfw", "unreviewed":
-	case "mixed", "adult":
-		if region != "INTL" {
-			return invalid, ErrInvalid
-		}
+	case "sfw", "unreviewed", "mixed", "adult":
 	default:
 		return invalid, ErrInvalid
 	}
@@ -139,11 +136,15 @@ func (s *Service) ReviewSiteNavigation(ctx context.Context, region, id string, r
 		if before.Revision != revision {
 			return invalid, ErrConflict
 		}
-		if before.Status == Published && in.Rating == "sfw" && in.Primary == "" {
+		if before.Status == Published && in.Rating == "unreviewed" && before.ContentRating != "unreviewed" {
 			return invalid, ErrInvalid
 		}
+		primary := pgtype.Text{String: in.Primary, Valid: in.Primary != ""}
+		if in.KeepTaxonomy {
+			primary, secondary, tags, languages = before.PrimaryCategory, before.SecondaryCategories, before.NavigationTags, before.SupportedLanguages
+		}
 		after, err := q.UpdateNavigationSite(ctx, dbgen.UpdateNavigationSiteParams{ID: before.ID, ContentRating: in.Rating,
-			PrimaryCategory: pgtype.Text{String: in.Primary, Valid: in.Primary != ""}, SecondaryCategories: secondary,
+			PrimaryCategory: primary, SecondaryCategories: secondary,
 			NavigationTags: tags, SupportedLanguages: languages})
 		if err != nil {
 			return invalid, err
@@ -183,7 +184,7 @@ func (s *Service) SetNavigationFeature(ctx context.Context, slot, publicID strin
 			if err != nil {
 				return 0, err
 			}
-			if site.Status != Published || site.ContentRating != "sfw" || !site.PrimaryCategory.Valid {
+			if site.Status != Published || site.ContentRating != "sfw" {
 				return 0, ErrInvalid
 			}
 			id = &site.ID

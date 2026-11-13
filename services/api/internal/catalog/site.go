@@ -51,8 +51,12 @@ func (s *Service) EditSite(ctx context.Context, id uuid.UUID, revision int64, in
 			return row, err
 		}
 		if row.Status == Published {
-			if err = requireSitePublication(ctx, q, id); err != nil {
+			ready, err := q.HasSitePresentation(ctx, id)
+			if err != nil {
 				return row, err
+			}
+			if !ready {
+				return row, ErrInvalid
 			}
 		}
 		if err = q.CloseRemovedSiteBindings(ctx, &id); err != nil {
@@ -78,12 +82,13 @@ func (s *Service) SetSiteStatus(ctx context.Context, id uuid.UUID, revision int6
 		if err = canChange(row.Status, desired); err != nil {
 			return row, err
 		}
-		if desired == Published {
-			if err = requireSitePublication(ctx, q, id); err != nil {
-				return row, err
-			}
+		action := "publish"
+		if desired == Archived {
+			action = "archive"
+		} else if row.PublishedAt.Valid {
+			action = "restore"
 		}
-		return q.ChangeSiteStatus(ctx, dbgen.ChangeSiteStatusParams{ID: id, NewStatus: desired})
+		return changeSiteVisibility(ctx, q, row, action, PublicationDecision{Actor: "catalog", Reason: "Explicit editorial status change"})
 	})
 }
 

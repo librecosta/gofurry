@@ -195,13 +195,19 @@ func TestGameIntakeHarvestD(t *testing.T) {
 		return scalar[string](t, pool, "SELECT profile->>'name' FROM game_intake_candidates WHERE id=$1", accepted.ID) == "Fable of the Foxes"
 	})
 	assertIntakeHTTP(t, l.http, base, accepted.PublicID, 200, "Editorial English", "编辑译名", "中文介绍")
-	must(t, s.RevokeSteamReview(ctx, first))
+	decision := catalog.PublicationDecision{Actor: "fixture", Reason: "Fixture policy decision"}
+	must(t, s.RevokeSteamReview(ctx, first, decision))
 	assertIntakeHTTP(t, l.http, base, accepted.PublicID, 404)
 	must(t, s.ReviewSteam(ctx, first, "fixture.work-synopsis", "fixture.content-assessment"))
-	assertIntakeHTTP(t, l.http, base, accepted.PublicID, 200, "Editorial English")
-	execSQL(t, pool, "UPDATE game_intake_candidates SET profile_at=now()-interval '31 days' WHERE id=$1", accepted.ID)
 	assertIntakeHTTP(t, l.http, base, accepted.PublicID, 404)
-	execSQL(t, pool, "UPDATE game_intake_candidates SET profile_at=now() WHERE id=$1", accepted.ID)
+	locked, err := dbgen.New(pool).LockGame(ctx, *accepted.Game)
+	must(t, err)
+	_, err = catalogDB.ChangeGamePublication(ctx, accepted.PublicID, locked.Revision, "clear_block", decision)
+	must(t, err)
+	for _, days := range []int32{31, 181, 365} {
+		execSQL(t, pool, "UPDATE game_intake_candidates SET profile_at=now()-make_interval(days=>$2),review_until=now()-make_interval(days=>$2) WHERE id=$1", accepted.ID, days)
+		assertIntakeHTTP(t, l.http, base, accepted.PublicID, 200, "Editorial English", "编辑译名")
+	}
 
 	run(t, dir, nil, "docker", "pause", redis)
 	t.Cleanup(func() { _ = exec.Command("docker", "unpause", redis).Run() })
@@ -280,6 +286,7 @@ func TestGameIntakeHarvestD(t *testing.T) {
 	}
 
 	testIntakeRelations(t, s, pool, catalogDB, accepted)
+	count(t, pool, 3, "SELECT count(*) FROM catalog_publication_decisions WHERE entity_id=$1 AND action IN ('publish','block','clear_block')", *accepted.Game)
 	t.Logf("Harvest simulated network calls: %d", l.calls.Load())
 }
 

@@ -38,7 +38,7 @@ func (s *Service) Presentation(assets *storage.Store, interactions bool) {
 
 type Card struct {
 	catalog.Summary
-	PrimaryCategory     string     `json:"primary_category"`
+	PrimaryCategory     *string    `json:"primary_category"`
 	SecondaryCategories []string   `json:"secondary_categories"`
 	Tags                []string   `json:"tags"`
 	Languages           []string   `json:"languages"`

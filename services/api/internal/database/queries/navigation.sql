@@ -147,7 +147,7 @@ ORDER BY x.section,x.rank,x.key;
 
 -- name: NavigationCategoryCounts :many
 SELECT c.code::text AS code,count(*)::bigint AS count FROM site_public_navigation s
-CROSS JOIN LATERAL unnest(ARRAY[s.primary_category]||s.secondary_categories) AS c(code) GROUP BY c.code;
+CROSS JOIN LATERAL unnest(ARRAY[s.primary_category]||s.secondary_categories) AS c(code) WHERE c.code IS NOT NULL GROUP BY c.code;
 
 -- name: NavigationLanguages :many
 SELECT DISTINCT c.code::text AS code FROM site_public_navigation s

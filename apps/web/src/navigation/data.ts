@@ -10,7 +10,7 @@ export type Sort = typeof sorts[number]
 export type Term = { code: string; zh: string; en: string }
 export type Card = {
   public_id: string; slug: string; localizations: { locale: Locale; name: string; summary?: string }[]
-  primary_category: CategoryCode; tags: string[]; languages: string[]; first_published_at: string | null
+  primary_category: CategoryCode | null; tags: string[]; languages: string[]; first_published_at: string | null
   logo_url?: string; cover_url?: string; visit_url?: string; rank?: number
 }
 type Heat = { status: 'ready' | 'cold' | 'stale' }
@@ -91,7 +91,7 @@ function card(value: unknown): Card {
   const c = object(value)
   assert(typeof c.public_id === 'string' && /^[0123456789abcdefghjkmnpqrstvwxyz]{16}$/.test(c.public_id) &&
     typeof c.slug === 'string' && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(c.slug) && c.slug.length <= 80 &&
-    typeof c.primary_category === 'string' && oneOf(categoryCodes)(c.primary_category) && strings(c.tags, 8) &&
+    (c.primary_category == null || typeof c.primary_category === 'string' && oneOf(categoryCodes)(c.primary_category)) && strings(c.tags, 8) &&
     strings(c.languages, 8) && Array.isArray(c.localizations) && c.localizations.length >= 1 && c.localizations.length <= 2 &&
     (c.first_published_at === null || typeof c.first_published_at === 'string') &&
     c.localizations.every(value => {
@@ -99,7 +99,7 @@ function card(value: unknown): Card {
       return (l.locale === 'zh' || l.locale === 'en') && typeof l.name === 'string' && (l.summary === undefined || typeof l.summary === 'string')
     }))
   return {
-    public_id: c.public_id, slug: c.slug, primary_category: c.primary_category as CategoryCode, localizations: c.localizations,
+    public_id: c.public_id, slug: c.slug, primary_category: (c.primary_category ?? null) as CategoryCode | null, localizations: c.localizations,
     tags: c.tags, languages: c.languages, first_published_at: c.first_published_at,
     visit_url: safeBusinessURL(typeof c.visit_url === 'string' ? c.visit_url : undefined),
     logo_url: safeImageURL(typeof c.logo_url === 'string' ? c.logo_url : undefined, 'logo'),

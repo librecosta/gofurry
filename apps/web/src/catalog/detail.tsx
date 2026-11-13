@@ -47,7 +47,7 @@ export function detailHeaders(data: DetailPageData | undefined): Record<string, 
 export function detailHead(data: DetailPageData | undefined) {
   if (data?.state !== 'published') return { meta: [{ name: 'robots', content: 'noindex' }] }
   const translation = data.detail.localizations.find(entry => entry.locale === data.locale)
-  const name = (translation ?? data.detail.localizations[0]).name
+  const name = (translation ?? data.detail.localizations[0])?.name ?? data.detail.public_id
   const reviewed = data.detail.kind !== 'sites' || data.detail.reviewed
   return {
     meta: [
@@ -63,8 +63,8 @@ export function detailHead(data: DetailPageData | undefined) {
 }
 
 const labels = {
-  en: { unavailable: 'This detail is temporarily unavailable.', missing: 'This page was not found.', untranslated: 'An English translation is unavailable.', sources: 'Platforms' },
-  zh: { unavailable: '详情暂时无法加载。', missing: '找不到此页面。', untranslated: '此页面暂无中文译文。', sources: '发行平台' },
+  en: { unavailable: 'This detail is temporarily unavailable.', missing: 'This page was not found.', untranslated: 'An English translation is unavailable.', noPresentation: 'This game has no recoverable title or synopsis.', sources: 'Platforms' },
+  zh: { unavailable: '详情暂时无法加载。', missing: '找不到此页面。', untranslated: '此页面暂无中文译文。', noPresentation: '此游戏没有可恢复的名称或简介。', sources: '发行平台' },
 }
 
 export function MissingDetail() {
@@ -79,9 +79,9 @@ export function DetailView({ data }: { data: DetailPageData }) {
   const display = translation ?? detail.localizations[0]
   return (
     <main className={styles.detail}>
-      <h1 lang={display.locale}>{display.name}</h1>
+      <h1 lang={display?.locale}>{display?.name ?? detail.public_id}</h1>
       {translation?.summary && <p className={styles.summary}>{translation.summary}</p>}
-      {!translation && <p>{copy.untranslated}</p>}
+      {!translation && <p>{display ? copy.untranslated : copy.noPresentation}</p>}
       {detail.kind === 'games' && detail.sources.length > 0 && <section><h2>{copy.sources}</h2><ul>{detail.sources.map(source =>
         <li key={JSON.stringify([source.platform_code, source.external_key])}>{source.source_url
           ? <a href={source.source_url} rel="noopener noreferrer">{source.platform_code}</a>

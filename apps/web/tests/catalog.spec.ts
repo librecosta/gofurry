@@ -102,6 +102,36 @@ test('approved automatic Game profiles render locally and revoked work is absent
   }
 })
 
+test('uncategorized Sites render in both regions and are eligible for editorial features', async ({ browser, request }) => {
+  const id = '000000000000000j'
+  const detail = '/sites/' + id + '/unsorted-almanac'
+  for (const [web, api, name, label, width] of [[cn, cnAPI, '无类手册', '未分类', 390], [intl, intlAPI, 'Unsorted Almanac', 'Uncategorized', 1280]] as const) {
+    const catalog = api + '/api/v1/sites'
+    const home = await (await request.get(catalog + '/discovery')).json()
+    expect(home.featured.secondary_2.public_id).toBe(id)
+    expect(home.featured.secondary_2.primary_category).toBeNull()
+    const search = '/sites/directory?q=' + encodeURIComponent(name)
+    const results = await (await request.get(api + '/api/v1' + search)).json()
+    expect(results.items.map((row: { public_id: string }) => row.public_id)).toEqual([id])
+    const filtered = await (await request.get(api + '/api/v1' + search + '&category=community')).json()
+    expect(filtered.items).toEqual([])
+    const page = await browser.newPage({ javaScriptEnabled: false, viewport: { width, height: 800 } })
+    try {
+      expect((await page.goto(web + search))?.status()).toBe(200)
+      await expect(page.getByText(label, { exact: true })).toBeVisible()
+      const link = page.getByRole('link', { name, exact: true })
+      await expect(link).toHaveAttribute('href', detail)
+      await link.click()
+      await expect(page.getByRole('heading', { name, exact: true })).toBeVisible()
+      await expect(page.getByText(label, { exact: true }).first()).toBeVisible()
+      const related = await request.get(catalog + '/' + id + '/related')
+      expect(related.status()).toBe(200)
+    } finally {
+      await page.close()
+    }
+  }
+})
+
 test('real API exposes bounded published DTOs and preserves Start and read boundaries', async ({ request }) => {
   const rows = await request.get(cnAPI + '/api/v1/sites?limit=1')
   expect(rows.status()).toBe(200)
@@ -109,7 +139,9 @@ test('real API exposes bounded published DTOs and preserves Start and read bound
   expect(page.items).toHaveLength(1)
   expect(page.after).toBe(site)
   expect(Object.keys(page.items[0]).sort()).toEqual(['localizations', 'public_id', 'slug'])
-  expect((await (await request.get(cnAPI + '/api/v1/sites?limit=1&after=' + site)).json()).items).toHaveLength(1)
+  const next = await (await request.get(cnAPI + '/api/v1/sites?limit=1&after=' + site)).json()
+  expect(next.items).toHaveLength(1)
+  expect(next.after).toBe(next.items[0].public_id)
   for (const query of ['limit=0', 'limit=51', 'limit=1&limit=2', 'after=17', 'unknown=true']) {
     expect((await request.get(cnAPI + '/api/v1/sites?' + query)).status()).toBe(400)
   }

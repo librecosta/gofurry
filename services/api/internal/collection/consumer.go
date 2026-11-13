@@ -197,6 +197,9 @@ func (s *Service) reset(ctx context.Context, conn *pgx.Conn, q *dbgen.Queries, s
 		if err := refreshIntakeProfiles(ctx, tx, generation, nil, ""); err != nil {
 			return err
 		}
+		if err := saveSiteTechnology(ctx, tx, generation, nil, ""); err != nil {
+			return err
+		}
 		return tx.ActivateCollectionGeneration(ctx, dbgen.ActivateCollectionGenerationParams{
 			Namespace: s.namespace, Generation: &generation, Epoch: &reset.Epoch, Cursor: cursor, ResetAck: &reset.ID,
 		})

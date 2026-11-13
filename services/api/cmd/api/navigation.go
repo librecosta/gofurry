@@ -52,7 +52,8 @@ func navigationCommand(cfg *platform.Config) *cobra.Command {
 			}
 			return edit.ReviewSiteNavigation(cmd.Context(), cfg.Deployment.Region, args[0], rev, in)
 		})
-	review.Flags().StringVar(&in.Rating, "rating", "", "unreviewed, sfw, mixed, or adult (subject to deployment)")
+	review.Flags().StringVar(&in.Rating, "rating", "", "unreviewed, sfw, mixed, or adult")
+	review.Flags().BoolVar(&in.KeepTaxonomy, "keep-taxonomy", false, "Keep the existing classification, tags and languages")
 	review.Flags().StringVar(&in.Primary, "primary", "", "Primary category code")
 	review.Flags().StringSliceVar(&in.Secondary, "secondary", nil, "Up to two supplemental category codes")
 	review.Flags().StringSliceVar(&in.Tags, "tags", nil, "Reviewed tag codes")
