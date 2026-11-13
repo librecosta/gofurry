@@ -161,7 +161,7 @@ DELETE FROM game_intake_candidates WHERE id IN (
 
 -- name: RefreshIntakeProfiles :many
 WITH newer AS (
- SELECT i.id,c.observation_id,c.confirmed_at,c.received_at,c.state,c.data
+ SELECT i.id,c.observation_id,c.state,c.data,c.observed_at
  FROM collection_current c JOIN collection_sources s ON s.id=c.source_id
  JOIN game_intake_candidates i ON i.namespace=s.namespace AND i.platform_code='steam' AND i.external_key=s.external_key
     AND i.profile_scope_key=c.scope_key AND i.state='accepted'
@@ -170,7 +170,7 @@ WITH newer AS (
     AND c.generation=sqlc.arg(generation) AND c.capability='steam.details' AND c.output_schema=1
     AND (sqlc.narg(source_id)::uuid IS NULL OR c.source_id=sqlc.narg(source_id))
     AND (sqlc.narg(scope_key)::text IS NULL OR c.scope_key=sqlc.narg(scope_key))
-    AND coalesce(c.confirmed_at,c.received_at)>coalesce(i.profile_at,'-infinity')
+    AND c.observed_at>coalesce(i.profile_at,'-infinity')
     AND (c.state='withdrawn' OR c.data->>'type' IS DISTINCT FROM 'game'
       OR (c.data->>'name'<>'' AND c.data->>'description'<>''))
     AND EXISTS (
@@ -183,9 +183,9 @@ WITH newer AS (
 )
 UPDATE game_intake_candidates i SET
  profile=CASE WHEN n.state='present' AND n.data->>'type'='game'
-   THEN jsonb_build_object('locale','en','name',n.data->>'name','summary',n.data->>'description') ELSE '{}'::jsonb END,
- profile_at=coalesce(n.confirmed_at,n.received_at),
+   THEN jsonb_build_object('locale','en','name',left(n.data->>'name',160),'summary',n.data->>'description') ELSE '{}'::jsonb END,
+ profile_at=n.observed_at,
  profile_observation_id=CASE WHEN n.state='present' AND n.data->>'type'='game' THEN n.observation_id END,
  updated_at=statement_timestamp()
-FROM newer n WHERE i.id=n.id AND coalesce(n.confirmed_at,n.received_at)>coalesce(i.profile_at,'-infinity')
+FROM newer n WHERE i.id=n.id AND n.observed_at>coalesce(i.profile_at,'-infinity')
 RETURNING i.id,i.game_id,i.reason;

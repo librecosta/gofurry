@@ -461,10 +461,20 @@ func (l *lab) feed(w http.ResponseWriter, r *http.Request) {
 		}
 		app := q.Get("appids")
 		name, kind, description := "Observed "+q.Get("l"), "game", ""
+		if app == "42" || app == "3000000001" {
+			extra += `,"supported_languages":"English<br>Simplified Chinese<script>private-script</script>","developers":["Fox Studio"],"publishers":["Pine Press"],"platforms":{"windows":true,"mac":false},"categories":[{"id":2,"description":"Single-player"}],"genres":[{"id":"23","description":"Indie"}],"release_date":{"coming_soon":true,"date":"Q3 2027"},"header_image":"https://cdn.akamai.steamstatic.com/fixture/header.jpg?secret=fixture","capsule_image":"https://cdn.akamai.steamstatic.com/fixture/capsule.jpg","screenshots":[{"id":0,"path_full":"https://cdn.akamai.steamstatic.com/fixture/shot.jpg"},{"id":1,"path_full":"https://not-steam.example/fixture/unsafe.jpg"}],"movies":[{"id":0,"mp4":{"max":"https://video.steamcontent.com/fixture/movie.mp4"}}]`
+		}
 		switch app {
+		case "42":
+			description = "An independent English description."
+			if q.Get("l") == "schinese" && q.Get("cc") != "HK" {
+				name, description = "松林故事", "森林里的狐狸重新打开了图书馆。"
+			}
 		case "3000000001", "3000000005":
 			name, description = "Fable of the Foxes", "<p>An anthropomorphic fox cast restores a library.</p><script>fixture-private-marker</script>"
-			if l.intakeVersion.Load() == 1 && app == "3000000001" {
+			if app == "3000000001" && q.Get("l") == "schinese" && q.Get("cc") == "CN" {
+				name, description = "狐狸寓言", "一群狐狸重建了他们的图书馆。"
+			} else if l.intakeVersion.Load() == 1 && app == "3000000001" {
 				name, description = "Fable of the Foxes Revised", "The fox librarians reopen their town library."
 			}
 		case "3000000002":

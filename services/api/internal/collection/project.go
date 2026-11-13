@@ -93,6 +93,9 @@ func (s *Service) project(ctx context.Context, q *dbgen.Queries, generation, epo
 			c, err = normalizeSteam(r.observation, src.ExternalKey)
 		}
 		if err != nil {
+			if src.Provider == "steam" && r.Capability == intakeCapability {
+				return nil // An invalid Storefront payload cannot replace verified evidence.
+			}
 			return err
 		}
 	}
@@ -102,8 +105,9 @@ func (s *Service) project(ctx context.Context, q *dbgen.Queries, generation, epo
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return err
 	}
-	if r.Position < prior.Position || (r.Position == prior.Position && (!r.Confirmed.After(prior.ConfirmedAt.Time) ||
-		prior.ObservationID == nil || *prior.ObservationID != r.ID)) {
+	upgrade := r.Capability == intakeCapability && c.Ruleset == steamProjectionRules && prior.Ruleset == projectionRules
+	if r.Position < prior.Position || (r.Position == prior.Position && (prior.ObservationID == nil || *prior.ObservationID != r.ID ||
+		!upgrade && !r.Confirmed.After(prior.ConfirmedAt.Time))) {
 		return nil
 	}
 	var id *uuid.UUID
@@ -122,6 +126,11 @@ func (s *Service) project(ctx context.Context, q *dbgen.Queries, generation, epo
 	if src.Provider == "steam" {
 		if r.Capability == intakeCapability && r.Scope.Dimensions["section"] == "details" {
 			if err := refreshIntakeProfiles(ctx, q, generation, &src.ID, r.ScopeKey); err != nil {
+				return err
+			}
+		}
+		if r.Capability == intakeCapability {
+			if err := saveSteamMetadata(ctx, q, generation, epoch, &src.ID, r.ScopeKey); err != nil {
 				return err
 			}
 		}
@@ -295,8 +304,7 @@ func (s *Service) applyPage(ctx context.Context, q *dbgen.Queries, epoch, genera
 
 func (s *Service) sweepPage(ctx context.Context, q *dbgen.Queries, generation, epoch uuid.UUID, rows []currentItem) error {
 	for _, item := range rows {
-		if item.Source == "steam" && item.Capability == intakeCapability && item.State == "present" &&
-			item.Scope.Dimensions["section"] == "details" {
+		if item.Source == "steam" && item.Capability == intakeCapability && item.State == "present" {
 			if item.Confirmed.IsZero() || item.Confirmed.Before(item.ReceivedAt) {
 				return errProtocol
 			}
@@ -304,7 +312,12 @@ func (s *Service) sweepPage(ctx context.Context, q *dbgen.Queries, generation, e
 			if err := s.project(ctx, q, generation, epoch, r, true); err != nil {
 				return err
 			}
-			if err := refreshIntakeProfiles(ctx, q, generation, nil, r.ScopeKey); err != nil {
+			if r.Scope.Dimensions["section"] == "details" {
+				if err := refreshIntakeProfiles(ctx, q, generation, nil, r.ScopeKey); err != nil {
+					return err
+				}
+			}
+			if err := saveSteamMetadata(ctx, q, generation, epoch, nil, r.ScopeKey); err != nil {
 				return err
 			}
 			continue

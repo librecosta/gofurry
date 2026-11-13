@@ -124,14 +124,16 @@ type Game struct {
 }
 
 type GameApprovedPresentation struct {
-	GameID        uuid.UUID          `json:"game_id"`
-	Locale        string             `json:"locale"`
-	Name          string             `json:"name"`
-	Summary       string             `json:"summary"`
-	GameSourceID  uuid.UUID          `json:"game_source_id"`
-	ObservationID uuid.UUID          `json:"observation_id"`
-	ObservedAt    pgtype.Timestamptz `json:"observed_at"`
-	Approval      []byte             `json:"approval"`
+	GameID            uuid.UUID          `json:"game_id"`
+	Locale            string             `json:"locale"`
+	Name              string             `json:"name"`
+	Summary           string             `json:"summary"`
+	GameSourceID      uuid.UUID          `json:"game_source_id"`
+	ObservationID     uuid.UUID          `json:"observation_id"`
+	ObservedAt        pgtype.Timestamptz `json:"observed_at"`
+	Approval          []byte             `json:"approval"`
+	SteamStoreCountry pgtype.Text        `json:"steam_store_country"`
+	SteamEgressRegion pgtype.Text        `json:"steam_egress_region"`
 }
 
 type GameEvidenceNews struct {
@@ -207,6 +209,27 @@ type GameSource struct {
 	ExternalKey  string    `json:"external_key"`
 	SourceUrl    string    `json:"source_url"`
 	Active       bool      `json:"active"`
+}
+
+type GameSourceMetadatum struct {
+	GameSourceID  uuid.UUID          `json:"game_source_id"`
+	Locale        string             `json:"locale"`
+	StoreCountry  string             `json:"store_country"`
+	EgressRegion  string             `json:"egress_region"`
+	Section       string             `json:"section"`
+	BindingID     uuid.UUID          `json:"binding_id"`
+	ScopeKey      string             `json:"scope_key"`
+	Epoch         uuid.UUID          `json:"epoch"`
+	Position      int64              `json:"position"`
+	EventAt       pgtype.Timestamptz `json:"event_at"`
+	State         string             `json:"state"`
+	OutputSchema  int32              `json:"output_schema"`
+	Ruleset       string             `json:"ruleset"`
+	ObservationID *uuid.UUID         `json:"observation_id"`
+	ContentHash   pgtype.Text        `json:"content_hash"`
+	ObservedAt    pgtype.Timestamptz `json:"observed_at"`
+	ConfirmedAt   pgtype.Timestamptz `json:"confirmed_at"`
+	Payload       []byte             `json:"payload"`
 }
 
 type Site struct {

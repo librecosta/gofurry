@@ -98,7 +98,9 @@ func TestCollectionHarvestD(t *testing.T) {
 	if bindA[0].SourceID != bindB[0].SourceID || bindA[1].SourceID != bindB[1].SourceID {
 		t.Fatal("shared source was cloned")
 	}
-	game, err := editor.CreateGame(ctx, catalog.GameInput{Editorial: text, Sources: []catalog.Source{{PlatformCode: "steam", ExternalKey: "42"}}})
+	game, err := editor.CreateGame(ctx, catalog.GameInput{Editorial: text, Sources: []catalog.Source{
+		{PlatformCode: "steam", ExternalKey: "42"}, {PlatformCode: "itch_io", ExternalKey: "fox-studio/curated"},
+	}})
 	must(t, err)
 	game, err = editor.SetGameStatus(ctx, game.ID, game.Revision, catalog.Published)
 	must(t, err)
@@ -140,11 +142,17 @@ func TestCollectionHarvestD(t *testing.T) {
 	tlsPlan := plan(bindA[0].ID, "web.tls", "", "")
 	priceUS := plan(gameBind.ID, "steam.details", "en", "us")
 	priceCN := plan(gameBind.ID, "steam.details", "zh-cn", "cn")
-	priceHK := plan(gameBind.ID, "steam.details", "en", "hk")
+	otherMarkets := []uuid.UUID{
+		plan(gameBind.ID, "steam.details", "en", "cn"),
+		plan(gameBind.ID, "steam.details", "en", "hk"),
+		plan(gameBind.ID, "steam.details", "zh-cn", "us"),
+		plan(gameBind.ID, "steam.details", "zh-cn", "hk"),
+	}
 	newsPlan := plan(gameBind.ID, "steam.news", "", "")
 	playersPlan := plan(gameBind.ID, "steam.players", "", "")
 	must(t, svc.Reconcile(ctx))
-	count(t, remotePool, 8, "SELECT count(*) FROM harvest.schedules WHERE enabled")
+	must(t, svc.Reconcile(ctx))
+	count(t, remotePool, 11, "SELECT count(*) FROM harvest.schedules WHERE enabled")
 	count(t, remotePool, 3, "SELECT count(*) FROM harvest.targets")
 	req := func(id uuid.UUID) request {
 		var r request
@@ -168,7 +176,9 @@ func TestCollectionHarvestD(t *testing.T) {
 	}
 	l.job(news)
 	l.job(players)
-	l.job(req(priceHK))
+	for _, id := range otherMarkets {
+		l.job(req(id))
+	}
 	count(t, pool, 0, "SELECT count(*) FROM collection_current")
 	var memBefore, memAfter runtime.MemStats
 	runtime.GC()
@@ -184,11 +194,14 @@ func TestCollectionHarvestD(t *testing.T) {
 	if state.Generation == nil || !state.AckPending || state.ResetAck == nil {
 		t.Fatal("projection and reset ACK token were not committed atomically")
 	}
-	count(t, pool, 2, "SELECT count(*) FROM collection_current WHERE generation=$1 AND capability='steam.details' AND data->>'state' IN ('free','zero_price')", state.Generation)
-	count(t, pool, 1, "SELECT count(*) FROM collection_current WHERE generation=$1 AND capability='steam.details' AND scope->>'region'='hk' AND scope->'dimensions'->>'section'='details'", state.Generation)
+	count(t, pool, 4, "SELECT count(*) FROM collection_current WHERE generation=$1 AND capability='steam.details' AND data->>'state' IN ('free','zero_price')", state.Generation)
+	count(t, pool, 2, "SELECT count(*) FROM collection_current WHERE generation=$1 AND capability='steam.details' AND scope->>'region'='hk' AND scope->'dimensions'->>'section'='details'", state.Generation)
 	count(t, pool, 0, "SELECT count(*) FROM collection_current WHERE generation=$1 AND capability='steam.details' AND scope->>'region'='hk' AND scope->'dimensions'->>'section'='price'", state.Generation)
 	count(t, pool, 1, "SELECT count(*) FROM game_evidence_players WHERE players=0")
 	count(t, pool, 1, "SELECT count(*) FROM game_evidence_news WHERE gid='123456'")
+	checkSteamReadModel(t, editor, game.PublicID, without.PublicID)
+	replaySteamMetadata(t, pool, state, gameBind.SourceID)
+	checkSteamWithdrawal(t, pool, svc, state, game.PublicID, gameBind.SourceID)
 	runtime.ReadMemStats(&memAfter)
 	t.Logf("paged snapshot wall=%s allocated=%d bytes retained_heap_delta=%d bytes fixture_requests=%d",
 		time.Since(start), memAfter.TotalAlloc-memBefore.TotalAlloc, int64(memAfter.HeapAlloc)-int64(memBefore.HeapAlloc), l.calls.Load())
@@ -205,6 +218,7 @@ func TestCollectionHarvestD(t *testing.T) {
 	if state.AckPending || state.ResetAck != nil {
 		t.Fatal("lost ACK did not converge on restart")
 	}
+	checkSteamReadModel(t, editor, game.PublicID, without.PublicID)
 
 	initial := state
 	l.dns.Store(1)
@@ -414,6 +428,7 @@ func TestCollectionHarvestD(t *testing.T) {
 	count(t, pool, 1, "SELECT count(*) FROM collection_current c JOIN collection_consumer n USING(generation) WHERE source_id=$1 AND facts ? 'tech.detected.wordpress'", moved[0].SourceID)
 	count(t, pool, 1, "SELECT count(*) FROM collection_current c JOIN collection_consumer n USING(generation) WHERE source_id=$1 AND facts ? 'dns.rrset'", moved[1].SourceID)
 	assertProfileFacts(t, editor, siteA.PublicID, "new.example.com", "wordpress")
+	checkSteamReadModel(t, editor, game.PublicID, without.PublicID)
 	expectEventually(t, 15*time.Second, "Harvest did not prune the replaced Observation", func() bool {
 		return scalar[int64](t, remotePool, "SELECT count(*) FROM harvest.observations WHERE id=$1", aged) == 0
 	})

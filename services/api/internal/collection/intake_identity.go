@@ -62,9 +62,9 @@ func (s *Intake) resolve(ctx context.Context, claim dbgen.GameIntakeCandidate, o
 		}
 		if v7(o.ID) {
 			decision.AttemptID, decision.ObservationID, decision.ObservationHash = &o.AttemptID, &o.ID, o.Hash
-			decision.ProfileAt, decision.ProfileScopeKey = timestamp(o.ReceivedAt), scopeKey
+			decision.ProfileAt, decision.ProfileScopeKey = timestamp(o.ObservedAt), scopeKey
 			decision.WorkTitle = strings.ToLower(o.detail.Name)
-			decision.Profile, _ = json.Marshal(catalog.Localization{Locale: "en", Name: o.detail.Name, Summary: o.detail.Description})
+			decision.Profile, _ = json.Marshal(catalog.Localization{Locale: "en", Name: clean(o.detail.Name, 160), Summary: o.detail.Description})
 			if err := q.NoteIntakeObservation(ctx, dbgen.NoteIntakeObservationParams{
 				ID: c.ID, AttemptID: decision.AttemptID, ObservationID: decision.ObservationID, ObservationHash: o.Hash,
 				ProfileScopeKey: scopeKey, Profile: decision.Profile, ProfileAt: decision.ProfileAt, WorkTitle: decision.WorkTitle,
@@ -332,11 +332,7 @@ func refreshIntakeProfiles(ctx context.Context, q *dbgen.Queries, generation uui
 		if err != nil {
 			return err
 		}
-		if game.Status == catalog.Published && !game.PublicationBlocked {
-			if err := q.SaveApprovedGamePresentation(ctx, game.ID); err != nil {
-				return err
-			}
-		} else if err := publishIntake(ctx, q, row.ID, game); err != nil {
+		if err := publishIntake(ctx, q, row.ID, game); err != nil {
 			return err
 		}
 	}

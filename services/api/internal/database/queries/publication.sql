@@ -1,7 +1,11 @@
 -- name: SaveApprovedGamePresentation :exec
-INSERT INTO game_approved_presentations
-SELECT p.game_id,p.locale,p.name,p.summary,p.game_source_id,p.observation_id,p.observed_at,p.approval
+INSERT INTO game_approved_presentations (game_id,locale,name,summary,game_source_id,observation_id,observed_at,approval,steam_store_country,steam_egress_region)
+SELECT p.game_id,p.locale,p.name,p.summary,p.game_source_id,p.observation_id,p.observed_at,p.approval,
+ CASE WHEN i.egress_region~'^[a-z0-9][a-z0-9_-]{0,34}$' THEN 'us' END,
+ CASE WHEN i.egress_region~'^[a-z0-9][a-z0-9_-]{0,34}$' THEN i.egress_region END
 FROM game_intake_presentation(sqlc.arg(game_id)::uuid,false) AS p(game_id,locale,name,summary,game_source_id,observation_id,observed_at,approval)
+LEFT JOIN game_sources s ON s.id=p.game_source_id AND s.game_id=p.game_id AND s.platform_code='steam'
+LEFT JOIN game_intake_candidates i ON i.platform_code='steam' AND i.external_key=s.external_key AND i.game_source_id=p.game_source_id AND p.locale='en'
 ON CONFLICT (game_id,locale) DO UPDATE SET
  name=excluded.name,summary=excluded.summary,observation_id=excluded.observation_id,observed_at=excluded.observed_at,
  approval=excluded.approval

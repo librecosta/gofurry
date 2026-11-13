@@ -1,0 +1,91 @@
+-- name: ReadGamePresentation :one
+WITH work AS MATERIALIZED (
+ SELECT * FROM games WHERE public_id=sqlc.arg(public_id) AND status='published' AND NOT publication_blocked
+), sources AS MATERIALIZED (
+ SELECT s.* FROM game_sources s JOIN work g ON s.game_id=g.id
+ ORDER BY s.active DESC,s.platform_code,s.external_key LIMIT 16
+)
+SELECT g.public_id,g.slug,(game_presentation(g.id,g.intake_display_source)->'localizations')::jsonb AS localizations,
+ coalesce((SELECT jsonb_agg(jsonb_build_object('locale',a.locale,'game_source_id',a.game_source_id,'observation_id',a.observation_id,
+  'observed_at',a.observed_at,'store_country',a.steam_store_country,'egress_region',a.steam_egress_region)
+  ORDER BY a.locale) FROM game_approved_presentations a WHERE a.game_id=g.id),'[]')::jsonb AS approved,
+ coalesce((SELECT jsonb_agg(jsonb_build_object(
+  'id',s.id,'platform_code',s.platform_code,'external_key',s.external_key,'source_url',nullif(s.source_url,''),'active',s.active,
+  'metadata',(SELECT coalesce(jsonb_agg(jsonb_build_object('locale',m.locale,'store_country',m.store_country,'egress_region',m.egress_region,
+    'section',m.section,'state',CASE WHEN m.state='present' AND s.active AND b.effective_until IS NULL AND b.id IS NOT NULL
+     AND m.epoch=cn.epoch AND EXISTS (
+      SELECT 1 FROM collection_current c WHERE c.generation=cn.generation AND c.source_id=src.id AND c.capability='steam.details'
+       AND c.output_schema=m.output_schema AND c.scope_key=m.scope_key AND c.position=m.position AND c.state='present')
+     AND NOT EXISTS (SELECT 1 FROM collection_gaps gap WHERE gap.namespace=src.namespace AND gap.prior_generation=cn.generation)
+     THEN 'observed' ELSE 'historical' END,
+    'scope_key',m.scope_key,'output_schema',m.output_schema,'ruleset',m.ruleset,'observation_id',m.observation_id,
+    'content_hash',m.content_hash,'observed_at',m.observed_at,'confirmed_at',m.confirmed_at,
+    'binding_id',m.binding_id,'target_id',src.target_id,'namespace',src.namespace,
+    'verified_chinese',coalesce(m.payload->>'localized'='true',false),
+    'details',CASE WHEN m.section='details' THEN m.payload-'localized' END,
+    'media',CASE WHEN m.section='media' THEN m.payload END)
+    ORDER BY m.locale,m.store_country,m.section),'[]')
+   FROM game_source_metadata m
+   LEFT JOIN collection_bindings b ON b.id=m.binding_id AND b.game_source_id=s.id AND b.game_id=g.id
+   LEFT JOIN collection_sources src ON src.id=b.source_id
+   LEFT JOIN collection_consumer cn ON cn.namespace=src.namespace
+   WHERE m.game_source_id=s.id AND m.egress_region=sqlc.arg(egress_region)::text AND m.payload IS NOT NULL),
+  'prices',(SELECT coalesce(jsonb_agg(to_jsonb(p) ORDER BY p.locale,p.store_country),'[]') FROM (
+   SELECT DISTINCT ON (c.scope->>'locale',c.scope->>'region') c.scope->>'locale' AS locale,c.scope->>'region' AS store_country,
+    c.scope->>'egress_region' AS egress_region,c.scope_key,c.ruleset,c.output_schema,c.observation_id,c.content_hash,c.observed_at,c.confirmed_at,
+    c.data->>'state' AS state,c.data->'amounts' AS amounts
+   FROM collection_bindings b
+   JOIN collection_sources src ON src.id=b.source_id AND src.provider='steam' AND src.resource_type='app' AND src.external_key=s.external_key
+   JOIN collection_consumer cn ON cn.namespace=src.namespace
+   JOIN collection_current c ON c.source_id=src.id AND c.generation=cn.generation
+   WHERE s.active AND s.platform_code='steam' AND b.game_source_id=s.id AND b.game_id=g.id AND b.effective_until IS NULL AND b.purpose='steam'
+    AND c.capability='steam.details' AND c.output_schema=1 AND c.state='present' AND c.observation_id IS NOT NULL
+    AND c.scope#>>'{dimensions,section}'='price' AND c.scope->>'egress_region'=sqlc.arg(egress_region)::text
+    AND c.scope->>'locale' IN ('en','zh-cn') AND c.scope->>'region' IN ('cn','us','hk')
+    AND c.scope->>'namespace'=src.namespace AND c.data->>'app_id'=s.external_key
+    AND c.data->>'tier'='observed_storefront' AND c.data->>'source_url'='https://store.steampowered.com/api/appdetails'
+    AND c.confirmed_at BETWEEN greatest(b.effective_from,statement_timestamp()-interval '48 hours') AND statement_timestamp()
+    AND NOT EXISTS (SELECT 1 FROM collection_gaps gap WHERE gap.namespace=src.namespace AND gap.prior_generation=cn.generation)
+    AND EXISTS (SELECT 1 FROM collection_plan_bindings m JOIN collection_plans p ON p.id=m.plan_id AND p.source_id=m.source_id
+     WHERE m.binding_id=b.id AND m.source_id=src.id AND p.capability=c.capability AND p.request_schema=c.output_schema
+      AND p.scope=c.scope-'namespace'-'dimensions' AND m.attached_at<=c.confirmed_at)
+   ORDER BY c.scope->>'locale',c.scope->>'region',c.confirmed_at DESC,src.id LIMIT 6
+  ) p),
+  'news',(SELECT coalesce(jsonb_agg(to_jsonb(n) ORDER BY n.published_at DESC,n.gid DESC),'[]') FROM (
+   SELECT item.* FROM (
+   SELECT DISTINCT ON (e.gid) e.gid,e.published_at,e.observed_at,e.observation_id,e.scope_key,e.value
+   FROM collection_sources src JOIN game_evidence_news e ON e.source_id=src.id
+   WHERE s.platform_code='steam' AND src.provider='steam' AND src.external_key=s.external_key
+    AND EXISTS (SELECT 1 FROM collection_bindings b
+     JOIN collection_plan_bindings m ON m.binding_id=b.id AND m.source_id=b.source_id
+     JOIN collection_plans p ON p.id=m.plan_id AND p.source_id=m.source_id AND p.capability='steam.news'
+     WHERE b.game_source_id=s.id AND b.game_id=g.id AND b.source_id=src.id
+      AND e.observed_at>=greatest(b.effective_from,m.attached_at) AND (b.effective_until IS NULL OR e.observed_at<b.effective_until)
+      AND p.scope->>'egress_region'=sqlc.arg(egress_region)::text
+      -- The historical news table retains the canonical scope hash.
+      AND e.scope_key=encode(sha256(convert_to('{"namespace":'||to_json(src.namespace)::text||',"egress_region":'||
+       to_json(p.scope->>'egress_region')::text||',"dimensions":{"section":"news"}}','UTF8')),'hex'))
+   ORDER BY e.gid,e.observed_at DESC,src.id
+   ) item ORDER BY item.published_at DESC,item.gid DESC LIMIT 20
+  ) n),
+  'players',(SELECT to_jsonb(p) FROM (
+   SELECT e.players,e.observed_at,e.observation_id,e.scope_key,c.ruleset,c.output_schema,c.content_hash,c.confirmed_at,
+    c.scope->>'egress_region' AS egress_region
+   FROM collection_bindings b
+   JOIN collection_sources src ON src.id=b.source_id AND src.provider='steam' AND src.resource_type='app' AND src.external_key=s.external_key
+   JOIN collection_consumer cn ON cn.namespace=src.namespace
+   JOIN collection_current c ON c.source_id=src.id AND c.generation=cn.generation AND c.capability='steam.players' AND c.state='present'
+   JOIN game_evidence_players e ON e.source_id=c.source_id AND e.scope_key=c.scope_key AND e.observation_id=c.observation_id
+    AND e.bucket=date_bin('30 minutes',c.observed_at,'2000-01-01 UTC')
+   WHERE s.active AND s.platform_code='steam' AND b.game_source_id=s.id AND b.game_id=g.id AND b.effective_until IS NULL AND b.purpose='steam'
+    AND c.scope->>'egress_region'=sqlc.arg(egress_region)::text AND c.scope->>'namespace'=src.namespace
+    AND c.output_schema=1 AND c.data->>'app_id'=s.external_key AND c.data->>'tier'='official_api'
+    AND c.observed_at BETWEEN greatest(b.effective_from,statement_timestamp()-interval '2 hours') AND statement_timestamp()
+    AND NOT EXISTS (SELECT 1 FROM collection_gaps gap WHERE gap.namespace=src.namespace AND gap.prior_generation=cn.generation)
+    AND EXISTS (SELECT 1 FROM collection_plan_bindings m JOIN collection_plans p ON p.id=m.plan_id AND p.source_id=m.source_id
+     WHERE m.binding_id=b.id AND m.source_id=src.id AND p.capability=c.capability AND p.request_schema=c.output_schema
+      AND p.scope=c.scope-'namespace'-'dimensions' AND m.attached_at<=c.observed_at)
+   ORDER BY e.observed_at DESC,src.id LIMIT 1
+  ) p))
+ ORDER BY s.active DESC,s.platform_code,s.external_key) FROM sources s),'[]')::jsonb AS sources
+FROM work g;

@@ -14,6 +14,8 @@ import (
 	"time"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/librecosta/gofurry/services/api/internal/catalog"
 )
 
 const projectionRules = "gofurry-evidence-1"
@@ -287,21 +289,10 @@ type steamProvenance struct {
 	Tier  string `json:"tier"`
 	URL   string `json:"source_url"`
 }
-type steamDetail struct {
-	steamProvenance
-	Name        string `json:"name"`
-	Type        string `json:"type,omitempty"`
-	Description string `json:"description,omitempty"`
-}
 type price struct {
 	steamProvenance
-	State   string `json:"state"`
-	Amounts *struct {
-		Currency string `json:"currency"`
-		Initial  *int64 `json:"initial"`
-		Final    *int64 `json:"final"`
-		Discount *int   `json:"discount_percent"`
-	} `json:"amounts,omitempty"`
+	State   string                `json:"state"`
+	Amounts *catalog.SteamAmounts `json:"amounts,omitempty"`
 }
 type newsItem struct {
 	GID         string    `json:"gid"`
@@ -322,9 +313,9 @@ type players struct {
 }
 
 func normalizeSteam(o observation, key string) (compact, error) {
-	c := compact{Facts: map[string]jsontext.Value{}, Ruleset: projectionRules}
+	c := compact{Facts: map[string]jsontext.Value{}, Ruleset: steamProjectionRules}
 	var src steamProvenance
-	if json.Unmarshal(o.Data, &src) != nil || strconv.FormatUint(uint64(src.AppID), 10) != key {
+	if !steamScopeOK(o) || json.Unmarshal(o.Data, &src) != nil || src.AppID == 0 || strconv.FormatUint(uint64(src.AppID), 10) != key {
 		return c, errProtocol
 	}
 	tier, address := "official_api", ""
@@ -343,35 +334,12 @@ func normalizeSteam(o observation, key string) (compact, error) {
 		return c, errProtocol
 	}
 	var value any
+	var normalizeErr error
 	switch o.Scope.Dimensions["section"] {
 	case "details":
-		var v steamDetail
-		if json.Unmarshal(o.Data, &v) != nil || v.Name == "" {
-			return c, errProtocol
-		}
-		v.Name, v.Type = clean(v.Name, 160), clean(v.Type, 64)
-		// Harvest emits plain text. Treat residual angle brackets as invalid
-		// for the display projection, while retaining validated identity.
-		if !strings.ContainsAny(v.Description, "<>") {
-			v.Description = clean(v.Description, 1200)
-		} else {
-			v.Description = ""
-		}
-		if strings.ContainsAny(v.Name, "<>") {
-			v.Name = ""
-		}
-		value = v
+		value, normalizeErr = normalizedSteamDetails(o)
 	case "media":
-		var v struct {
-			steamProvenance
-			Header  string `json:"header,omitempty"`
-			Capsule string `json:"capsule,omitempty"`
-		}
-		if json.Unmarshal(o.Data, &v) != nil {
-			return c, errProtocol
-		}
-		v.Header, v.Capsule = publicURL(v.Header), publicURL(v.Capsule)
-		value = v
+		value, normalizeErr = normalizedSteamMedia(o)
 	case "price":
 		var v price
 		if json.Unmarshal(o.Data, &v) != nil {
@@ -384,7 +352,7 @@ func normalizeSteam(o observation, key string) (compact, error) {
 		} else {
 			a := v.Amounts
 			if a == nil || a.Initial == nil || a.Final == nil || *a.Initial < *a.Final || !currencyCode.MatchString(a.Currency) ||
-				(a.Discount != nil && (*a.Discount < 0 || *a.Discount > 100)) ||
+				a.Discount == nil || *a.Discount < 0 || *a.Discount > 100 ||
 				!(v.State == "zero_price" && *a.Final == 0 || v.State == "priced" && *a.Final > 0) {
 				return c, errProtocol
 			}
@@ -424,7 +392,7 @@ func normalizeSteam(o observation, key string) (compact, error) {
 		return c, errProtocol
 	}
 	raw, err := json.Marshal(value, json.Deterministic(true))
-	if err != nil || len(raw) > 6000 {
+	if normalizeErr != nil || err != nil || len(raw) > 24<<10 {
 		return c, errProtocol
 	}
 	c.Data = raw

@@ -899,17 +899,13 @@ func (q *Queries) PendingCollectionSources(ctx context.Context, namespace string
 	return items, nil
 }
 
-const pruneGameEvidence = `-- name: PruneGameEvidence :exec
-WITH old_players AS (
- DELETE FROM game_evidence_players WHERE ctid IN
- (SELECT ctid FROM game_evidence_players WHERE bucket < transaction_timestamp() - interval '30 days' ORDER BY bucket LIMIT 512)
-)
-DELETE FROM game_evidence_news WHERE ctid IN
-(SELECT ctid FROM game_evidence_news WHERE published_at < transaction_timestamp() - interval '180 days' ORDER BY published_at LIMIT 512)
+const pruneGameEvidencePlayers = `-- name: PruneGameEvidencePlayers :exec
+DELETE FROM game_evidence_players WHERE ctid IN
+(SELECT ctid FROM game_evidence_players WHERE bucket < transaction_timestamp() - interval '30 days' ORDER BY bucket LIMIT 512)
 `
 
-func (q *Queries) PruneGameEvidence(ctx context.Context) error {
-	_, err := q.db.Exec(ctx, pruneGameEvidence)
+func (q *Queries) PruneGameEvidencePlayers(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, pruneGameEvidencePlayers)
 	return err
 }
 
@@ -923,7 +919,8 @@ ON CONFLICT (generation,source_id,capability,output_schema,scope_key) DO UPDATE 
  content_hash=excluded.content_hash,evidence=excluded.evidence,ruleset=excluded.ruleset,data=excluded.data,facts=excluded.facts
 WHERE collection_current.position<excluded.position OR (collection_current.position=excluded.position
  AND collection_current.observation_id=excluded.observation_id
- AND excluded.confirmed_at>COALESCE(collection_current.confirmed_at,'-infinity'))
+ AND (excluded.confirmed_at>COALESCE(collection_current.confirmed_at,'-infinity')
+  OR (excluded.capability='steam.details' AND excluded.ruleset='gofurry-steam-1' AND collection_current.ruleset='gofurry-evidence-1')))
 `
 
 type PutCollectionCurrentParams struct {

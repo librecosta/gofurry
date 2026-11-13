@@ -177,6 +177,26 @@ func TestGameIntakeHarvestD(t *testing.T) {
 	})
 	count(t, remote, 1, "SELECT count(*) FROM harvest.jobs WHERE target_id=$1 AND schedule_id IS NOT NULL AND state IN ('succeeded','partial')", accepted.Target)
 	assertIntakeHTTP(t, l.http, base, accepted.PublicID, 200, "Fable of the Foxes Revised")
+	steam := New(pool, cfg)
+	t.Cleanup(steam.Close)
+	binding, err := steam.BindGame(ctx, accepted.PublicID, first)
+	must(t, err)
+	anchor := time.Now().UTC().Add(24 * time.Hour).Truncate(time.Second)
+	for _, market := range []string{"cn", "hk"} {
+		plan := Plan{Capability: intakeCapability, Locale: "zh-cn", Region: market, EgressRegion: "cn", Anchor: anchor, Interval: 24 * time.Hour}
+		_, err = steam.AddPlan(ctx, binding.ID, plan)
+		must(t, err)
+		params, _, _, err := plan.params("app", first)
+		must(t, err)
+		l.job(request{TargetID: *accepted.Target, Capability: intakeCapability, Schema: 1, Params: params,
+			Scope: scope{Locale: plan.Locale, Region: market, EgressRegion: "cn"}})
+		if market == "cn" {
+			expectEventually(t, 20*time.Second, "verified Chinese metadata did not extend the approved source", func() bool {
+				return scalar[int64](t, pool, "SELECT count(*) FROM game_approved_presentations WHERE game_id=$1 AND locale='zh' AND steam_store_country='cn'", accepted.Game) == 1
+			})
+		}
+	}
+	assertIntakeHTTP(t, l.http, base, accepted.PublicID, 200, "Fable of the Foxes Revised", "狐狸寓言")
 	game, err := dbgen.New(pool).LockGame(ctx, *accepted.Game)
 	must(t, err)
 	_, err = catalogDB.EditGame(ctx, game.ID, game.Revision, catalog.GameInput{Editorial: catalog.Editorial{Localizations: []catalog.Localization{
@@ -190,7 +210,8 @@ func TestGameIntakeHarvestD(t *testing.T) {
 			!scalar[bool](t, remote, "SELECT reset_required FROM harvest.consumers WHERE id=$1", consumer.ID)
 	})
 	l.intakeVersion.Store(0)
-	execSQL(t, remote, "UPDATE harvest.schedules SET next_due_at=now()-interval '1s' WHERE target_id=$1", accepted.Target)
+	execSQL(t, remote, `UPDATE harvest.schedules SET next_due_at=greatest(anchor_at,now()-interval '1s')
+ WHERE target_id=$1 AND scope->>'locale'='en' AND scope->>'region'='us'`, accepted.Target)
 	expectEventually(t, 30*time.Second, "automatic refresh stopped after the Consumer reset", func() bool {
 		return scalar[string](t, pool, "SELECT profile->>'name' FROM game_intake_candidates WHERE id=$1", accepted.ID) == "Fable of the Foxes"
 	})
@@ -198,6 +219,7 @@ func TestGameIntakeHarvestD(t *testing.T) {
 	decision := catalog.PublicationDecision{Actor: "fixture", Reason: "Fixture policy decision"}
 	must(t, s.RevokeSteamReview(ctx, first, decision))
 	assertIntakeHTTP(t, l.http, base, accepted.PublicID, 404)
+	assertNotPublic(t, ctx, catalogDB, accepted.PublicID)
 	must(t, s.ReviewSteam(ctx, first, "fixture.work-synopsis", "fixture.content-assessment"))
 	assertIntakeHTTP(t, l.http, base, accepted.PublicID, 404)
 	locked, err := dbgen.New(pool).LockGame(ctx, *accepted.Game)
@@ -240,20 +262,6 @@ func TestGameIntakeHarvestD(t *testing.T) {
 	})
 	l.worker = launch(t, l.dir, l.env, l.bin, "fixture", "worker", "--config", l.workerConfig)
 	waitForIntake(t, s, pool, "3000000007", "accepted", "created_game", false)
-	if runtime.GOOS == "windows" {
-		api.stop()
-	} else {
-		must(t, api.cmd.Process.Signal(syscall.SIGTERM))
-		select {
-		case <-api.done:
-			if !api.cmd.ProcessState.Success() {
-				t.Fatal("Fiber failed to drain Intake on SIGTERM")
-			}
-		case <-time.After(12 * time.Second):
-			t.Fatal("Fiber did not drain Intake on SIGTERM")
-		}
-	}
-
 	for _, scenario := range []struct{ key, state, reason string }{
 		{"3000000002", "accepted", "created_game"}, {"3000000003", "rejected", "not_full_game"},
 		{"3000000004", "deferred", "unknown_app_type"}, {"3000000005", "deferred", "weak_identity_match"},
@@ -263,6 +271,9 @@ func TestGameIntakeHarvestD(t *testing.T) {
 		row := waitForIntake(t, s, pool, scenario.key, scenario.state, scenario.reason, true)
 		if scenario.key == "3000000002" && (row.GameState != "draft" || row.Observation == nil) {
 			t.Fatal("missing positive evidence should allow only a sourced draft")
+		}
+		if scenario.key == "3000000002" {
+			assertNotPublic(t, ctx, catalogDB, row.PublicID)
 		}
 		if scenario.state != "accepted" && row.Game != nil {
 			t.Fatal("ambiguous or unsupported source acquired a Game")
@@ -287,6 +298,24 @@ func TestGameIntakeHarvestD(t *testing.T) {
 
 	testIntakeRelations(t, s, pool, catalogDB, accepted)
 	count(t, pool, 3, "SELECT count(*) FROM catalog_publication_decisions WHERE entity_id=$1 AND action IN ('publish','block','clear_block')", *accepted.Game)
+	l.worker.stop()
+	l.plane.stop()
+	readAgedSteamGame(t, pool, catalogDB, accepted.PublicID, func() {
+		assertIntakeHTTP(t, l.http, base, accepted.PublicID, 200, "Editorial English", "编辑译名")
+	})
+	if runtime.GOOS == "windows" {
+		api.stop()
+	} else {
+		must(t, api.cmd.Process.Signal(syscall.SIGTERM))
+		select {
+		case <-api.done:
+			if !api.cmd.ProcessState.Success() {
+				t.Fatal("Fiber failed to drain Intake on SIGTERM")
+			}
+		case <-time.After(12 * time.Second):
+			t.Fatal("Fiber did not drain Intake on SIGTERM")
+		}
+	}
 	t.Logf("Harvest simulated network calls: %d", l.calls.Load())
 }
 

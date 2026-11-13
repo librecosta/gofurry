@@ -154,7 +154,8 @@ ON CONFLICT (generation,source_id,capability,output_schema,scope_key) DO UPDATE 
  content_hash=excluded.content_hash,evidence=excluded.evidence,ruleset=excluded.ruleset,data=excluded.data,facts=excluded.facts
 WHERE collection_current.position<excluded.position OR (collection_current.position=excluded.position
  AND collection_current.observation_id=excluded.observation_id
- AND excluded.confirmed_at>COALESCE(collection_current.confirmed_at,'-infinity'));
+ AND (excluded.confirmed_at>COALESCE(collection_current.confirmed_at,'-infinity')
+  OR (excluded.capability='steam.details' AND excluded.ruleset='gofurry-steam-1' AND collection_current.ruleset='gofurry-evidence-1')));
 
 -- name: DeleteOldCollectionRows :execrows
 DELETE FROM collection_current WHERE ctid IN (
@@ -216,13 +217,9 @@ VALUES (sqlc.arg(source_id),sqlc.arg(scope_key),date_bin('30 minutes',sqlc.arg(o
 ON CONFLICT (source_id,scope_key,bucket) DO UPDATE SET observed_at=excluded.observed_at,observation_id=excluded.observation_id,players=excluded.players
 WHERE game_evidence_players.observed_at<excluded.observed_at;
 
--- name: PruneGameEvidence :exec
-WITH old_players AS (
- DELETE FROM game_evidence_players WHERE ctid IN
- (SELECT ctid FROM game_evidence_players WHERE bucket < transaction_timestamp() - interval '30 days' ORDER BY bucket LIMIT 512)
-)
-DELETE FROM game_evidence_news WHERE ctid IN
-(SELECT ctid FROM game_evidence_news WHERE published_at < transaction_timestamp() - interval '180 days' ORDER BY published_at LIMIT 512);
+-- name: PruneGameEvidencePlayers :exec
+DELETE FROM game_evidence_players WHERE ctid IN
+(SELECT ctid FROM game_evidence_players WHERE bucket < transaction_timestamp() - interval '30 days' ORDER BY bucket LIMIT 512);
 
 -- name: TryCollectionLock :one
 SELECT pg_try_advisory_lock(hashtextextended('gofurry/harvest/'||sqlc.arg(namespace)::text,0));
