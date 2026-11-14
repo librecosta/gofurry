@@ -25,7 +25,7 @@ UPDATE game_intake_candidates i SET state='resolving',lease_id=$1,
  namespace=CASE WHEN i.namespace='' AND i.platform_code='steam' THEN $2 ELSE i.namespace END,
  egress_region=CASE WHEN i.egress_region='' AND i.platform_code='steam' THEN $3 ELSE i.egress_region END,
  updated_at=statement_timestamp()
-FROM due WHERE i.id=due.id RETURNING i.id, i.platform_code, i.external_key, i.discovered_via, i.state, i.reason, i.next_at, i.lease_id, i.lease_until, i.failures, i.namespace, i.egress_region, i.target_id, i.job_started_at, i.job_writer_binding, i.job_round, i.job_id, i.attempt_id, i.observation_id, i.observation_hash, i.game_id, i.game_source_id, i.profile_scope_key, i.profile, i.profile_at, i.profile_observation_id, i.work_title, i.relation, i.relation_attached, i.decision_version, i.review, i.review_until, i.published_at, i.decided_at, i.created_at, i.updated_at, i.review_revoked
+FROM due WHERE i.id=due.id RETURNING i.id, i.platform_code, i.external_key, i.discovered_via, i.state, i.reason, i.next_at, i.lease_id, i.lease_until, i.failures, i.namespace, i.egress_region, i.target_id, i.job_started_at, i.job_writer_binding, i.job_round, i.job_id, i.attempt_id, i.observation_id, i.observation_hash, i.game_id, i.game_source_id, i.profile_scope_key, i.profile, i.profile_at, i.profile_observation_id, i.work_title, i.relation, i.relation_attached, i.decision_version, i.review, i.review_until, i.published_at, i.decided_at, i.created_at, i.updated_at, i.review_revoked, i.discovery_modified, i.job_generation, i.automation
 `
 
 type ClaimIntakeParams struct {
@@ -75,6 +75,9 @@ func (q *Queries) ClaimIntake(ctx context.Context, arg ClaimIntakeParams) (GameI
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.ReviewRevoked,
+		&i.DiscoveryModified,
+		&i.JobGeneration,
+		&i.Automation,
 	)
 	return i, err
 }
@@ -185,7 +188,7 @@ INSERT INTO game_intake_candidates (id,platform_code,external_key,discovered_via
 SELECT $1,$2,$3,$4 WHERE (
  SELECT count(*) FROM game_intake_candidates WHERE state IN ('discovered','resolving','deferred')
 )<10000
-RETURNING id, platform_code, external_key, discovered_via, state, reason, next_at, lease_id, lease_until, failures, namespace, egress_region, target_id, job_started_at, job_writer_binding, job_round, job_id, attempt_id, observation_id, observation_hash, game_id, game_source_id, profile_scope_key, profile, profile_at, profile_observation_id, work_title, relation, relation_attached, decision_version, review, review_until, published_at, decided_at, created_at, updated_at, review_revoked
+RETURNING id, platform_code, external_key, discovered_via, state, reason, next_at, lease_id, lease_until, failures, namespace, egress_region, target_id, job_started_at, job_writer_binding, job_round, job_id, attempt_id, observation_id, observation_hash, game_id, game_source_id, profile_scope_key, profile, profile_at, profile_observation_id, work_title, relation, relation_attached, decision_version, review, review_until, published_at, decided_at, created_at, updated_at, review_revoked, discovery_modified, job_generation, automation
 `
 
 type InsertIntakeCandidateParams struct {
@@ -241,6 +244,9 @@ func (q *Queries) InsertIntakeCandidate(ctx context.Context, arg InsertIntakeCan
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.ReviewRevoked,
+		&i.DiscoveryModified,
+		&i.JobGeneration,
+		&i.Automation,
 	)
 	return i, err
 }
@@ -279,7 +285,7 @@ func (q *Queries) InsertIntakeSource(ctx context.Context, arg InsertIntakeSource
 }
 
 const intakeCandidate = `-- name: IntakeCandidate :one
-SELECT id, platform_code, external_key, discovered_via, state, reason, next_at, lease_id, lease_until, failures, namespace, egress_region, target_id, job_started_at, job_writer_binding, job_round, job_id, attempt_id, observation_id, observation_hash, game_id, game_source_id, profile_scope_key, profile, profile_at, profile_observation_id, work_title, relation, relation_attached, decision_version, review, review_until, published_at, decided_at, created_at, updated_at, review_revoked FROM game_intake_candidates WHERE platform_code=$1 AND external_key=$2
+SELECT id, platform_code, external_key, discovered_via, state, reason, next_at, lease_id, lease_until, failures, namespace, egress_region, target_id, job_started_at, job_writer_binding, job_round, job_id, attempt_id, observation_id, observation_hash, game_id, game_source_id, profile_scope_key, profile, profile_at, profile_observation_id, work_title, relation, relation_attached, decision_version, review, review_until, published_at, decided_at, created_at, updated_at, review_revoked, discovery_modified, job_generation, automation FROM game_intake_candidates WHERE platform_code=$1 AND external_key=$2
 `
 
 type IntakeCandidateParams struct {
@@ -328,6 +334,9 @@ func (q *Queries) IntakeCandidate(ctx context.Context, arg IntakeCandidateParams
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.ReviewRevoked,
+		&i.DiscoveryModified,
+		&i.JobGeneration,
+		&i.Automation,
 	)
 	return i, err
 }
@@ -425,7 +434,7 @@ func (q *Queries) LockIntakeAdmission(ctx context.Context) error {
 }
 
 const lockIntakeCandidate = `-- name: LockIntakeCandidate :one
-SELECT id, platform_code, external_key, discovered_via, state, reason, next_at, lease_id, lease_until, failures, namespace, egress_region, target_id, job_started_at, job_writer_binding, job_round, job_id, attempt_id, observation_id, observation_hash, game_id, game_source_id, profile_scope_key, profile, profile_at, profile_observation_id, work_title, relation, relation_attached, decision_version, review, review_until, published_at, decided_at, created_at, updated_at, review_revoked FROM game_intake_candidates WHERE platform_code=$1 AND external_key=$2 FOR UPDATE
+SELECT id, platform_code, external_key, discovered_via, state, reason, next_at, lease_id, lease_until, failures, namespace, egress_region, target_id, job_started_at, job_writer_binding, job_round, job_id, attempt_id, observation_id, observation_hash, game_id, game_source_id, profile_scope_key, profile, profile_at, profile_observation_id, work_title, relation, relation_attached, decision_version, review, review_until, published_at, decided_at, created_at, updated_at, review_revoked, discovery_modified, job_generation, automation FROM game_intake_candidates WHERE platform_code=$1 AND external_key=$2 FOR UPDATE
 `
 
 type LockIntakeCandidateParams struct {
@@ -474,12 +483,15 @@ func (q *Queries) LockIntakeCandidate(ctx context.Context, arg LockIntakeCandida
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.ReviewRevoked,
+		&i.DiscoveryModified,
+		&i.JobGeneration,
+		&i.Automation,
 	)
 	return i, err
 }
 
 const lockIntakeLease = `-- name: LockIntakeLease :one
-SELECT id, platform_code, external_key, discovered_via, state, reason, next_at, lease_id, lease_until, failures, namespace, egress_region, target_id, job_started_at, job_writer_binding, job_round, job_id, attempt_id, observation_id, observation_hash, game_id, game_source_id, profile_scope_key, profile, profile_at, profile_observation_id, work_title, relation, relation_attached, decision_version, review, review_until, published_at, decided_at, created_at, updated_at, review_revoked FROM game_intake_candidates WHERE id=$1 AND lease_id=$2 AND lease_until>statement_timestamp() FOR UPDATE
+SELECT id, platform_code, external_key, discovered_via, state, reason, next_at, lease_id, lease_until, failures, namespace, egress_region, target_id, job_started_at, job_writer_binding, job_round, job_id, attempt_id, observation_id, observation_hash, game_id, game_source_id, profile_scope_key, profile, profile_at, profile_observation_id, work_title, relation, relation_attached, decision_version, review, review_until, published_at, decided_at, created_at, updated_at, review_revoked, discovery_modified, job_generation, automation FROM game_intake_candidates WHERE id=$1 AND lease_id=$2 AND lease_until>statement_timestamp() FOR UPDATE
 `
 
 type LockIntakeLeaseParams struct {
@@ -528,6 +540,9 @@ func (q *Queries) LockIntakeLease(ctx context.Context, arg LockIntakeLeaseParams
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.ReviewRevoked,
+		&i.DiscoveryModified,
+		&i.JobGeneration,
+		&i.Automation,
 	)
 	return i, err
 }

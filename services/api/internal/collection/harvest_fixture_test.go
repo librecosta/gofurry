@@ -38,8 +38,10 @@ import (
 	"golang.org/x/net/dns/dnsmessage"
 )
 
-const harvestRevision = "80847f575486468859c1d036ee7dd351a7ef5333"
+const harvestRevision = "349730b5c3ff57be084dfac72dfb77f19dacb54c"
 const fixtureStream = "gofurry_b1_test"
+const discoveryStream = "gofurry_catalog_test"
+const fixtureSteamKey = "a920b029bb19982830080c13d82478a1"
 const postgresImage = "postgres:18.6@sha256:5a5a84b19854a9ffaa54082c166ff4ec27473a361e496e5ea167f298f2da9722"
 
 var harvestSource = flag.String("harvest-source", "", "Read-only Harvest V0.1-D checkout")
@@ -226,12 +228,15 @@ type lab struct {
 	t                                       *testing.T
 	dir, bin, address, config, workerConfig string
 	writer, reader, operator                string
+	discoveryWriter, discoveryReader        string
 	env                                     []string
 	net                                     *httptest.Server
 	http                                    *http.Client
 	plane, worker                           *process
 	mode, dns, news                         atomic.Int32
 	intakeVersion                           atomic.Int32
+	discoveryMode                           atomic.Int32
+	created                                 int64
 	calls                                   atomic.Int64
 	certificate                             atomic.Pointer[tls.Certificate]
 	sign                                    func() *tls.Certificate
@@ -242,12 +247,14 @@ func newLab(t *testing.T, db platform.DatabaseConfig) *lab {
 	dir := t.TempDir()
 	l := &lab{t: t, dir: dir, address: localAddress(t), writer: rand.Text() + rand.Text(), reader: rand.Text() + rand.Text(),
 		operator: rand.Text() + rand.Text(), http: &http.Client{Timeout: 4 * time.Second, Transport: &http.Transport{}}}
+	l.discoveryWriter, l.discoveryReader = rand.Text()+rand.Text(), rand.Text()+rand.Text()
+	l.created = time.Now().UTC().Unix()
 	t.Cleanup(l.http.CloseIdleConnections)
 	source, err := filepath.Abs(*harvestSource)
 	must(t, err)
 	if run(t, source, nil, "git", "rev-parse", "HEAD") != harvestRevision ||
 		run(t, source, nil, "git", "status", "--porcelain", "--untracked-files=no") != "" {
-		t.Fatal("expected clean pinned Harvest V0.1-D sources")
+		t.Fatal("expected clean pinned Harvest Steam catalog sources")
 	}
 	l.bin = filepath.Join(dir, "harvest-fixture")
 	if runtime.GOOS == "windows" {
@@ -281,18 +288,26 @@ principals:
 	for _, grant := range []struct{ name, role, token string }{
 		{"b1_writer", "writer", l.writer}, {"b1_reader", "reader", l.reader}, {"b1_operator", "operator", l.operator}, {"b1_worker", "worker", worker},
 	} {
+		grantNS, grantCaps := fixtureStream, strings.Join(capabilities, ", ")
+		if grant.role == "worker" || grant.role == "operator" {
+			grantNS += ", " + discoveryStream
+			grantCaps += ", steam.catalog"
+		}
 		fmt.Fprintf(&yaml, `  - name: %s
     role: %s
     token: %q
     namespaces: [%s]
     capabilities: [%s]
 `,
-			grant.name, grant.role, grant.token, fixtureStream, strings.Join(capabilities, ", "))
+			grant.name, grant.role, grant.token, grantNS, grantCaps)
 		if grant.role == "worker" {
 			fmt.Fprintln(&yaml, `    max_slots: 1
     egress_profiles: [local]`)
 		}
 	}
+	fmt.Fprintf(&yaml, `  - {name: catalog_writer, role: writer, token: %q, namespaces: [%s], capabilities: [steam.catalog]}
+  - {name: catalog_reader, role: reader, token: %q, namespaces: [%s], capabilities: [steam.catalog]}
+`, l.discoveryWriter, discoveryStream, l.discoveryReader, discoveryStream)
 	fmt.Fprintln(&yaml, `network:
   global_bucket: global
   routes:
@@ -312,6 +327,7 @@ principals:
 		fmt.Fprintf(&yaml, `    - {capability: %s, namespace: %s, profile: local, provider_bucket: %s, account_bucket: %s}
 `, cap, fixtureStream, provider, account)
 	}
+	fmt.Fprintf(&yaml, "    - {capability: steam.catalog, namespace: %s, profile: local, provider_bucket: steam_catalog, account_bucket: steam_account}\n", discoveryStream)
 	fmt.Fprintln(&yaml, "  quotas:")
 	for _, bucket := range []string{"global", "direct", "web", "web_account", "steam_api", "steam_account", "store_account"} {
 		fmt.Fprintf(&yaml, "    - {id: %s, burst: 32, per_minute: 600, concurrency: 4", bucket)
@@ -321,18 +337,21 @@ principals:
 		fmt.Fprintln(&yaml, "}")
 	}
 	fmt.Fprintln(&yaml, "    - {id: steam_store, burst: 1, per_minute: 30, concurrency: 1}")
+	fmt.Fprintln(&yaml, "    - {id: steam_catalog, burst: 8, per_minute: 60, concurrency: 1}")
 	must(t, os.WriteFile(l.config, []byte(yaml.String()), 0600))
 	yaml.Reset()
-	fmt.Fprintf(&yaml, `control_url: %q
+	fmt.Fprintf(&yaml, `steam_catalog_api_key: %q
+control_url: %q
 token: %q
 concurrency: 1
 offers:
-`, "http://"+l.address, worker)
+`, fixtureSteamKey, "http://"+l.address, worker)
 	for _, cap := range capabilities {
 		impl := strings.Split(cap, ".")[0] + "_v1"
 		fmt.Fprintf(&yaml, `  - {capability: %s, request_schema: 1, output_schema: 1, implementation: %s}
 `, cap, impl)
 	}
+	fmt.Fprintln(&yaml, "  - {capability: steam.catalog, request_schema: 1, output_schema: 1, implementation: steam_v1}")
 	fmt.Fprintln(&yaml, `egress:
   profiles:
     - {name: local, mode: direct, direct_region: cn}`)
@@ -407,7 +426,7 @@ func (l *lab) network() string {
 		pub, priv, err := ed25519.GenerateKey(rand.Reader)
 		must(t, err)
 		template := &x509.Certificate{SerialNumber: big.NewInt(serial), NotBefore: now.Add(-time.Hour), NotAfter: now.Add(8 * time.Hour),
-			DNSNames: []string{"*.example.com", "dns.google", "store.steampowered.com", "api.steampowered.com"},
+			DNSNames: []string{"*.example.com", "dns.google", "store.steampowered.com", "api.steampowered.com", "partner.steam-api.com"},
 			KeyUsage: x509.KeyUsageDigitalSignature, ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}}
 		leaf, err := x509.CreateCertificate(rand.Reader, template, ca, pub, key)
 		must(t, err)
@@ -450,6 +469,8 @@ func (l *lab) feed(w http.ResponseWriter, r *http.Request) {
 		raw, _ = reply.Pack()
 		w.Header().Set("Content-Type", "application/dns-message")
 		_, _ = w.Write(raw)
+	case "partner.steam-api.com":
+		l.catalogFeed(w, r)
 	case "store.steampowered.com":
 		w.Header().Set("Content-Type", "application/json")
 		extra := `"is_free":true`
@@ -465,6 +486,8 @@ func (l *lab) feed(w http.ResponseWriter, r *http.Request) {
 			extra += `,"supported_languages":"English<br>Simplified Chinese<script>private-script</script>","developers":["Fox Studio"],"publishers":["Pine Press"],"platforms":{"windows":true,"mac":false},"categories":[{"id":2,"description":"Single-player"}],"genres":[{"id":"23","description":"Indie"}],"release_date":{"coming_soon":true,"date":"Q3 2027"},"header_image":"https://cdn.akamai.steamstatic.com/fixture/header.jpg?secret=fixture","capsule_image":"https://cdn.akamai.steamstatic.com/fixture/capsule.jpg","screenshots":[{"id":0,"path_full":"https://cdn.akamai.steamstatic.com/fixture/shot.jpg"},{"id":1,"path_full":"https://not-steam.example/fixture/unsafe.jpg"}],"movies":[{"id":0,"mp4":{"max":"https://video.steamcontent.com/fixture/movie.mp4"}}]`
 		}
 		switch app {
+		case "3100000001", "3100000002", "3100000003", "3100000004", "3100000005", "3100000006", "3100000007", "3100000008", "3100000009":
+			name, kind, description, extra = l.eligibilityFixture(app, name, kind, description, extra)
 		case "42":
 			description = "An independent English description."
 			if q.Get("l") == "schinese" && q.Get("cc") != "HK" {

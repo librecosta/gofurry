@@ -56,11 +56,11 @@ tasks:
     cmds:
       - node scripts/check-catalog.mjs
   check:collection:
-    desc: Verify GoFurry and pinned Harvest V0.1-D against separate disposable PostgreSQL 18 databases
+    desc: Verify GoFurry and pinned Harvest against separate disposable PostgreSQL 18 databases
     vars:
       HARVEST_SOURCE: '{{default (print .ROOT_DIR "/../harvest") .HARVEST_SOURCE}}'
     cmds:
-      - go -C services/api test -tags=integration ./internal/collection -run '^Test(CollectionHarvestD|GameIntakeHarvestD|GameIntakeAdmission|DurableCatalogForward|SteamMetadataScale)$' -count=1 -timeout=8m -v -args -harvest-source "{{.HARVEST_SOURCE}}"
+      - go -C services/api test -tags=integration ./internal/collection -run '^Test(CollectionHarvestD|GameIntakeHarvestD|GameIntakeAdmission|DurableCatalogForward|SteamMetadataScale|SteamDiscoveryHarvest|SteamDiscoveryScale)$' -count=1 -timeout=8m -v -args -harvest-source "{{.HARVEST_SOURCE}}"
   check:wallpapers:
     cmds:
       - go -C services/api test ./internal/wallpaper ./internal/management ./internal/storage ./internal/platform

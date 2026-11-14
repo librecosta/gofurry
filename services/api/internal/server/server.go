@@ -174,8 +174,12 @@ func New(logger zerolog.Logger, cfg platform.Config) *Server {
 	var runCollection sync.Once
 	var collectionWG sync.WaitGroup
 	var intake *collection.Intake
+	var steamDiscovery *collection.Discovery
 	if collector != nil && cfg.Harvest.IntakeEnabled {
 		intake = collection.NewIntake(pool, cfg.Harvest)
+		if cfg.Harvest.Discovery != nil && cfg.Harvest.Discovery.Enabled {
+			steamDiscovery = collection.NewDiscovery(pool, cfg.Harvest, intake)
+		}
 	}
 	var heatPool *pgxpool.Pool
 	if cfg.Navigation != nil && cfg.Navigation.HeatEnabled && pool != nil {
@@ -200,6 +204,11 @@ func New(logger zerolog.Logger, cfg platform.Config) *Server {
 			if intake != nil {
 				collectionWG.Go(func() {
 					intake.Run(collectionCtx, func() { logger.Warn().Msg("Game intake tick deferred") })
+				})
+			}
+			if steamDiscovery != nil {
+				collectionWG.Go(func() {
+					steamDiscovery.Run(collectionCtx, func() { logger.Warn().Msg("Steam discovery tick deferred") })
 				})
 			}
 			if yearbookPool != nil {
@@ -230,6 +239,9 @@ func New(logger zerolog.Logger, cfg platform.Config) *Server {
 		once.Do(func() {
 			stopCollection()
 			collectionWG.Wait()
+			if steamDiscovery != nil {
+				steamDiscovery.Close()
+			}
 			if intake != nil {
 				intake.Close()
 			}

@@ -42,6 +42,7 @@ type IntakeEvidence struct {
 	ScopeKey        string         `json:"scope_key,omitempty"`
 	Review          jsontext.Value `json:"review,omitzero"`
 	ReviewRevoked   bool           `json:"review_revoked,omitempty"`
+	Automation      jsontext.Value `json:"automation,omitzero"`
 	Relation        jsontext.Value `json:"relation,omitzero"`
 }
 
@@ -78,6 +79,9 @@ func (s *Intake) Inspect(ctx context.Context, platform, key string) (CandidateSt
 		if string(row.Relation) != "{}" {
 			out.Evidence.Relation = row.Relation
 		}
+		if string(row.Automation) != "{}" {
+			out.Evidence.Automation = row.Automation
+		}
 	}
 	if row.GameID == nil {
 		return out, nil
@@ -112,11 +116,17 @@ func (s *Intake) ReviewSteam(ctx context.Context, key, furryRef, sfwRef string) 
 		if err != nil {
 			return err
 		}
-		if c.State == "rejected" || c.Reason == "merge_suggested" {
+		if c.State == "rejected" && c.Reason != "adult_game" && c.Reason != "irrelevant_game" || c.Reason == "merge_suggested" {
 			return ErrIntakeState
 		}
-		if err = q.PutIntakeReview(ctx, dbgen.PutIntakeReviewParams{ID: c.ID, Review: proof}); err != nil || c.State != "accepted" {
+		if err = q.PutIntakeReview(ctx, dbgen.PutIntakeReviewParams{ID: c.ID, Review: proof}); err != nil {
 			return err
+		}
+		if c.Reason == "eligibility_uncertain" || c.Reason == "adult_game" || c.Reason == "irrelevant_game" {
+			return q.WakeReviewedEligibility(ctx, c.ID)
+		}
+		if c.State != "accepted" {
+			return nil
 		}
 		game, err := q.LockGame(ctx, *c.GameID)
 		if err != nil {

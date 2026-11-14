@@ -40,11 +40,13 @@ type intakeAttempt struct {
 type intakeJobDetail struct {
 	Job      intakeJob       `json:"job"`
 	Attempts []intakeAttempt `json:"attempts"`
+	Results  []observation   `json:"confirmed_results"`
 }
 
 type intakeObservation struct {
 	observation
-	detail steamDetail
+	detail           steamDetail
+	confirmedAttempt uuid.UUID
 }
 
 func intakePlan(region string) Plan {
@@ -107,6 +109,9 @@ func (s *Intake) submitJob(ctx context.Context, c dbgen.GameIntakeCandidate, req
 	// its ID is known, then use read-only GETs. The writer and origin fence
 	// above keeps replay in the same Harvest idempotency namespace.
 	key := "gofurry-intake-" + c.ID.String() + "-" + strconv.Itoa(int(c.JobRound))
+	if c.JobGeneration > 0 {
+		key += "-" + strconv.FormatInt(c.JobGeneration, 10)
+	}
 	in := struct {
 		Request request `json:"request"`
 	}{req}
@@ -137,8 +142,37 @@ func (s *Intake) job(ctx context.Context, c dbgen.GameIntakeCandidate, req reque
 
 func (s *Intake) attributedObservation(ctx context.Context, c dbgen.GameIntakeCandidate, j intakeJobDetail, expected segmentScope, key string) (intakeObservation, error) {
 	var out intakeObservation
-	if j.Job.AcceptedAttempt == nil || !v7(*j.Job.AcceptedAttempt) {
+	attempt, err := acceptedIntakeAttempt(j)
+	if err != nil {
+		return out, err
+	}
+	if len(j.Results) > 3 {
 		return out, errProtocol
+	}
+	for _, o := range j.Results {
+		if o.ScopeKey != key {
+			continue
+		}
+		if out.ID != uuid.Nil() || !acceptedObservation(o, j.Job, attempt, expected, key) ||
+			o.State != "present" || o.Evidence != "" {
+			return out, errProtocol
+		}
+		normalized, err := normalizeSteam(o, c.ExternalKey)
+		if err != nil || json.Unmarshal(normalized.Data, &out.detail) != nil {
+			return out, errProtocol
+		}
+		out.observation = o
+		out.confirmedAttempt = attempt.ID
+	}
+	if out.ID != uuid.Nil() {
+		return out, nil
+	}
+	return s.intakeHistoryObservation(ctx, c, j, attempt, expected, key)
+}
+
+func acceptedIntakeAttempt(j intakeJobDetail) (intakeAttempt, error) {
+	if j.Job.AcceptedAttempt == nil || !v7(*j.Job.AcceptedAttempt) {
+		return intakeAttempt{}, errProtocol
 	}
 	var attempt intakeAttempt
 	for _, a := range j.Attempts {
@@ -149,8 +183,22 @@ func (s *Intake) attributedObservation(ctx context.Context, c dbgen.GameIntakeCa
 	}
 	if attempt.Claimed.IsZero() || !attempt.Ended.Equal(j.Job.Updated) || attempt.Ended.Before(attempt.Claimed) ||
 		attempt.Ended.After(j.Job.Deadline) || attempt.State != j.Job.State {
-		return out, errProtocol
+		return attempt, errProtocol
 	}
+	return attempt, nil
+}
+
+func acceptedObservation(o observation, j intakeJob, a intakeAttempt, expected segmentScope, key string) bool {
+	return o.TargetID == j.Request.TargetID && o.Capability == j.Request.Capability && o.Schema == 1 &&
+		o.ScopeKey == key && o.Scope.Namespace == expected.Namespace && o.Scope.scope == expected.scope &&
+		scopeMatches(o.Scope, key) && o.Scope.Dimensions["section"] == expected.Dimensions["section"] &&
+		len(o.Scope.Dimensions) == 1 && v7(o.JobID) && v7(o.AttemptID) && !o.ReceivedAt.After(a.Ended) &&
+		(o.JobID != j.ID || o.AttemptID == a.ID && o.ReceivedAt.Equal(a.Ended)) &&
+		o.Source == "steam" && !o.Sample && validObservation(result{observation: o})
+}
+
+func (s *Intake) intakeHistoryObservation(ctx context.Context, c dbgen.GameIntakeCandidate, j intakeJobDetail, attempt intakeAttempt, expected segmentScope, key string) (intakeObservation, error) {
+	var out intakeObservation
 	q := url.Values{"stream": {c.Namespace}, "target": {c.TargetID.String()}, "capability": {intakeCapability}, "scope": {key},
 		"since": {attempt.Claimed.UTC().Format(time.RFC3339Nano)}, "until": {attempt.Ended.UTC().Format(time.RFC3339Nano)}, "limit": {"8"}}
 	r := s.collection.remote
@@ -187,6 +235,7 @@ func (s *Intake) attributedObservation(ctx context.Context, c dbgen.GameIntakeCa
 				return out, errProtocol
 			}
 			out.observation = o
+			out.confirmedAttempt = attempt.ID
 		}
 		if page.After == "" {
 			return out, nil

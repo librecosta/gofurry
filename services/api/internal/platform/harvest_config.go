@@ -10,16 +10,17 @@ import (
 )
 
 type HarvestConfig struct {
-	URL                string        `mapstructure:"url" json:"-"`
-	Namespace          string        `mapstructure:"namespace"`
-	WriterToken        string        `mapstructure:"writer_token" json:"-"`
-	ReaderToken        string        `mapstructure:"reader_token" json:"-"`
-	ConsumerID         string        `mapstructure:"consumer_id"`
-	Consume            bool          `mapstructure:"consume"`
-	PollInterval       time.Duration `mapstructure:"poll_interval" json:"-"`
-	PageSize           int           `mapstructure:"page_size"`
-	IntakeEnabled      bool          `mapstructure:"intake_enabled"`
-	IntakeEgressRegion string        `mapstructure:"intake_egress_region"`
+	URL                string           `mapstructure:"url" json:"-"`
+	Namespace          string           `mapstructure:"namespace"`
+	WriterToken        string           `mapstructure:"writer_token" json:"-"`
+	ReaderToken        string           `mapstructure:"reader_token" json:"-"`
+	ConsumerID         string           `mapstructure:"consumer_id"`
+	Consume            bool             `mapstructure:"consume"`
+	PollInterval       time.Duration    `mapstructure:"poll_interval" json:"-"`
+	PageSize           int              `mapstructure:"page_size"`
+	IntakeEnabled      bool             `mapstructure:"intake_enabled"`
+	IntakeEgressRegion string           `mapstructure:"intake_egress_region"`
+	Discovery          *DiscoveryConfig `mapstructure:"discovery" json:"-"`
 }
 
 var harvestNamespace = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,62}$`)
@@ -69,5 +70,5 @@ func (c *Config) validateHarvest() error {
 	if h.PollInterval < time.Second || h.PollInterval > 5*time.Minute || h.PageSize < 1 || h.PageSize > 100 {
 		return errors.New("harvest poll_interval or page_size is outside its supported bounds")
 	}
-	return nil
+	return c.validateDiscovery(h)
 }

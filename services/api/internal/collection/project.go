@@ -128,6 +128,11 @@ func (s *Service) project(ctx context.Context, q *dbgen.Queries, generation, epo
 			if err := refreshIntakeProfiles(ctx, q, generation, &src.ID, r.ScopeKey); err != nil {
 				return err
 			}
+			if r.State == "present" && r.Position > prior.Position {
+				if err := applySteamAdultEvidence(ctx, q, generation, &src.ID, r.ScopeKey); err != nil {
+					return err
+				}
+			}
 		}
 		if r.Capability == intakeCapability {
 			if err := saveSteamMetadata(ctx, q, generation, epoch, &src.ID, r.ScopeKey); err != nil {

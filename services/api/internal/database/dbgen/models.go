@@ -193,6 +193,9 @@ type GameIntakeCandidate struct {
 	CreatedAt            pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
 	ReviewRevoked        bool               `json:"review_revoked"`
+	DiscoveryModified    int64              `json:"discovery_modified"`
+	JobGeneration        int64              `json:"job_generation"`
+	Automation           []byte             `json:"automation"`
 }
 
 type GameLocalization struct {
@@ -464,6 +467,41 @@ type StartWallpaper struct {
 	CreatedAt     pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
 	PublishedAt   pgtype.Timestamptz `json:"published_at"`
+}
+
+type SteamDiscoveryState struct {
+	Namespace     string             `json:"namespace"`
+	Paused        bool               `json:"paused"`
+	Backfill      bool               `json:"backfill"`
+	Watermark     int64              `json:"watermark"`
+	WindowStarted int64              `json:"window_started"`
+	ModifiedSince int64              `json:"modified_since"`
+	LastAppid     int64              `json:"last_appid"`
+	PageLimit     int32              `json:"page_limit"`
+	EgressRegion  string             `json:"egress_region"`
+	TargetID      *uuid.UUID         `json:"target_id"`
+	IntentID      *uuid.UUID         `json:"intent_id"`
+	IntentAt      pgtype.Timestamptz `json:"intent_at"`
+	WriterBinding string             `json:"writer_binding"`
+	JobID         *uuid.UUID         `json:"job_id"`
+	NextAt        pgtype.Timestamptz `json:"next_at"`
+	BudgetDay     int64              `json:"budget_day"`
+	JobsToday     int32              `json:"jobs_today"`
+	SelectedToday int32              `json:"selected_today"`
+	ExploredToday int32              `json:"explored_today"`
+	AdmissionDay  int64              `json:"admission_day"`
+	AdmittedToday int32              `json:"admitted_today"`
+	Pages         int64              `json:"pages"`
+	RowsSeen      int64              `json:"rows_seen"`
+	Windows       int64              `json:"windows"`
+	Admitted      int64              `json:"admitted"`
+	Pending       []byte             `json:"pending"`
+	LastCode      string             `json:"last_code"`
+}
+
+type SteamEligibilityAiBudget struct {
+	UtcDay pgtype.Date `json:"utc_day"`
+	Calls  int32       `json:"calls"`
 }
 
 type WallpaperAuditLog struct {

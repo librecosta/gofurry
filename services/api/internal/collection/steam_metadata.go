@@ -90,10 +90,29 @@ func normalizedSteamDetails(o observation) (steamDetail, error) {
 	if v.Release != nil {
 		v.Release.DateText = steamPlainText(v.Release.DateText, 128)
 	}
+	if v.Content != nil && !validSteamContent(v.Content) {
+		v.Content = nil
+	}
 	// A requested Chinese locale may come back with an English fallback.
 	// Require Chinese-script synopsis text before promoting a zh presentation.
 	v.Localized = o.Scope.Locale == "zh-cn" && hasChineseSynopsis(v.Description)
 	return v, nil
+}
+
+func validSteamContent(v *catalog.SteamContent) bool {
+	if v.RequiredAge != nil && (*v.RequiredAge < 0 || *v.RequiredAge > 21) ||
+		!slices.Contains([]string{"", "E", "E10+", "T", "M", "AO"}, v.ESRB) ||
+		!slices.Contains([]string{"", "3", "7", "12", "16", "18"}, v.PEGI) || len(v.Descriptors) > 16 {
+		return false
+	}
+	prior := 0
+	for _, id := range v.Descriptors {
+		if id <= prior || id > 32767 {
+			return false
+		}
+		prior = id
+	}
+	return true
 }
 
 func hasChineseSynopsis(text string) bool {

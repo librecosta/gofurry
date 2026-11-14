@@ -44,6 +44,10 @@ func lockIntakeCandidate(ctx context.Context, q *dbgen.Queries, source catalog.S
 }
 
 func (s *Intake) resolve(ctx context.Context, claim dbgen.GameIntakeCandidate, o intakeObservation, scopeKey string) error {
+	var classification steamEligibility
+	if s.automation && v7(o.ID) {
+		classification = s.classifySteam(ctx, claim, o)
+	}
 	return s.transact(ctx, func(ctx context.Context, q *dbgen.Queries) error {
 		c, err := q.LockIntakeLease(ctx, dbgen.LockIntakeLeaseParams{ID: claim.ID, LeaseID: claim.LeaseID})
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -61,7 +65,7 @@ func (s *Intake) resolve(ctx context.Context, claim dbgen.GameIntakeCandidate, o
 			_, _, decision.ProfileScopeKey = intakeRequest(c)
 		}
 		if v7(o.ID) {
-			decision.AttemptID, decision.ObservationID, decision.ObservationHash = &o.AttemptID, &o.ID, o.Hash
+			decision.AttemptID, decision.ObservationID, decision.ObservationHash = &o.confirmedAttempt, &o.ID, o.Hash
 			decision.ProfileAt, decision.ProfileScopeKey = timestamp(o.ObservedAt), scopeKey
 			decision.WorkTitle = strings.ToLower(o.detail.Name)
 			decision.Profile, _ = json.Marshal(catalog.Localization{Locale: "en", Name: clean(o.detail.Name, 160), Summary: o.detail.Description})
@@ -71,6 +75,15 @@ func (s *Intake) resolve(ctx context.Context, claim dbgen.GameIntakeCandidate, o
 			}); err != nil {
 				return err
 			}
+			if classification.Policy != "" && !c.ReviewRevoked {
+				proof, err := json.Marshal(classification)
+				if err != nil {
+					return err
+				}
+				if err = q.PutSteamEligibility(ctx, dbgen.PutSteamEligibilityParams{ID: c.ID, Automation: proof}); err != nil {
+					return err
+				}
+			}
 		}
 
 		current, err := findIntakeSource(ctx, q, source)
@@ -79,6 +92,16 @@ func (s *Intake) resolve(ctx context.Context, claim dbgen.GameIntakeCandidate, o
 		}
 		if err != nil {
 			return err
+		}
+		if current == nil && c.DiscoveredVia == "discovery" && classification.AppType == "game" && string(c.Review) == "{}" {
+			switch {
+			case classification.Content == "adult":
+				return releaseIntake(ctx, q, c, "rejected", "adult_game", 0, 0)
+			case classification.Relevance == "irrelevant":
+				return releaseIntake(ctx, q, c, "rejected", "irrelevant_game", 0, 0)
+			case classification.Content != "sfw" || classification.Relevance != "relevant":
+				return releaseIntake(ctx, q, c, "deferred", "eligibility_uncertain", 0, 0)
+			}
 		}
 		other, err := relatedIntakeSource(ctx, q, c)
 		if errors.Is(err, errIntakeAmbiguousSource) {

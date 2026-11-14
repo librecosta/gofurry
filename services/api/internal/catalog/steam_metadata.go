@@ -13,6 +13,14 @@ type SteamDetails struct {
 	Categories         []SteamLabel    `json:"categories,omitempty"`
 	Genres             []SteamLabel    `json:"genres,omitempty"`
 	Release            *SteamRelease   `json:"release,omitempty"`
+	Content            *SteamContent   `json:"content_rating,omitempty"`
+}
+
+type SteamContent struct {
+	RequiredAge *int   `json:"required_age,omitempty"`
+	ESRB        string `json:"esrb,omitempty"`
+	PEGI        string `json:"pegi,omitempty"`
+	Descriptors []int  `json:"descriptors,omitempty"`
 }
 
 type SteamPlatforms struct {

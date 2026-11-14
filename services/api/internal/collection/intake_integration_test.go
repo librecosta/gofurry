@@ -281,8 +281,8 @@ func TestGameIntakeHarvestD(t *testing.T) {
 	}
 	count(t, remote, 0, "SELECT count(*) FROM harvest.schedules s JOIN harvest.targets t ON t.id=s.target_id WHERE t.external_key IN ('3000000003','3000000004','3000000005')")
 
-	// A Job that merely confirms existing data must not claim the older Job's
-	// Observation, even when all the other provenance fields match.
+	// Confirmation links the original immutable Observation without
+	// replacing its creation Job and Attempt.
 	key := targetKey{fixtureStream, "steam", "app", "3000000006"}
 	var target targetView
 	must(t, h.call(ctx, l.writer, "POST", "targets", nil, key, &target, 201))
@@ -291,10 +291,11 @@ func TestGameIntakeHarvestD(t *testing.T) {
 	l.job(req)
 	_, err = s.SubmitSteam(ctx, key.ExternalKey, "operator")
 	must(t, err)
-	unchanged := waitForIntake(t, s, pool, key.ExternalKey, "deferred", "observation_unattributed", true)
-	if unchanged.Observation != nil || unchanged.Game != nil {
-		t.Fatal("an old Observation was assigned to an unchanged Job")
+	unchanged := waitForIntake(t, s, pool, key.ExternalKey, "accepted", "created_game", true)
+	if unchanged.Observation == nil || unchanged.Game == nil || unchanged.Attempt == nil {
+		t.Fatal("Harvest confirmation did not attribute the result")
 	}
+	count(t, remote, 1, "SELECT count(*) FROM harvest.observations WHERE id=$1 AND job_id<>$2 AND attempt_id<>$3", *unchanged.Observation, *unchanged.Job, *unchanged.Attempt)
 
 	testIntakeRelations(t, s, pool, catalogDB, accepted)
 	count(t, pool, 3, "SELECT count(*) FROM catalog_publication_decisions WHERE entity_id=$1 AND action IN ('publish','block','clear_block')", *accepted.Game)
