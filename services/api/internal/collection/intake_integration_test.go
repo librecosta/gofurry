@@ -179,13 +179,29 @@ func TestGameIntakeHarvestD(t *testing.T) {
 	assertIntakeHTTP(t, l.http, base, accepted.PublicID, 200, "Fable of the Foxes Revised")
 	steam := New(pool, cfg)
 	t.Cleanup(steam.Close)
-	binding, err := steam.BindGame(ctx, accepted.PublicID, first)
-	must(t, err)
+	var binding dbgen.CollectionBinding
+	// The running Consumer takes the same namespace lock as operator writes.
+	// A busy response precedes all writes, so retry just that contention.
+	expectEventually(t, 10*time.Second, "Consumer lock never released for the game binding", func() bool {
+		var err error
+		binding, err = steam.BindGame(ctx, accepted.PublicID, first)
+		if errors.Is(err, errBusy) {
+			return false
+		}
+		must(t, err)
+		return true
+	})
 	anchor := time.Now().UTC().Add(24 * time.Hour).Truncate(time.Second)
 	for _, market := range []string{"cn", "hk"} {
 		plan := Plan{Capability: intakeCapability, Locale: "zh-cn", Region: market, EgressRegion: "cn", Anchor: anchor, Interval: 24 * time.Hour}
-		_, err = steam.AddPlan(ctx, binding.ID, plan)
-		must(t, err)
+		expectEventually(t, 10*time.Second, "Consumer lock never released for the "+market+" plan", func() bool {
+			_, err := steam.AddPlan(ctx, binding.ID, plan)
+			if errors.Is(err, errBusy) {
+				return false
+			}
+			must(t, err)
+			return true
+		})
 		params, _, _, err := plan.params("app", first)
 		must(t, err)
 		l.job(request{TargetID: *accepted.Target, Capability: intakeCapability, Schema: 1, Params: params,
