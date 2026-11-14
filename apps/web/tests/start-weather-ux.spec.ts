@@ -41,6 +41,8 @@ test('weather UX: device permission is gesture-only, rounded POST resolves ID, w
   await picker(page); expect(positions).toHaveLength(0)
   await expect(locate(page)).toHaveAttribute('aria-describedby', /.+/)
   await expect(popup(page)).toContainText('Precise location is not saved.')
+  // Wait for the entering WeatherView to finish moving before taking two boxes.
+  await expect(popup(page).locator('[data-weather-view]:not([inert])')).toHaveCSS('opacity', '1')
   const backBox = await popup(page).getByRole('button', { name: 'Back to weather' }).boundingBox(), locateBox = await locate(page).boundingBox()
   expect(Math.abs(backBox!.y - locateBox!.y)).toBeLessThan(1); expect(backBox!.x + backBox!.width).toBeLessThan(locateBox!.x)
   await locate(page).click()
