@@ -9,6 +9,7 @@ import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
 import { sitesFixtureSQL } from './sites-fixture.mjs'
 import { profileFixtureSQL, profileID } from './site-profile-fixture.mjs'
+import { collectionGame, gamesFixtureSQL, memberTwo } from './game-channel-fixture.mjs'
 
 const root = fileURLToPath(new URL('../', import.meta.url))
 const webDir = join(root, 'apps', 'web')
@@ -181,6 +182,27 @@ try {
   run('go', ['-C', 'services/api', 'build', '-o', binary, './cmd/api'])
 
   for (const [region, fixture] of Object.entries(fixtures)) {
+    run('docker', ['exec', container, 'psql', '-Xq', '-v', 'ON_ERROR_STOP=1', '-U', 'postgres',
+      '-d', 'gofurry_d1_' + region.toLowerCase() + '_test', '-c', gamesFixtureSQL(region)])
+    const editor = join(scratch, region + '-collection.json')
+    const members = join(scratch, region + '-members.json')
+    await writeFile(editor, JSON.stringify({ slug: 'fox-volumes', localizations: [
+      { locale: 'en', name: 'Fox Volumes', summary: 'An editorial collection of fox stories.' },
+      ...(region === 'CN' ? [{ locale: 'zh', name: '狐狸故事集', summary: '一次策展。' }] : []),
+    ] }))
+    await writeFile(members, JSON.stringify([memberTwo, collectionGame, '2000000000000029']))
+    const channel = (args, capture = true) => run(binary, ['--config', fixture.config, 'game-channel', ...args], root, process.env, capture)
+    const created = JSON.parse(channel(['create', editor]))
+    const numbered = JSON.parse(channel(['members', created.public_id, String(created.revision), members]))
+    const published = JSON.parse(channel(['status', created.public_id, String(numbered.revision), 'published']))
+    fixture.gameCollection = published.public_id
+    if (region === 'CN') {
+      channel(['feature', 'primary', '1', collectionGame])
+      channel(['feature', 'collection_1', '1', published.public_id])
+      channel(['feature', 'secondary_1', '1', '2000000000000029'])
+      const conflict = spawnSync(binary, ['--config', fixture.config, 'game-channel', 'members', created.public_id, '1', members], { cwd: root, encoding: 'utf8' })
+      if (conflict.status !== 1 || !conflict.stderr.includes('revision or source conflict')) throw new Error('Stale collection edit was accepted')
+    }
     // The existing wallpaper read model uses this base to format URLs. Its
     // PostgreSQL query does not contact object storage.
     await appendFile(fixture.config, `storage:
@@ -239,6 +261,7 @@ navigation:
     ...process.env, CATALOG_CN_WEB: fixtures.CN.web, CATALOG_INTL_WEB: fixtures.INTL.web,
     CATALOG_CN_API: fixtures.CN.api, CATALOG_INTL_API: fixtures.INTL.api,
     CATALOG_CN_EDGE: fixtures.CN.edge,
+    GAME_COLLECTION_CN: fixtures.CN.gameCollection, GAME_COLLECTION_INTL: fixtures.INTL.gameCollection,
   })
 
   const apiDetail = fixtures.CN.api + '/api/v1/sites/000000000000000a'
@@ -266,6 +289,7 @@ navigation:
   if (await event('outbound_click', { siteID: '000000000000000d' }) !== 503 || !await status(fixtures.CN.api + '/api/v1/sites/directory', 200)) {
     throw new Error('Redis outage affected browsing or accepted an event')
   }
+  if (!(await status(fixtures.CN.api + '/api/v1/games/directory', 200))) throw new Error('Redis outage affected the game directory')
   run('docker', ['unpause', redisContainer])
   redisPaused = false
   await waitFor(async () => await event('detail_view') === 202, 'Shared Redis reservations')
@@ -280,6 +304,8 @@ navigation:
   await waitFor(() => status(fixtures.CN.api + '/api/v1/sites/directory', 503), 'Navigation database-outage status')
   await waitFor(() => status(fixtures.CN.web + '/sites', 503), 'Discovery SSR database-outage status')
   await waitFor(() => status(fixtures.CN.web + '/sites/directory?category=community', 503), 'Directory SSR database-outage status')
+  await waitFor(() => status(fixtures.CN.web + '/games/directory', 503), 'Game directory SSR database-outage status')
+  await waitFor(() => status(fixtures.CN.web + '/games/collections/' + fixtures.CN.gameCollection + '/fox-volumes', 503), 'Collection SSR database-outage status')
   if (!(await status(fixtures.CN.web + '/start', 200))) throw new Error('Database outage affected Start SSR')
   run('docker', ['unpause', container])
   paused = false
@@ -288,6 +314,7 @@ navigation:
   await waitFor(() => status(apiYearbook, 200), 'Yearbook API database recovery')
   await waitFor(() => status(webYearbook, 200), 'Yearbook SSR database recovery')
   await waitFor(() => status(fixtures.CN.api + '/api/v1/sites/directory', 200), 'Navigation database recovery')
+  await waitFor(() => status(fixtures.CN.web + '/games', 200), 'Game discovery database recovery')
   // A request paused in flight may already have reached PostgreSQL before its
   // client deadline. Either commit outcome is valid; replay must add nothing.
   const committed = totals()

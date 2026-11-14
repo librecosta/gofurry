@@ -60,7 +60,7 @@ tasks:
     vars:
       HARVEST_SOURCE: '{{default (print .ROOT_DIR "/../harvest") .HARVEST_SOURCE}}'
     cmds:
-      - go -C services/api test -tags=integration ./internal/collection -run '^Test(CollectionHarvestD|GameIntakeHarvestD|GameIntakeAdmission|DurableCatalogForward|SteamMetadataScale|SteamDiscoveryHarvest|SteamDiscoveryScale)$' -count=1 -timeout=8m -v -args -harvest-source "{{.HARVEST_SOURCE}}"
+      - go -C services/api test -tags=integration ./internal/collection -run '^Test(CollectionHarvestD|GameIntakeHarvestD|GameIntakeAdmission|DurableCatalogForward|SteamMetadataScale|SteamDiscoveryHarvest|SteamDiscoveryScale|GameChannelScale|GameCollectionLifecycle)$' -count=1 -timeout=8m -v -args -harvest-source "{{.HARVEST_SOURCE}}"
   check:wallpapers:
     cmds:
       - go -C services/api test ./internal/wallpaper ./internal/management ./internal/storage ./internal/platform

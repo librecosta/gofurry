@@ -29,6 +29,7 @@ WHERE id=$1 RETURNING *;
 
 -- name: RestoreGamePublication :one
 UPDATE games SET status='published',archived_at=NULL,published_at=coalesce(published_at,transaction_timestamp()),
+ first_published_at=coalesce(first_published_at,published_at,transaction_timestamp()),
  revision=revision+1,updated_at=transaction_timestamp()
 WHERE id=$1 RETURNING *;
 

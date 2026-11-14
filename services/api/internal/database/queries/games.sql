@@ -12,6 +12,7 @@ WHERE id=$1 RETURNING *;
 -- name: ChangeGameStatus :one
 UPDATE games SET status=sqlc.arg(new_status),revision=revision+1,updated_at=transaction_timestamp(),
  published_at=CASE WHEN sqlc.arg(new_status)::text='published' THEN transaction_timestamp() ELSE published_at END,
+ first_published_at=CASE WHEN sqlc.arg(new_status)::text='published' THEN coalesce(first_published_at,published_at,transaction_timestamp()) ELSE first_published_at END,
  archived_at=CASE WHEN sqlc.arg(new_status)::text='archived' THEN transaction_timestamp() ELSE NULL END
 WHERE id=sqlc.arg(id) RETURNING *;
 

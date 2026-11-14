@@ -3,7 +3,7 @@ package collection
 import (
 	"cmp"
 	json "encoding/json/v2"
-	"net/url"
+
 	"slices"
 	"strconv"
 	"strings"
@@ -130,28 +130,10 @@ func hasChineseSynopsis(text string) bool {
 	return han >= 2 && han >= letters
 }
 
-func steamAssetURL(raw string) string {
-	if len(raw) > 512 || strings.ContainsAny(raw, "<>") || strings.ContainsFunc(raw, unicode.IsSpace) {
-		return ""
-	}
-	link := publicURL(raw)
-	u, err := url.Parse(link)
-	if err != nil || u.Scheme != "https" || u.Host != u.Hostname() || u.Path == "" || u.Path == "/" ||
-		strings.ContainsAny(u.Path, "\\<>") || strings.ContainsFunc(u.Path, unicode.IsControl) {
-		return ""
-	}
-	host := u.Hostname()
-	if strings.HasSuffix(host, ".steamstatic.com") || strings.HasSuffix(host, ".steamcontent.com") ||
-		host == "steamcdn-a.akamaihd.net" || host == "steamuserimages-a.akamaihd.net" {
-		return link
-	}
-	return ""
-}
-
 func steamAssets(in []string, limit int) []string {
 	out := make([]string, 0, min(len(in), limit))
 	for _, raw := range in[:min(len(in), limit)] {
-		if link := steamAssetURL(raw); link != "" {
+		if link := catalog.SteamMediaURL(raw); link != "" {
 			out = append(out, link)
 		}
 	}
@@ -164,7 +146,7 @@ func normalizedSteamMedia(o observation) (steamMedia, error) {
 	if json.Unmarshal(o.Data, &v) != nil {
 		return v, errProtocol
 	}
-	v.Header, v.Capsule = steamAssetURL(v.Header), steamAssetURL(v.Capsule)
+	v.Header, v.Capsule = catalog.SteamMediaURL(v.Header), catalog.SteamMediaURL(v.Capsule)
 	v.Screenshots, v.Movies = steamAssets(v.Screenshots, 8), steamAssets(v.Movies, 4)
 	if v.Header == "" && v.Capsule == "" && len(v.Screenshots) == 0 && len(v.Movies) == 0 {
 		return v, errProtocol

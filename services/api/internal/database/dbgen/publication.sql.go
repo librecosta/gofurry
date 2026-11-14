@@ -83,7 +83,7 @@ func (q *Queries) LegacySitePolicyPending(ctx context.Context) (int64, error) {
 }
 
 const lockGamePublicID = `-- name: LockGamePublicID :one
-SELECT id, public_id, slug, status, revision, created_at, updated_at, published_at, archived_at, intake_managed, intake_display_source, publication_blocked FROM games WHERE public_id=$1 FOR UPDATE
+SELECT id, public_id, slug, status, revision, created_at, updated_at, published_at, archived_at, intake_managed, intake_display_source, publication_blocked, first_published_at FROM games WHERE public_id=$1 FOR UPDATE
 `
 
 func (q *Queries) LockGamePublicID(ctx context.Context, publicID string) (Game, error) {
@@ -102,6 +102,7 @@ func (q *Queries) LockGamePublicID(ctx context.Context, publicID string) (Game, 
 		&i.IntakeManaged,
 		&i.IntakeDisplaySource,
 		&i.PublicationBlocked,
+		&i.FirstPublishedAt,
 	)
 	return i, err
 }
@@ -161,8 +162,9 @@ func (q *Queries) PublishedGamesMissingPresentation(ctx context.Context) (int64,
 
 const restoreGamePublication = `-- name: RestoreGamePublication :one
 UPDATE games SET status='published',archived_at=NULL,published_at=coalesce(published_at,transaction_timestamp()),
+ first_published_at=coalesce(first_published_at,published_at,transaction_timestamp()),
  revision=revision+1,updated_at=transaction_timestamp()
-WHERE id=$1 RETURNING id, public_id, slug, status, revision, created_at, updated_at, published_at, archived_at, intake_managed, intake_display_source, publication_blocked
+WHERE id=$1 RETURNING id, public_id, slug, status, revision, created_at, updated_at, published_at, archived_at, intake_managed, intake_display_source, publication_blocked, first_published_at
 `
 
 func (q *Queries) RestoreGamePublication(ctx context.Context, id uuid.UUID) (Game, error) {
@@ -181,6 +183,7 @@ func (q *Queries) RestoreGamePublication(ctx context.Context, id uuid.UUID) (Gam
 		&i.IntakeManaged,
 		&i.IntakeDisplaySource,
 		&i.PublicationBlocked,
+		&i.FirstPublishedAt,
 	)
 	return i, err
 }
@@ -256,7 +259,7 @@ func (q *Queries) SaveSiteTechnology(ctx context.Context, arg SaveSiteTechnology
 
 const setGamePublicationBlock = `-- name: SetGamePublicationBlock :one
 UPDATE games SET publication_blocked=$2,revision=revision+1,updated_at=transaction_timestamp()
-WHERE id=$1 RETURNING id, public_id, slug, status, revision, created_at, updated_at, published_at, archived_at, intake_managed, intake_display_source, publication_blocked
+WHERE id=$1 RETURNING id, public_id, slug, status, revision, created_at, updated_at, published_at, archived_at, intake_managed, intake_display_source, publication_blocked, first_published_at
 `
 
 type SetGamePublicationBlockParams struct {
@@ -280,6 +283,7 @@ func (q *Queries) SetGamePublicationBlock(ctx context.Context, arg SetGamePublic
 		&i.IntakeManaged,
 		&i.IntakeDisplaySource,
 		&i.PublicationBlocked,
+		&i.FirstPublishedAt,
 	)
 	return i, err
 }

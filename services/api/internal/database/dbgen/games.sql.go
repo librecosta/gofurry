@@ -51,8 +51,9 @@ func (q *Queries) CanPublishGame(ctx context.Context, id uuid.UUID) (bool, error
 const changeGameStatus = `-- name: ChangeGameStatus :one
 UPDATE games SET status=$1,revision=revision+1,updated_at=transaction_timestamp(),
  published_at=CASE WHEN $1::text='published' THEN transaction_timestamp() ELSE published_at END,
+ first_published_at=CASE WHEN $1::text='published' THEN coalesce(first_published_at,published_at,transaction_timestamp()) ELSE first_published_at END,
  archived_at=CASE WHEN $1::text='archived' THEN transaction_timestamp() ELSE NULL END
-WHERE id=$2 RETURNING id, public_id, slug, status, revision, created_at, updated_at, published_at, archived_at, intake_managed, intake_display_source, publication_blocked
+WHERE id=$2 RETURNING id, public_id, slug, status, revision, created_at, updated_at, published_at, archived_at, intake_managed, intake_display_source, publication_blocked, first_published_at
 `
 
 type ChangeGameStatusParams struct {
@@ -76,6 +77,7 @@ func (q *Queries) ChangeGameStatus(ctx context.Context, arg ChangeGameStatusPara
 		&i.IntakeManaged,
 		&i.IntakeDisplaySource,
 		&i.PublicationBlocked,
+		&i.FirstPublishedAt,
 	)
 	return i, err
 }
@@ -91,7 +93,7 @@ func (q *Queries) ClearGameLocalizations(ctx context.Context, gameID uuid.UUID) 
 
 const createGame = `-- name: CreateGame :one
 INSERT INTO games (id,public_id,slug,intake_managed) VALUES ($1,$2,$3,$4)
-ON CONFLICT (public_id) DO NOTHING RETURNING id, public_id, slug, status, revision, created_at, updated_at, published_at, archived_at, intake_managed, intake_display_source, publication_blocked
+ON CONFLICT (public_id) DO NOTHING RETURNING id, public_id, slug, status, revision, created_at, updated_at, published_at, archived_at, intake_managed, intake_display_source, publication_blocked, first_published_at
 `
 
 type CreateGameParams struct {
@@ -122,6 +124,7 @@ func (q *Queries) CreateGame(ctx context.Context, arg CreateGameParams) (Game, e
 		&i.IntakeManaged,
 		&i.IntakeDisplaySource,
 		&i.PublicationBlocked,
+		&i.FirstPublishedAt,
 	)
 	return i, err
 }
@@ -148,7 +151,7 @@ func (q *Queries) HasGamePresentation(ctx context.Context, id uuid.UUID) (bool, 
 }
 
 const lockGame = `-- name: LockGame :one
-SELECT id, public_id, slug, status, revision, created_at, updated_at, published_at, archived_at, intake_managed, intake_display_source, publication_blocked FROM games WHERE id=$1 FOR UPDATE
+SELECT id, public_id, slug, status, revision, created_at, updated_at, published_at, archived_at, intake_managed, intake_display_source, publication_blocked, first_published_at FROM games WHERE id=$1 FOR UPDATE
 `
 
 func (q *Queries) LockGame(ctx context.Context, id uuid.UUID) (Game, error) {
@@ -167,6 +170,7 @@ func (q *Queries) LockGame(ctx context.Context, id uuid.UUID) (Game, error) {
 		&i.IntakeManaged,
 		&i.IntakeDisplaySource,
 		&i.PublicationBlocked,
+		&i.FirstPublishedAt,
 	)
 	return i, err
 }
@@ -265,7 +269,7 @@ func (q *Queries) SaveGameSource(ctx context.Context, arg SaveGameSourceParams) 
 
 const updateGame = `-- name: UpdateGame :one
 UPDATE games SET slug=$2,revision=revision+1,updated_at=transaction_timestamp()
-WHERE id=$1 RETURNING id, public_id, slug, status, revision, created_at, updated_at, published_at, archived_at, intake_managed, intake_display_source, publication_blocked
+WHERE id=$1 RETURNING id, public_id, slug, status, revision, created_at, updated_at, published_at, archived_at, intake_managed, intake_display_source, publication_blocked, first_published_at
 `
 
 type UpdateGameParams struct {
@@ -289,6 +293,7 @@ func (q *Queries) UpdateGame(ctx context.Context, arg UpdateGameParams) (Game, e
 		&i.IntakeManaged,
 		&i.IntakeDisplaySource,
 		&i.PublicationBlocked,
+		&i.FirstPublishedAt,
 	)
 	return i, err
 }

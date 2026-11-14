@@ -77,6 +77,35 @@ func checkSteamReadModel(t *testing.T, editor *catalog.Service, id, unrelated st
 	if len(p.Sources[1].Metadata) != 0 || len(p.Sources[1].Prices) != 0 || len(p.Sources[1].News) != 0 || p.Sources[1].Players != nil {
 		t.Fatal("an unrelated egress route inherited Steam data")
 	}
+	for _, region := range []string{"CN", "INTL"} {
+		market := catalog.ChannelMarket{Region: region, Egress: "cn"}
+		current, err := editor.GameDirectory(t.Context(), market, catalog.ChannelCriteria{Locale: "en", Keyword: "curated name", Store: "itch_io", System: "windows", Phase: "upcoming"})
+		must(t, err)
+		if len(current.Items) != 1 {
+			t.Fatalf("%s source-backed directory: %+v", region, current)
+		}
+		game := current.Items[0]
+		if game.PublicID != id || game.CoverURL == "" || game.Price == nil || game.Price.AppID != "42" ||
+			game.Release == nil || game.Release.Day != nil || game.Release.Precision != "quarter" {
+			t.Fatalf("%s lost scoped card facts: %+v", region, game)
+		}
+		home, err := editor.GameHome(t.Context(), market, "en")
+		must(t, err)
+		if len(home.News) != 1 || home.News[0].AppID != "42" || home.News[0].PublicID != id {
+			t.Fatalf("%s lost attributed Steam news: %+v", region, home.News)
+		}
+		switch region {
+		case "CN":
+			if game.Price.State != "free" || game.Price.StoreCountry != "cn" || game.Price.Amounts != nil || len(home.Offers) != 1 {
+				t.Fatalf("CN inherited a non-CN quote: %+v", game.Price)
+			}
+		case "INTL":
+			if game.Price.State != "zero_price" || game.Price.StoreCountry != "us" || game.Price.Amounts == nil ||
+				game.Price.Amounts.Currency != "USD" || len(home.Offers) != 0 {
+				t.Fatalf("INTL zero amount was interpreted as free: %+v", game.Price)
+			}
+		}
+	}
 }
 
 func replaySteamMetadata(t *testing.T, pool *pgxpool.Pool, consumer dbgen.CollectionConsumer, source uuid.UUID) {
@@ -137,6 +166,12 @@ func readAgedSteamGame(t *testing.T, pool *pgxpool.Pool, editor *catalog.Service
 		}
 		if len(view.Sources[index].Prices) != 0 || view.Sources[index].Players != nil {
 			t.Fatalf("aged price or player observation appeared at day %d", days)
+		}
+		page, err := editor.GameDirectory(ctx, catalog.ChannelMarket{Region: "CN", Egress: "cn"}, catalog.ChannelCriteria{Locale: "en"})
+		must(t, err)
+		at := slices.IndexFunc(page.Items, func(card catalog.GameCard) bool { return card.PublicID == gameID })
+		if at < 0 || page.Items[at].Price != nil || page.Items[at].CoverURL == "" {
+			t.Fatalf("aging removed card or cover, or kept an expired quote at %d days", days)
 		}
 	}
 }

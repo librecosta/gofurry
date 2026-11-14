@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -248,6 +249,33 @@ func TestSteamDiscoveryHarvest(t *testing.T) {
 	first, err := intake.Inspect(ctx, "steam", "3100000001")
 	must(t, err)
 	assertIntakeHTTP(t, l.http, base, first.PublicID, 200, "anthropomorphic foxes")
+	readChannel := func(path string, out any) {
+		t.Helper()
+		resp, err := l.http.Get(base + "/api/v1/games/" + path)
+		must(t, err)
+		defer resp.Body.Close()
+		body, err := io.ReadAll(io.LimitReader(resp.Body, 256<<10))
+		must(t, err)
+		if resp.StatusCode != 200 {
+			t.Fatalf("Game channel %s status %d", path, resp.StatusCode)
+		}
+		must(t, json.Unmarshal(body, out))
+	}
+	readDirectory := func(query string) []catalog.GameCard {
+		t.Helper()
+		var page catalog.ChannelPage[catalog.GameCard]
+		readChannel("directory?"+query, &page)
+		return page.Items
+	}
+	initial := readDirectory("q=anthropomorphic+foxes")
+	if len(initial) != 1 || initial[0].PublicID != first.PublicID || initial[0].FirstPublishedAt == nil {
+		t.Fatalf("automatically accepted game not in directory: %+v", initial)
+	}
+	var home catalog.GameChannel
+	readChannel("discovery", &home)
+	if !slices.ContainsFunc(home.Recent, func(game catalog.GameCard) bool { return game.PublicID == first.PublicID }) || len(home.Featured) != 0 {
+		t.Fatal("automatic publication did not reach the uncurated discovery page")
+	}
 	count(t, pool, 2, "SELECT count(*) FROM games WHERE status='published'")
 	count(t, pool, 2, "SELECT count(*) FROM game_approved_presentations WHERE approval->>'policy'='steam-eligibility-1'")
 	if aiCalls.Load() != 2 {
@@ -256,6 +284,22 @@ func TestSteamDiscoveryHarvest(t *testing.T) {
 	t.Logf("catalog 8 rows => 2 automatically published, 1 irrelevant, 1 adult, 2 uncertain, 1 Demo and 1 weak identity; first public ID %s", first.PublicID)
 
 	editor := catalog.New(pool)
+	collection, err := editor.CreateGameCollection(ctx, catalog.Editorial{Slug: "field-guide", Localizations: []catalog.Localization{{Locale: "en", Name: "Field Guide"}}})
+	must(t, err)
+	collection, err = editor.SetGameCollectionMembers(ctx, collection.PublicID, collection.Revision, []string{first.PublicID})
+	must(t, err)
+	collection, err = editor.SetGameCollectionStatus(ctx, collection.PublicID, collection.Revision, catalog.Published)
+	must(t, err)
+	membersPath := "collections/" + collection.PublicID
+	readMembers := func(want int) {
+		t.Helper()
+		var result catalog.PublicCollection
+		readChannel(membersPath, &result)
+		if len(result.Members.Items) != want || (want == 1 && result.Members.Items[0].PublicID != first.PublicID) {
+			t.Fatalf("collection visibility differs from its published members: %+v", result)
+		}
+	}
+	readMembers(1)
 	game, e := dbgen.New(pool).LockGame(ctx, *first.Game)
 	must(t, e)
 	_, e = editor.EditGame(ctx, game.ID, game.Revision, catalog.GameInput{Editorial: catalog.Editorial{Localizations: []catalog.Localization{{Locale: "en", Name: "Edited Fox Library", Summary: "Editorial wins."}}}})
@@ -325,6 +369,10 @@ func TestSteamDiscoveryHarvest(t *testing.T) {
 		return scalar[bool](t, pool, "SELECT publication_blocked FROM games WHERE id=$1", *first.Game)
 	})
 	assertIntakeHTTP(t, l.http, base, first.PublicID, 404)
+	readMembers(0)
+	if len(readDirectory("q=Edited+Fox+Library")) != 0 {
+		t.Fatal("blocked game leaked into search")
+	}
 	count(t, pool, 1, "SELECT count(*) FROM catalog_publication_decisions WHERE entity_id=$1 AND action='block' AND actor='steam-eligibility-1'", *first.Game)
 	// Replay cannot clear a block or undo an explicit disposition.
 	count(t, pool, 2, "SELECT count(*) FROM collection_gaps WHERE namespace=$1", fixtureStream)
@@ -343,6 +391,12 @@ func TestSteamDiscoveryHarvest(t *testing.T) {
 	for _, days := range []int32{31, 181, 365} {
 		execSQL(t, pool, "UPDATE game_approved_presentations SET observed_at=now()-make_interval(days=>$1)", days)
 		assertIntakeHTTP(t, l.http, base, first.PublicID, 200, "Edited Fox Library", "Editorial wins")
+		items := readDirectory("q=Edited+Fox+Library")
+		if len(items) != 1 || items[0].PublicID != first.PublicID || items[0].Slug != initial[0].Slug ||
+			items[0].FirstPublishedAt == nil || !items[0].FirstPublishedAt.Equal(*initial[0].FirstPublishedAt) || items[0].Price != nil {
+			t.Fatalf("directory changed after %d days without collection: %+v", days, items)
+		}
+		readMembers(1)
 	}
 }
 

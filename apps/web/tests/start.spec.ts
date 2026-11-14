@@ -606,6 +606,9 @@ test('start: logo navigation has stable first-frame placement and unavailable de
   const sitesPath = region === 'CN' ? '/en/sites' : '/sites'
   await expect(sites).toHaveAttribute('href', sitesPath)
   await expect(sites).not.toHaveAttribute('aria-disabled')
+  const games = popup.getByRole('link', { name: 'Games', exact: true })
+  await expect(games).toHaveAttribute('href', region === 'CN' ? '/en/games' : '/games')
+  await expect(games).not.toHaveAttribute('aria-disabled')
   const buttons = popup.locator('[aria-disabled="true"]')
   for (const button of await buttons.all()) {
     const bounds = (await button.boundingBox())!

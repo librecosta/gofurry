@@ -122,7 +122,7 @@ test('directory history and Start menu preserve the navigation path, with native
   const menu = page.locator('[data-start-brand]')
   const sites = menu.getByRole('link', { name: 'Sites', exact: true })
   await expect(sites).toHaveAttribute('href', '/en/sites')
-  await expect(menu.getByRole('button', { name: 'Games' })).toHaveAttribute('aria-disabled', 'true')
+  await expect(menu.getByRole('link', { name: 'Games' })).toHaveAttribute('href', '/en/games')
   await sites.focus()
   await sites.press('Enter')
   await expect(page).toHaveURL(edge + '/en/sites')

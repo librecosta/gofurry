@@ -11,7 +11,7 @@ import (
 
 const readGamePresentation = `-- name: ReadGamePresentation :one
 WITH work AS MATERIALIZED (
- SELECT id, public_id, slug, status, revision, created_at, updated_at, published_at, archived_at, intake_managed, intake_display_source, publication_blocked FROM games WHERE public_id=$2 AND status='published' AND NOT publication_blocked
+ SELECT id, public_id, slug, status, revision, created_at, updated_at, published_at, archived_at, intake_managed, intake_display_source, publication_blocked, first_published_at FROM games WHERE public_id=$2 AND status='published' AND NOT publication_blocked
 ), sources AS MATERIALIZED (
  SELECT s.id, s.game_id, s.platform_code, s.external_key, s.source_url, s.active FROM game_sources s JOIN work g ON s.game_id=g.id
  ORDER BY s.active DESC,s.platform_code,s.external_key LIMIT 16

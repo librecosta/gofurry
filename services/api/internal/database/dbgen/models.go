@@ -121,6 +121,7 @@ type Game struct {
 	IntakeManaged       bool               `json:"intake_managed"`
 	IntakeDisplaySource *uuid.UUID         `json:"intake_display_source"`
 	PublicationBlocked  bool               `json:"publication_blocked"`
+	FirstPublishedAt    pgtype.Timestamptz `json:"first_published_at"`
 }
 
 type GameApprovedPresentation struct {
@@ -134,6 +135,63 @@ type GameApprovedPresentation struct {
 	Approval          []byte             `json:"approval"`
 	SteamStoreCountry pgtype.Text        `json:"steam_store_country"`
 	SteamEgressRegion pgtype.Text        `json:"steam_egress_region"`
+}
+
+type GameChannelFeature struct {
+	Slot     string     `json:"slot"`
+	EntityID *uuid.UUID `json:"entity_id"`
+	Revision int64      `json:"revision"`
+}
+
+type GameChannelLocale struct {
+	GameID  uuid.UUID `json:"game_id"`
+	Locale  string    `json:"locale"`
+	Name    string    `json:"name"`
+	Summary string    `json:"summary"`
+}
+
+type GameChannelPublic struct {
+	ID                  uuid.UUID          `json:"id"`
+	PublicID            string             `json:"public_id"`
+	Slug                string             `json:"slug"`
+	FirstPublishedAt    pgtype.Timestamptz `json:"first_published_at"`
+	IntakeDisplaySource *uuid.UUID         `json:"intake_display_source"`
+}
+
+type GameChannelSteam struct {
+	GameSourceID  uuid.UUID          `json:"game_source_id"`
+	Locale        string             `json:"locale"`
+	StoreCountry  string             `json:"store_country"`
+	EgressRegion  string             `json:"egress_region"`
+	Section       string             `json:"section"`
+	GameID        uuid.UUID          `json:"game_id"`
+	Genres        []string           `json:"genres"`
+	Systems       []string           `json:"systems"`
+	Developers    []string           `json:"developers"`
+	ComingSoon    pgtype.Bool        `json:"coming_soon"`
+	ReleaseText   string             `json:"release_text"`
+	ReleaseDay    pgtype.Date        `json:"release_day"`
+	Precision     string             `json:"precision"`
+	Cover         pgtype.Text        `json:"cover"`
+	ObservationID uuid.UUID          `json:"observation_id"`
+	ObservedAt    pgtype.Timestamptz `json:"observed_at"`
+}
+
+type GameCollection struct {
+	ID               uuid.UUID          `json:"id"`
+	PublicID         string             `json:"public_id"`
+	Slug             string             `json:"slug"`
+	Localizations    []byte             `json:"localizations"`
+	Status           string             `json:"status"`
+	Revision         int64              `json:"revision"`
+	FirstPublishedAt pgtype.Timestamptz `json:"first_published_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+}
+
+type GameCollectionMember struct {
+	CollectionID uuid.UUID `json:"collection_id"`
+	GameID       uuid.UUID `json:"game_id"`
+	Position     int32     `json:"position"`
 }
 
 type GameEvidenceNews struct {

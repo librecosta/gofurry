@@ -521,7 +521,7 @@ func (l *lab) feed(w http.ResponseWriter, r *http.Request) {
 		}
 		items := "[]"
 		if l.news.Load() == 0 {
-			items = fmt.Sprintf(`[{"gid":"123456","title":"Fixture update","date":%d,"url":"https://steamcommunity.com/games/42/news?token=discard","contents":"discard-raw-article"}]`, time.Now().Unix())
+			items = fmt.Sprintf(`[{"gid":"123456","title":"Fixture update","date":%d,"url":"https://steamcommunity.com/games/42/announcements/detail/123456?token=discard","contents":"discard-raw-article"}]`, time.Now().Unix())
 		}
 		_, _ = fmt.Fprintf(w, `{"appnews":{"appid":%s,"newsitems":%s,"count":1}}`, q.Get("appid"), items)
 	default:

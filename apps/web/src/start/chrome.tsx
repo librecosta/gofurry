@@ -50,7 +50,7 @@ export function StartHeader() {
               {home === '/' ? <Popover.Close nativeButton={false} render={<Link to="/" />} className={styles.navItem}><HouseIcon size={17} aria-hidden="true" />{m.home}</Popover.Close>
                 : <button type="button" aria-disabled="true" aria-describedby={unavailableId} data-target={home} className={cx(styles.navItem, styles.pending)}><HouseIcon size={17} aria-hidden="true" />{m.home}</button>}
               <Popover.Close nativeButton={false} role="link" render={<Link to={localizedPath('/sites', locale, region)} />} className={styles.navItem}><CompassIcon size={17} aria-hidden="true" />{m.sites}</Popover.Close>
-              <button type="button" aria-disabled="true" aria-describedby={unavailableId} data-target={localizedPath('/games', locale, region)} className={cx(styles.navItem, styles.pending)}><GameControllerIcon size={17} aria-hidden="true" />{m.games}</button>
+              <Popover.Close nativeButton={false} role="link" render={<Link to={localizedPath('/games', locale, region)} />} className={styles.navItem}><GameControllerIcon size={17} aria-hidden="true" />{m.games}</Popover.Close>
             </nav>
           </Popover.Popup>
         </Popover.Positioner>

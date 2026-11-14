@@ -13,7 +13,7 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-func registerURLs(v1 fiber.Router, backgrounds, suggestions, location, weather, cities, nearestCity fiber.Handler, shared *redis.Client, region string, directory *catalog.Service, yearbooks *yearbook.Service, discovery *navigation.Service, interactions fiber.Handler, interactionsEnabled bool) {
+func registerURLs(v1 fiber.Router, backgrounds, suggestions, location, weather, cities, nearestCity fiber.Handler, shared *redis.Client, region string, directory *catalog.Service, yearbooks *yearbook.Service, discovery *navigation.Service, interactions fiber.Handler, interactionsEnabled bool, market catalog.ChannelMarket) {
 	v1.Get("/status", handlers.Status)
 	v1.Get("/sites/:publicID/yearbooks", handlers.Yearbooks(yearbooks))
 	v1.Get("/sites/:publicID/yearbooks/:year", handlers.Yearbook(yearbooks))
@@ -44,6 +44,11 @@ func registerURLs(v1 fiber.Router, backgrounds, suggestions, location, weather, 
 			group.Get("/directory", handlers.NavigationDirectory(discovery, region))
 			group.Get("/:publicID/stats", handlers.NavigationStats(discovery))
 			group.Get("/:publicID/related", handlers.NavigationRelated(discovery))
+		} else {
+			group.Get("/discovery", handlers.GameChannel(directory, market, "home"))
+			group.Get("/directory", handlers.GameChannel(directory, market, "directory"))
+			group.Get("/collections", handlers.GameChannel(directory, market, "collections"))
+			group.Get("/collections/:publicID", handlers.GameChannel(directory, market, "members"))
 		}
 		group.Get("/", route.page)
 		group.Get("/:publicID", route.detail)
