@@ -44,8 +44,12 @@ func TestLegacySeedPostgreSQL18(t *testing.T) {
 		}
 		return out
 	}
-	container := docker("", "run", "-d", "--rm", "-p", "127.0.0.1::5432",
+	// Docker writes image-pull progress to stderr when the image is cold.
+	// Use a CID file so validation and cleanup only consume the container ID.
+	cidPath := filepath.Join(base, "postgres.cid")
+	docker("", "run", "-d", "--rm", "--cidfile", cidPath, "-p", "127.0.0.1::5432",
 		"-e", "POSTGRES_PASSWORD=fixture-superuser-only", "-e", "POSTGRES_INITDB_ARGS=--encoding=UTF8", testImage)
+	container := strings.TrimSpace(string(readTestFile(t, cidPath)))
 	if !regexp.MustCompile("^[a-f0-9]{64}$").MatchString(container) {
 		t.Fatal("unexpected fixture container identity")
 	}
