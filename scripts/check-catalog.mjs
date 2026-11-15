@@ -166,6 +166,12 @@ try {
   run('go', ['-C', 'services/api', 'test', '-count=1', '-v', '-tags=integration', './internal/catalog',
     '-args', '-catalog-cn-config', fixtures.CN.config, '-catalog-intl-config', fixtures.INTL.config])
   run('docker', ['exec', container, 'createdb', '-U', 'postgres', 'gofurry_d1_forward_test'])
+  const assetDatabase = 'gofurry_d4_assets_test'
+  run('docker', ['exec', container, 'createdb', '-U', 'postgres', assetDatabase])
+  const assetConfig = join(scratch, 'management-assets.yaml')
+  await writeFile(assetConfig, yaml('CN', databasePort, await port()).replace('gofurry_d1_cn_test', assetDatabase), { mode: 0o600 })
+  run('go', ['-C', 'services/api', 'test', '-count=1', '-v', '-tags=integration', './internal/management',
+    '-args', '-management-asset-config', assetConfig])
   const forwardConfig = join(scratch, 'forward.yaml')
   await writeFile(forwardConfig, yaml('CN', databasePort, await port()).replace('gofurry_d1_cn_test', 'gofurry_d1_forward_test'), { mode: 0o600 })
   run('go', ['-C', 'services/api', 'test', '-count=1', '-v',
