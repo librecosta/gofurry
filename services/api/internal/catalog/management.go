@@ -20,9 +20,7 @@ type ManagementResult struct {
 // Manage commits one verified operator receipt with all local catalogue changes.
 func (s *Service) Manage(ctx context.Context, receipt dbgen.RecordManagementOperationParams, change func(context.Context, *Service, *dbgen.Queries) (ManagementResult, error)) (ManagementResult, error) {
 	return write(ctx, s, func(ctx context.Context, q *dbgen.Queries) (ManagementResult, error) {
-		bound := *s
-		bound.transaction = q
-		result, err := change(ctx, &bound, q)
+		result, err := change(ctx, s.InTransaction(q), q)
 		if err != nil {
 			return result, err
 		}

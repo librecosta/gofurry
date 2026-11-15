@@ -41,6 +41,7 @@ jobs:
           go-version-file: services/api/go.mod
           cache-dependency-path: services/api/go.sum
       - run: go -C services/api test -tags=integration ./internal/legacyseed -count=1 -timeout=8m -v
+      - run: go -C services/api test -tags=integration ./internal/legacyimport -count=1 -timeout=8m -v
   check:
     runs-on: ubuntu-latest
     timeout-minutes: 20

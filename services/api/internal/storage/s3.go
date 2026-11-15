@@ -4,6 +4,8 @@ package storage
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"io"
@@ -51,8 +53,21 @@ func (s *Store) URL(key string) string {
 }
 
 func New(cfg platform.StorageConfig) *Store {
+	return newStore(cfg, nil)
+}
+
+// NewWithRootCAs allows an explicitly trusted private test CA. Hostname and
+// certificate verification still apply to the endpoint and public delivery.
+func NewWithRootCAs(cfg platform.StorageConfig, roots *x509.CertPool) *Store {
+	return newStore(cfg, &tls.Config{RootCAs: roots, MinVersion: tls.VersionTLS12})
+}
+
+func newStore(cfg platform.StorageConfig, tlsConfig *tls.Config) *Store {
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.Proxy = nil
+	if tlsConfig != nil {
+		transport.TLSClientConfig = tlsConfig
+	}
 	return &Store{transport: transport, bucket: cfg.Bucket, publicBase: cfg.PublicBaseURL, client: s3.New(s3.Options{
 		Region: cfg.Region, BaseEndpoint: aws.String(cfg.Endpoint), UsePathStyle: true,
 		Credentials: credentials.NewStaticCredentialsProvider(cfg.AccessKeyID, cfg.SecretAccessKey, ""),

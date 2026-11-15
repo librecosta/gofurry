@@ -44,7 +44,11 @@ func TestGameIntakeHarvestD(t *testing.T) {
 	remote, err := database.Open(ctx, harvestDB)
 	must(t, err)
 	t.Cleanup(remote.Close)
-	count(t, pool, 4, "SELECT count(*) FROM pg_constraint WHERE contype='f' AND connamespace='public'::regnamespace")
+	count(t, pool, 6, "SELECT count(*) FROM pg_constraint WHERE contype='f' AND connamespace='public'::regnamespace")
+	count(t, pool, 2, `SELECT count(*) FROM pg_constraint WHERE contype='f' AND connamespace='public'::regnamespace
+ AND confdeltype='r' AND (conrelid,confrelid) IN
+ (('legacy_site_ids'::regclass,'sites'::regclass),('legacy_game_ids'::regclass,'games'::regclass))
+ AND pg_get_constraintdef(oid) LIKE 'FOREIGN KEY (target_id) REFERENCES %'`)
 
 	h := &client{base: "http://" + l.address, http: l.http}
 	var consumer ackView

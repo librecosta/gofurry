@@ -58,6 +58,11 @@ type SiteAsset struct {
 	Height int `json:"height"`
 }
 
+// ValidateSiteAsset verifies candidate bytes without contacting object storage.
+func ValidateSiteAsset(kind SiteAssetKind, raw []byte) (SiteAsset, error) {
+	return inspectSiteAsset(kind, raw)
+}
+
 func inspectSiteAsset(kind SiteAssetKind, raw []byte) (asset SiteAsset, err error) {
 	defer func() {
 		if recover() != nil {

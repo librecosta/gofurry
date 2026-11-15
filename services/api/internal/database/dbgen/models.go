@@ -178,20 +178,59 @@ type GameChannelSteam struct {
 }
 
 type GameCollection struct {
-	ID               uuid.UUID          `json:"id"`
-	PublicID         string             `json:"public_id"`
-	Slug             string             `json:"slug"`
-	Localizations    []byte             `json:"localizations"`
-	Status           string             `json:"status"`
-	Revision         int64              `json:"revision"`
-	FirstPublishedAt pgtype.Timestamptz `json:"first_published_at"`
-	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	ID                        uuid.UUID          `json:"id"`
+	PublicID                  string             `json:"public_id"`
+	Slug                      string             `json:"slug"`
+	Localizations             []byte             `json:"localizations"`
+	Status                    string             `json:"status"`
+	Revision                  int64              `json:"revision"`
+	FirstPublishedAt          pgtype.Timestamptz `json:"first_published_at"`
+	UpdatedAt                 pgtype.Timestamptz `json:"updated_at"`
+	DerivedMembershipRevision int64              `json:"derived_membership_revision"`
+}
+
+type GameCollectionEffectiveMember struct {
+	CollectionID uuid.UUID `json:"collection_id"`
+	GameID       uuid.UUID `json:"game_id"`
+	Position     int32     `json:"position"`
+}
+
+type GameCollectionExclusion struct {
+	CollectionID uuid.UUID `json:"collection_id"`
+	GameID       uuid.UUID `json:"game_id"`
 }
 
 type GameCollectionMember struct {
 	CollectionID uuid.UUID `json:"collection_id"`
 	GameID       uuid.UUID `json:"game_id"`
 	Position     int32     `json:"position"`
+}
+
+type GameCollectionTagRule struct {
+	CollectionID uuid.UUID `json:"collection_id"`
+	TagID        uuid.UUID `json:"tag_id"`
+}
+
+type GameEditorialTag struct {
+	ID            uuid.UUID          `json:"id"`
+	CategoryID    uuid.UUID          `json:"category_id"`
+	Code          string             `json:"code"`
+	Localizations []byte             `json:"localizations"`
+	ArchivedAt    pgtype.Timestamptz `json:"archived_at"`
+}
+
+type GameEditorialTagCategory struct {
+	ID            uuid.UUID          `json:"id"`
+	Code          string             `json:"code"`
+	Localizations []byte             `json:"localizations"`
+	SortOrder     int32              `json:"sort_order"`
+	ArchivedAt    pgtype.Timestamptz `json:"archived_at"`
+}
+
+type GameEditorialTagMember struct {
+	GameID uuid.UUID `json:"game_id"`
+	TagID  uuid.UUID `json:"tag_id"`
+	Role   string    `json:"role"`
 }
 
 type GameEvidenceNews struct {
@@ -314,6 +353,78 @@ type GameSourceMetadatum struct {
 	ObservedAt    pgtype.Timestamptz `json:"observed_at"`
 	ConfirmedAt   pgtype.Timestamptz `json:"confirmed_at"`
 	Payload       []byte             `json:"payload"`
+}
+
+type LegacyEditorialID struct {
+	LegacyDeployment string             `json:"legacy_deployment"`
+	Kind             string             `json:"kind"`
+	LegacyID         int64              `json:"legacy_id"`
+	TargetID         uuid.UUID          `json:"target_id"`
+	PublicIDAtLink   string             `json:"public_id_at_link"`
+	FirstPlanSha256  string             `json:"first_plan_sha256"`
+	Origin           string             `json:"origin"`
+	DecisionSha256   string             `json:"decision_sha256"`
+	VerifiedAt       pgtype.Timestamptz `json:"verified_at"`
+	VerifiedBy       pgtype.Text        `json:"verified_by"`
+}
+
+type LegacyEditorialMapping struct {
+	Kind             string    `json:"kind"`
+	LegacyDeployment string    `json:"legacy_deployment"`
+	LegacyID         int64     `json:"legacy_id"`
+	TargetID         uuid.UUID `json:"target_id"`
+	PublicIDAtLink   string    `json:"public_id_at_link"`
+	Origin           string    `json:"origin"`
+	FirstPlanSha256  string    `json:"first_plan_sha256"`
+}
+
+type LegacyGameID struct {
+	LegacyDeployment string             `json:"legacy_deployment"`
+	LegacyID         int64              `json:"legacy_id"`
+	TargetID         uuid.UUID          `json:"target_id"`
+	PublicIDAtLink   string             `json:"public_id_at_link"`
+	FirstPlanSha256  string             `json:"first_plan_sha256"`
+	Origin           string             `json:"origin"`
+	DecisionSha256   string             `json:"decision_sha256"`
+	VerifiedAt       pgtype.Timestamptz `json:"verified_at"`
+	VerifiedBy       pgtype.Text        `json:"verified_by"`
+}
+
+type LegacyImportBatch struct {
+	PlanSha256       string             `json:"plan_sha256"`
+	LegacyDeployment string             `json:"legacy_deployment"`
+	BackupSha256     string             `json:"backup_sha256"`
+	ContentSha256    string             `json:"content_sha256"`
+	DecisionsSha256  string             `json:"decisions_sha256"`
+	RuleVersion      int32              `json:"rule_version"`
+	ExecutedBy       string             `json:"executed_by"`
+	StartedAt        pgtype.Timestamptz `json:"started_at"`
+}
+
+type LegacyImportReceipt struct {
+	PlanSha256     string             `json:"plan_sha256"`
+	SourceKey      string             `json:"source_key"`
+	Phase          string             `json:"phase"`
+	IntentSha256   string             `json:"intent_sha256"`
+	DecisionSha256 string             `json:"decision_sha256"`
+	Outcome        string             `json:"outcome"`
+	TargetID       uuid.UUID          `json:"target_id"`
+	PublicID       string             `json:"public_id"`
+	Revision       int64              `json:"revision"`
+	PostSha256     string             `json:"post_sha256"`
+	CommittedAt    pgtype.Timestamptz `json:"committed_at"`
+}
+
+type LegacySiteID struct {
+	LegacyDeployment string             `json:"legacy_deployment"`
+	LegacyID         int64              `json:"legacy_id"`
+	TargetID         uuid.UUID          `json:"target_id"`
+	PublicIDAtLink   string             `json:"public_id_at_link"`
+	FirstPlanSha256  string             `json:"first_plan_sha256"`
+	Origin           string             `json:"origin"`
+	DecisionSha256   string             `json:"decision_sha256"`
+	VerifiedAt       pgtype.Timestamptz `json:"verified_at"`
+	VerifiedBy       pgtype.Text        `json:"verified_by"`
 }
 
 type ManagementOperation struct {

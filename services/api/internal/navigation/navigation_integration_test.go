@@ -125,12 +125,16 @@ func TestNavigationPostgreSQLRedis(t *testing.T) {
 		value[int](t, pool, "SELECT count(*) FROM collection_sources WHERE namespace='fixture'") != 1 ||
 		value[int](t, pool, "SELECT count(*) FROM site_navigation_reviews WHERE site_id=$1", legacy) != 1 ||
 		value[int](t, pool, "SELECT count(*) FROM start_wallpapers WHERE title='Preserved fixture' AND status='published'") != 1 ||
-		value[int](t, pool, "SELECT count(*) FROM pg_constraint WHERE contype='f' AND connamespace='public'::regnamespace") != 4 ||
+		value[int](t, pool, "SELECT count(*) FROM pg_constraint WHERE contype='f' AND connamespace='public'::regnamespace") != 6 ||
+		value[int](t, pool, `SELECT count(*) FROM pg_constraint WHERE contype='f' AND connamespace='public'::regnamespace
+ AND confdeltype='r' AND (conrelid,confrelid) IN
+ (('legacy_site_ids'::regclass,'sites'::regclass),('legacy_game_ids'::regclass,'games'::regclass))
+ AND pg_get_constraintdef(oid) LIKE 'FOREIGN KEY (target_id) REFERENCES %'`) != 2 ||
 		value[int](t, pool, "SELECT count(*) FROM games WHERE id=$1 AND public_id='000000000000000g'", game) != 1 ||
 		value[int](t, pool, "SELECT count(*) FROM collection_bindings WHERE site_id=$1", legacy) != 1 ||
 		value[int](t, pool, "SELECT count(*) FROM site_navigation_heat WHERE site_id=$1 AND score=20", legacy) != 1 ||
 		value[string](t, pool, "SELECT body FROM site_localizations WHERE site_id=$1", legacy) != "" {
-		t.Fatal("migration lost history or added foreign keys")
+		t.Fatal("migration lost history or changed the expected foreign-key inventory")
 	}
 	if !value[bool](t, pool, "SELECT legacy_detail AND content_rating='unreviewed' AND first_published_at IS NULL AND primary_category IS NULL AND logo_asset_key=$2 AND featured_cover_asset_key IS NULL FROM sites WHERE id=$1", legacy, logo) {
 		t.Fatal("migration invented editorial facts for a legacy Site")

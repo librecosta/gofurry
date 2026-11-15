@@ -18,6 +18,11 @@ import (
 var itchKey = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*/[a-z0-9]+(?:-[a-z0-9]+)*$`)
 var errIntakeAmbiguousSource = errors.New("multiple legacy sources share a normalized platform key")
 
+// NormalizeIntakeSource shares the canonical work identity with offline import.
+func NormalizeIntakeSource(platform, key string) (catalog.Source, error) {
+	return intakeSource(platform, key)
+}
+
 func intakeSource(platform, key string) (catalog.Source, error) {
 	platform, key = strings.ToLower(strings.TrimSpace(platform)), strings.TrimSpace(key)
 	switch platform {

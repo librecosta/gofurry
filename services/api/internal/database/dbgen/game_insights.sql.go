@@ -333,9 +333,9 @@ WITH current_game AS MATERIALIZED (
  CROSS JOIN LATERAL unnest(s.genres) genre
 ), matches AS (
  SELECT m.game_id,3 AS weight FROM current_game g
- JOIN game_collection_members own ON own.game_id=g.id
+ JOIN game_collection_effective_members own ON own.game_id=g.id
  JOIN game_collections c ON c.id=own.collection_id AND c.status='published'
- JOIN game_collection_members m ON m.collection_id=c.id AND m.game_id<>g.id
+ JOIN game_collection_effective_members m ON m.collection_id=c.id AND m.game_id<>g.id
  GROUP BY m.game_id
  UNION ALL
  SELECT s.game_id,count(DISTINCT genre)::integer AS weight

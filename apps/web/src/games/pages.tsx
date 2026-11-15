@@ -1,4 +1,4 @@
-import { Link, useNavigate } from '@tanstack/react-router'
+import { Link, useLocation, useNavigate } from '@tanstack/react-router'
 import { GameControllerIcon } from '@phosphor-icons/react/dist/ssr/GameController'
 import { ArrowRightIcon } from '@phosphor-icons/react/dist/ssr/ArrowRight'
 import { MagnifyingGlassIcon } from '@phosphor-icons/react/dist/ssr/MagnifyingGlass'
@@ -228,8 +228,11 @@ function DirectoryFilters({ page }: { page: Page }) {
 }
 
 function Pagination({ page, after }: { page: Page; after?: string }) {
+  const current = useLocation({ select: location => location.pathname + location.searchStr })
   const m = text[page.locale]
-  if (!after && !page.criteria.after) return null
+  // A cursor belongs to the loaded filters. During route loading the URL
+  // can already describe a different query while old data is still visible.
+  if (current !== page.path + page.query || (!after && !page.criteria.after)) return null
   return <nav aria-label={m.directory} className={styles.pagination}>
     {page.criteria.after && <Link to={page.path + criteriaQuery({ ...page.criteria, after: undefined })}>{m.first}</Link>}
     {after && <Link rel="next" to={page.path + criteriaQuery({ ...page.criteria, after })}>{m.more}<ArrowRightIcon size={17} aria-hidden="true" /></Link>}

@@ -38,7 +38,7 @@ WITH settings AS NOT MATERIALIZED (
 ), works AS (
  SELECT g.*,0 AS position FROM game_channel_public g WHERE sqlc.arg(view_kind)::text='directory'
  UNION ALL
- SELECT g.*,m.position FROM game_collection_members m JOIN game_channel_public g ON g.id=m.game_id
+ SELECT g.*,coalesce(m.position,513)::integer AS position FROM game_collection_effective_members m JOIN game_channel_public g ON g.id=m.game_id
  WHERE m.collection_id=sqlc.narg(collection_id)::uuid AND sqlc.arg(view_kind)::text='members'
 ), eligible AS NOT MATERIALIZED (
  SELECT g.*,p.locale,p.country,p.currency,p.egress,p.sort,p.genres,p.os,p.phase,p.price,p.keyword

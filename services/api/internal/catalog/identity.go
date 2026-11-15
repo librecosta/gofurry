@@ -76,6 +76,9 @@ func newPublicID() string {
 	return publicEncoding.EncodeToString(entropy[:])
 }
 
+// NormalizeEditorial validates an editorial candidate with the same rules as writes.
+func NormalizeEditorial(input Editorial) (Editorial, error) { return normalizeEditorial(input, "") }
+
 func ValidPublicID(value string) bool { return publicPattern.MatchString(value) }
 
 func normalizeEditorial(in Editorial, previousSlug string) (Editorial, error) {
@@ -137,6 +140,9 @@ func validText(s string, min, max int, multiline bool) bool {
 	}
 	return true
 }
+
+// NormalizeSiteAddresses validates proposed addresses without writing them.
+func NormalizeSiteAddresses(in []Address) ([]Address, error) { return normalizeAddresses(in) }
 
 func normalizeAddresses(in []Address) ([]Address, error) {
 	if len(in) > 16 {

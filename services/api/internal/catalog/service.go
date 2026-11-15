@@ -22,6 +22,13 @@ func New(pool *pgxpool.Pool) *Service {
 	return &Service{pool: pool, publicID: newPublicID}
 }
 
+// InTransaction binds a domain service to an explicitly owned pgx transaction.
+func (s *Service) InTransaction(q *dbgen.Queries) *Service {
+	bound := *s
+	bound.transaction = q
+	return &bound
+}
+
 func (s *Service) WithSiteAssets(assets *storage.Store) *Service {
 	s.assets = assets
 	return s

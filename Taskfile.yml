@@ -59,6 +59,10 @@ tasks:
     desc: Exercise the D5-A legacy CLI against a disposable PostgreSQL 18 fixture and local Logo bytes
     cmds:
       - go -C services/api test -tags=integration ./internal/legacyseed -count=1 -timeout=8m -v
+  check:legacy-import:
+    desc: Exercise the D5-B1 importer against disposable PostgreSQL 18 and isolated TLS object storage
+    cmds:
+      - go -C services/api test -tags=integration ./internal/legacyimport -count=1 -timeout=8m -v
   check:collection:
     desc: Verify GoFurry and pinned Harvest against separate disposable PostgreSQL 18 databases
     vars:

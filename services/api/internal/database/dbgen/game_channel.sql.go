@@ -23,7 +23,7 @@ func (q *Queries) ClearGameCollectionMembers(ctx context.Context, collectionID u
 
 const createGameCollection = `-- name: CreateGameCollection :one
 INSERT INTO game_collections (id,public_id,slug,localizations) VALUES ($1,$2,$3,$4)
-ON CONFLICT (public_id) DO NOTHING RETURNING id, public_id, slug, localizations, status, revision, first_published_at, updated_at
+ON CONFLICT (public_id) DO NOTHING RETURNING id, public_id, slug, localizations, status, revision, first_published_at, updated_at, derived_membership_revision
 `
 
 type CreateGameCollectionParams struct {
@@ -50,6 +50,7 @@ func (q *Queries) CreateGameCollection(ctx context.Context, arg CreateGameCollec
 		&i.Revision,
 		&i.FirstPublishedAt,
 		&i.UpdatedAt,
+		&i.DerivedMembershipRevision,
 	)
 	return i, err
 }
@@ -64,7 +65,7 @@ func (q *Queries) DisableGameChannelJIT(ctx context.Context) error {
 }
 
 const editGameCollection = `-- name: EditGameCollection :one
-UPDATE game_collections SET slug=$2,localizations=$3,revision=revision+1,updated_at=statement_timestamp() WHERE id=$1 RETURNING id, public_id, slug, localizations, status, revision, first_published_at, updated_at
+UPDATE game_collections SET slug=$2,localizations=$3,revision=revision+1,updated_at=statement_timestamp() WHERE id=$1 RETURNING id, public_id, slug, localizations, status, revision, first_published_at, updated_at, derived_membership_revision
 `
 
 type EditGameCollectionParams struct {
@@ -85,6 +86,7 @@ func (q *Queries) EditGameCollection(ctx context.Context, arg EditGameCollection
 		&i.Revision,
 		&i.FirstPublishedAt,
 		&i.UpdatedAt,
+		&i.DerivedMembershipRevision,
 	)
 	return i, err
 }
@@ -137,7 +139,7 @@ WITH settings AS NOT MATERIALIZED (
 ), works AS (
  SELECT g.id, g.public_id, g.slug, g.first_published_at, g.intake_display_source,0 AS position FROM game_channel_public g WHERE $12::text='directory'
  UNION ALL
- SELECT g.id, g.public_id, g.slug, g.first_published_at, g.intake_display_source,m.position FROM game_collection_members m JOIN game_channel_public g ON g.id=m.game_id
+ SELECT g.id, g.public_id, g.slug, g.first_published_at, g.intake_display_source,coalesce(m.position,513)::integer AS position FROM game_collection_effective_members m JOIN game_channel_public g ON g.id=m.game_id
  WHERE m.collection_id=$13::uuid AND $12::text='members'
 ), eligible AS NOT MATERIALIZED (
  SELECT g.id, g.public_id, g.slug, g.first_published_at, g.intake_display_source, g.position,p.locale,p.country,p.currency,p.egress,p.sort,p.genres,p.os,p.phase,p.price,p.keyword
@@ -490,7 +492,7 @@ func (q *Queries) ListGameCollections(ctx context.Context, arg ListGameCollectio
 }
 
 const lockGameCollection = `-- name: LockGameCollection :one
-SELECT id, public_id, slug, localizations, status, revision, first_published_at, updated_at FROM game_collections WHERE public_id=$1 FOR UPDATE
+SELECT id, public_id, slug, localizations, status, revision, first_published_at, updated_at, derived_membership_revision FROM game_collections WHERE public_id=$1 FOR UPDATE
 `
 
 func (q *Queries) LockGameCollection(ctx context.Context, publicID string) (GameCollection, error) {
@@ -505,6 +507,7 @@ func (q *Queries) LockGameCollection(ctx context.Context, publicID string) (Game
 		&i.Revision,
 		&i.FirstPublishedAt,
 		&i.UpdatedAt,
+		&i.DerivedMembershipRevision,
 	)
 	return i, err
 }
@@ -534,7 +537,7 @@ func (q *Queries) PrivateGameCollectionMembers(ctx context.Context, collectionID
 }
 
 const publicGameCollection = `-- name: PublicGameCollection :one
-SELECT id, public_id, slug, localizations, status, revision, first_published_at, updated_at FROM game_collections WHERE public_id=$1 AND status='published'
+SELECT id, public_id, slug, localizations, status, revision, first_published_at, updated_at, derived_membership_revision FROM game_collections WHERE public_id=$1 AND status='published'
 `
 
 func (q *Queries) PublicGameCollection(ctx context.Context, publicID string) (GameCollection, error) {
@@ -549,6 +552,7 @@ func (q *Queries) PublicGameCollection(ctx context.Context, publicID string) (Ga
 		&i.Revision,
 		&i.FirstPublishedAt,
 		&i.UpdatedAt,
+		&i.DerivedMembershipRevision,
 	)
 	return i, err
 }
@@ -587,7 +591,7 @@ func (q *Queries) ReadGameChannelFeatures(ctx context.Context) ([]ReadGameChanne
 }
 
 const readGameCollection = `-- name: ReadGameCollection :one
-SELECT id, public_id, slug, localizations, status, revision, first_published_at, updated_at FROM game_collections WHERE public_id=$1
+SELECT id, public_id, slug, localizations, status, revision, first_published_at, updated_at, derived_membership_revision FROM game_collections WHERE public_id=$1
 `
 
 func (q *Queries) ReadGameCollection(ctx context.Context, publicID string) (GameCollection, error) {
@@ -602,6 +606,7 @@ func (q *Queries) ReadGameCollection(ctx context.Context, publicID string) (Game
 		&i.Revision,
 		&i.FirstPublishedAt,
 		&i.UpdatedAt,
+		&i.DerivedMembershipRevision,
 	)
 	return i, err
 }
@@ -731,7 +736,7 @@ func (q *Queries) SetGameChannelFeature(ctx context.Context, arg SetGameChannelF
 }
 
 const touchGameCollection = `-- name: TouchGameCollection :one
-UPDATE game_collections SET revision=revision+1,updated_at=statement_timestamp() WHERE id=$1 RETURNING id, public_id, slug, localizations, status, revision, first_published_at, updated_at
+UPDATE game_collections SET revision=revision+1,updated_at=statement_timestamp() WHERE id=$1 RETURNING id, public_id, slug, localizations, status, revision, first_published_at, updated_at, derived_membership_revision
 `
 
 func (q *Queries) TouchGameCollection(ctx context.Context, id uuid.UUID) (GameCollection, error) {
@@ -746,6 +751,7 @@ func (q *Queries) TouchGameCollection(ctx context.Context, id uuid.UUID) (GameCo
 		&i.Revision,
 		&i.FirstPublishedAt,
 		&i.UpdatedAt,
+		&i.DerivedMembershipRevision,
 	)
 	return i, err
 }
@@ -753,7 +759,7 @@ func (q *Queries) TouchGameCollection(ctx context.Context, id uuid.UUID) (GameCo
 const updateGameCollectionStatus = `-- name: UpdateGameCollectionStatus :one
 UPDATE game_collections SET status=$1,
  first_published_at=CASE WHEN $1::text='published' THEN coalesce(first_published_at,transaction_timestamp()) ELSE first_published_at END,
- revision=revision+1,updated_at=statement_timestamp() WHERE id=$2 RETURNING id, public_id, slug, localizations, status, revision, first_published_at, updated_at
+ revision=revision+1,updated_at=statement_timestamp() WHERE id=$2 RETURNING id, public_id, slug, localizations, status, revision, first_published_at, updated_at, derived_membership_revision
 `
 
 type UpdateGameCollectionStatusParams struct {
@@ -773,6 +779,7 @@ func (q *Queries) UpdateGameCollectionStatus(ctx context.Context, arg UpdateGame
 		&i.Revision,
 		&i.FirstPublishedAt,
 		&i.UpdatedAt,
+		&i.DerivedMembershipRevision,
 	)
 	return i, err
 }
