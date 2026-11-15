@@ -16,7 +16,7 @@ export const Route = createRootRoute({
         { name: 'description', content: 'GoFurry engineering foundation.' },
       ]),
     ],
-    links: [{ rel: 'stylesheet', href: cssUrl }, { rel: 'icon', href: 'data:,' }],
+    links: [{ rel: 'stylesheet', href: cssUrl }, { rel: 'icon', type: 'image/png', sizes: '96x96', href: '/brand/gofurry-favicon.png' }],
   }),
   component: Root,
 })
