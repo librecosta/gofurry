@@ -2,12 +2,16 @@ package legacyseed
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"errors"
 	"fmt"
 	"io"
 	"os"
+	"slices"
+	"strings"
+	"time"
 
 	"encoding/json/jsontext"
 	"encoding/json/v2"
@@ -17,9 +21,12 @@ import (
 // database configuration. Each subsequent read checks the bytes consumed
 // against the already verified manifest.
 type Bundle struct {
-	root  *os.Root
-	files map[string]entry
+	root     *os.Root
+	files    map[string]entry
+	manifest manifest
 }
+
+const SchemaVersion = formatVersion
 
 func OpenBundle(ctx context.Context, path, snapshot, backup, content string) (*Bundle, error) {
 	if !snapshotPattern.MatchString(snapshot) || !digestPattern.MatchString(backup) || !digestPattern.MatchString(content) {
@@ -34,7 +41,7 @@ func OpenBundle(ctx context.Context, path, snapshot, backup, content string) (*B
 		root.Close()
 		return nil, errors.New("D5-A v1 seed verification failed")
 	}
-	b := &Bundle{root: root, files: make(map[string]entry, len(m.Files))}
+	b := &Bundle{root: root, files: make(map[string]entry, len(m.Files)), manifest: m}
 	for _, f := range m.Files {
 		b.files[f.Path] = f
 	}
@@ -42,6 +49,43 @@ func OpenBundle(ctx context.Context, path, snapshot, backup, content string) (*B
 }
 
 func (b *Bundle) Close() error { return b.root.Close() }
+
+// Export passes the sealed Seed inventory in canonical order. The timestamp
+// is packaging metadata and is normalized without changing the ContentSHA.
+// The receiver must consume each reader before returning.
+func (b *Bundle) Export(ctx context.Context, receive func(path string, size int64, digest string, data io.Reader) error) error {
+	m := b.manifest
+	m.CreatedAt = time.Unix(0, 0).UTC()
+	raw, err := marshal(m)
+	if err != nil {
+		return err
+	}
+	raw = append(raw, '\n')
+	metadata := map[string][]byte{"manifest.json": raw}
+	files := append(slices.Clone(m.Files), entry{Path: "manifest.json", SHA: sha(raw), Bytes: int64(len(raw))})
+	slices.SortFunc(files, func(a, b entry) int { return strings.Compare(a.Path, b.Path) })
+	sums := checksumLines(files)
+	metadata["SHA256SUMS"] = sums
+	files = append([]entry{{Path: "SHA256SUMS", SHA: sha(sums), Bytes: int64(len(sums))}}, files...)
+	for _, file := range files {
+		if raw, ok := metadata[file.Path]; ok {
+			if err = receive(file.Path, file.Bytes, file.SHA, bytes.NewReader(raw)); err != nil {
+				return err
+			}
+			continue
+		}
+		f, err := openPrivateFile(b.root, file.Path)
+		if err != nil {
+			return errors.New("cannot open sealed Seed member")
+		}
+		err = receive(file.Path, file.Bytes, file.SHA, &contextReader{ctx, f})
+		f.Close()
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
 func (b *Bundle) Rows(ctx context.Context, path string, each func(jsontext.Value) error) error {
 	f, ok := b.files[path]

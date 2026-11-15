@@ -86,8 +86,12 @@ func loadDecisions(c Config) ([]decision, string, error) {
 	if err != nil {
 		return nil, "", err
 	}
+	return parseDecisions(raw, c.Content)
+}
+
+func parseDecisions(raw []byte, content string) ([]decision, string, error) {
 	var file decisionFile
-	if decode(raw, &file) != nil || file.Version != 1 || file.Content != c.Content || file.Decisions == nil || len(file.Decisions) > 250000 {
+	if decode(raw, &file) != nil || file.Version != 1 || file.Content != content || file.Decisions == nil || len(file.Decisions) > 250000 {
 		return nil, "", errors.New("invalid or incompatible decision file")
 	}
 	return file.Decisions, digest(raw), nil

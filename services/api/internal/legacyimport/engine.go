@@ -65,6 +65,10 @@ type engine struct {
 }
 
 func Run(ctx context.Context, c Config, opts Options) (Plan, Report, error) {
+	return run(ctx, c, opts, false)
+}
+
+func run(ctx context.Context, c Config, opts Options, bootstrap bool) (Plan, Report, error) {
 	var plan Plan
 	report := Report{Status: "failed", Content: c.Content, Target: c.target(), Counts: map[string]int{}, Assets: map[string]int{}}
 	if err := c.validate(); err != nil {
@@ -85,6 +89,11 @@ func Run(ctx context.Context, c Config, opts Options) (Plan, Report, error) {
 	b, err := build(ctx, bundle, ds)
 	if err != nil {
 		return plan, report, err
+	}
+	if bootstrap {
+		if _, err = bootstrapInventory(b, ds); err != nil {
+			return plan, report, err
+		}
 	}
 	if opts.Mode != "plan" {
 		plan, err = loadPlan(opts.PlanFile, opts.PlanSHA, c, b, decisionSHA)
@@ -107,7 +116,7 @@ func Run(ctx context.Context, c Config, opts Options) (Plan, Report, error) {
 	if err = c.guard(ctx, conn); err != nil {
 		return plan, report, err
 	}
-	if opts.Mode == "plan" {
+	preflight := func() (Plan, Report, error) {
 		plan, err = createPlan(ctx, c, conn, b, decisionSHA)
 		if err != nil {
 			return plan, report, err
@@ -134,6 +143,9 @@ func Run(ctx context.Context, c Config, opts Options) (Plan, Report, error) {
 		report.collect(b)
 		return plan, report, nil
 	}
+	if opts.Mode == "plan" && !bootstrap {
+		return preflight()
+	}
 
 	objects, err := c.objects()
 	if err != nil {
@@ -146,7 +158,7 @@ func Run(ctx context.Context, c Config, opts Options) (Plan, Report, error) {
 	// transactions use their own row locks and revision guards as before.
 	lockQuery := "SELECT pg_try_advisory_lock(1280760113,1)"
 	unlockQuery := "SELECT pg_advisory_unlock(1280760113,1)"
-	if opts.Mode == "verify" {
+	if opts.Mode != "apply" {
 		lockQuery = "SELECT pg_try_advisory_lock_shared(1280760113,1)"
 		unlockQuery = "SELECT pg_advisory_unlock_shared(1280760113,1)"
 	}
@@ -161,6 +173,17 @@ func Run(ctx context.Context, c Config, opts Options) (Plan, Report, error) {
 			_ = conn.Close(cleanup)
 		}
 	}()
+	if bootstrap {
+		if err = bootstrapTarget(ctx, conn, opts.Mode, report.PlanSHA, plan); err != nil {
+			return plan, report, err
+		}
+		if err = bootstrapStorage(ctx, objects, b); err != nil {
+			return plan, report, err
+		}
+	}
+	if opts.Mode == "plan" {
+		return preflight()
+	}
 	e := engine{ctx: ctx, conn: conn, service: catalog.New(pool), bundle: bundle, store: objects, verified: map[string]bool{},
 		report: &report, planSHA: report.PlanSHA, decisions: decisionSHA}
 	if opts.Mode == "apply" {

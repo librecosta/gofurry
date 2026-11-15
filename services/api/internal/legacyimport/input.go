@@ -27,6 +27,10 @@ import (
 const deployment = "gofurry_nav_site_cn"
 const schemaVersion = 202611150003
 
+const BootstrapDeployment = deployment
+const BootstrapGooseVersion = schemaVersion
+const BootstrapPlanVersion = 1
+
 var (
 	digestPattern   = regexp.MustCompile(`^[0-9a-f]{64}$`)
 	databasePattern = regexp.MustCompile(`^gofurry_d5b1_[a-z0-9_]{1,38}$`)

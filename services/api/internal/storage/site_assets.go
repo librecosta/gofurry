@@ -198,3 +198,30 @@ func (s *Store) VerifySiteAsset(ctx context.Context, kind SiteAssetKind, key str
 	asset.ETag = head.ETag
 	return asset, nil
 }
+
+// CheckSiteLogoDestination is a read-only bootstrap preflight. Missing Logo
+// objects are expected before first import, while TLS or authorization errors
+// must stop before any database writes.
+func (s *Store) CheckSiteLogoDestination(ctx context.Context, key string) error {
+	public := s.SiteAssetURL(SiteLogo, key)
+	if public == "" {
+		return ErrSiteAsset
+	}
+	if _, err := s.client.HeadBucket(ctx, &s3.HeadBucketInput{Bucket: &s.bucket}); err != nil {
+		return errors.New("bootstrap object bucket unavailable or access denied")
+	}
+	client := http.Client{Transport: s.transport, Timeout: 10 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	request, err := http.NewRequestWithContext(ctx, http.MethodHead, public, nil)
+	if err != nil {
+		return ErrSiteAsset
+	}
+	response, err := client.Do(request)
+	if err != nil {
+		return errors.New("bootstrap Logo CDN unavailable")
+	}
+	response.Body.Close()
+	if response.StatusCode != http.StatusOK && response.StatusCode != http.StatusNotFound {
+		return errors.New("bootstrap Logo CDN rejected the preflight")
+	}
+	return nil
+}

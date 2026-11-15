@@ -43,7 +43,7 @@ type Plan struct {
 func (p Plan) Bytes() []byte { return append(encode(p), '\n') }
 
 func planBase(c Config, b blueprint, decisions string) Plan {
-	return Plan{1, c.Snapshot, c.Backup, c.Content, decisions, c.target(), make([]planItem, 0, len(b.Items))}
+	return Plan{BootstrapPlanVersion, c.Snapshot, c.Backup, c.Content, decisions, c.target(), make([]planItem, 0, len(b.Items))}
 }
 
 func createPlan(ctx context.Context, c Config, db *pgx.Conn, b blueprint, decisions string) (Plan, error) {
