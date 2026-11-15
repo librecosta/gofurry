@@ -55,6 +55,10 @@ tasks:
     desc: Verify Site, Game, Yearbook and both regional Navigation pages with disposable PostgreSQL 18 and Redis 8
     cmds:
       - node scripts/check-catalog.mjs
+  check:legacy-seed:
+    desc: Exercise the D5-A legacy CLI against a disposable PostgreSQL 18 fixture and local Logo bytes
+    cmds:
+      - go -C services/api test -tags=integration ./internal/legacyseed -count=1 -timeout=8m -v
   check:collection:
     desc: Verify GoFurry and pinned Harvest against separate disposable PostgreSQL 18 databases
     vars:
