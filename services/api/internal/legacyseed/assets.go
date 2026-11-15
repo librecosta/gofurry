@@ -27,6 +27,8 @@ const (
 	imagePixelsLimit = 16 << 20
 	imageOutputLimit = 1 << 20
 	logoReadLimit    = 5000
+	// Both public legacy frontends supplied this exact defaultLogo.svg.
+	legacyDefaultLogoSHA = "c2c3af69e8f1d6ecddd00bcc88fb28a8ff44a23e52dd1cc87e6d28298ab8ea23"
 )
 
 var logoKeyPattern = regexp.MustCompile(`^nav/sites/[1-9][0-9]{0,18}/icon/[a-f0-9]{32}(?:\.[a-z0-9]{1,16})?$`)
@@ -46,11 +48,13 @@ type logo struct {
 }
 
 type logoReader struct {
-	root    *os.Root
-	inspect bool
-	limit   int
-	cache   map[string]logo
-	seen    map[string]bool
+	root     *os.Root
+	inspect  bool
+	limit    int
+	cache    map[string]logo
+	seen     map[string]bool
+	renderer string
+	shared   map[string]int
 }
 
 func openPrivateFile(root *os.Root, path string) (*os.File, error) {
@@ -133,14 +137,14 @@ func (l *logoReader) convert(ctx context.Context, key string, dest packageWriter
 	if len(l.cache) >= l.limit {
 		return row, nil
 	}
-	row, err := convertObject(ctx, l.root, key, dest)
+	row, err := convertObject(ctx, l.root, key, dest, l.renderer, l.shared)
 	if err == nil {
 		l.cache[key] = row
 	}
 	return row, err
 }
 
-func convertObject(ctx context.Context, root *os.Root, key string, dest packageWriter) (logo, error) {
+func convertObject(ctx context.Context, root *os.Root, key string, dest packageWriter, renderer string, shared map[string]int) (logo, error) {
 	row := logo{SourceKey: key, Status: "invalid_image"}
 	f, err := openPrivateFile(root, key)
 	if err != nil {
@@ -166,9 +170,21 @@ func convertObject(ctx context.Context, root *os.Root, key string, dest packageW
 	// The old object writer used the first 32 hex characters of the original
 	// SHA-256 in the filename. A stale/corrupted mirror file must fail even if
 	// the replacement bytes happen to decode.
-	if strings.SplitN(filepath.Base(key), ".", 2)[0] != sha(raw)[:32] {
+	digest := sha(raw)
+	if logoSourceDigest(key) != digest[:32] {
 		row.Status = "source_checksum_mismatch"
 		return row, nil
+	}
+	if renderer != "" && legacyLogoFormat(raw) != "" {
+		if digest == legacyDefaultLogoSHA {
+			row.Status = "logo_known_placeholder"
+			return row, nil
+		}
+		if shared[digest[:32]] >= 3 {
+			row.Status = "logo_suspected_placeholder"
+			return row, nil
+		}
+		return recoverLogo(ctx, raw, row, dest, renderer)
 	}
 	if !validImageEnvelope(raw) {
 		if !knownRaster(raw) {
@@ -191,6 +207,15 @@ func convertObject(ctx context.Context, root *os.Root, key string, dest packageW
 		}
 		conversion = "lossless_webp_centered"
 	}
+	return writeLogo(row, raw, asset, conversion, dest)
+}
+
+func logoSourceDigest(key string) string {
+	digest, _, _ := strings.Cut(filepath.Base(key), ".")
+	return digest
+}
+
+func writeLogo(row logo, raw []byte, asset storage.SiteAsset, conversion string, dest packageWriter) (logo, error) {
 	row.Status, row.Conversion = "ready", conversion
 	row.SHA, row.Key, row.Width, row.Height, row.Bytes = asset.SHA256, asset.Key, asset.Width, asset.Height, asset.Bytes
 	row.Path = "assets/site-logos/" + row.SHA + ".webp"

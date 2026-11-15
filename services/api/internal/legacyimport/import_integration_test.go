@@ -117,7 +117,7 @@ CREATE DATABASE gofurry_d5b1_fixture;`)
 	seed := legacyseed.Config{Snapshot: "d5b1-fixture", BackupSHA: strings.Repeat("a", 64), TargetDB: "gofurry_d5b1_fixture",
 		Output: filepath.Join(base, "sealed"), Logos: filepath.Join(base, "logos"), GFN: load("gfn"), GFG: load("gfg"), GFA: load("gfa")}
 	logo := testRead(t, filepath.Join("..", "storage", "testdata", "site-logo.webp"))
-	for _, id := range []int{1, 4} {
+	for _, id := range []int{1, 2, 4} {
 		k := fmt.Sprintf("nav/sites/%d/icon/%s.webp", id, digest(logo)[:32])
 		f := filepath.Join(seed.Logos, filepath.FromSlash(k))
 		if err := os.MkdirAll(filepath.Dir(f), 0700); err != nil {
@@ -305,6 +305,7 @@ func TestLegacyImportPostgreSQL18(t *testing.T) {
 		decide("allow_publish", makeKey(sites, 1), publishValue{SFW: true}),
 		decide("link_existing", makeKey(sites, 3), linkValue{site.ID, "site", site.PublicID, site.Revision}),
 		decide("allow_logo", makeKey(sites, 1), logoHash),
+		decide("allow_logo", makeKey(sites, 2), logoHash),
 		decide("allow_logo", makeKey(sites, 4), logoHash),
 		decide("select_source", makeKey(games, 1), []catalog.Source{{PlatformCode: "steam", ExternalKey: "20"}}),
 		decide("select_source", makeKey(games, 2), []catalog.Source{}),
@@ -391,9 +392,10 @@ func TestLegacyImportPostgreSQL18(t *testing.T) {
 BEGIN RAISE EXCEPTION 'fixture transient failure'; END $fixture$;
 CREATE TRIGGER fixture_game_failure BEFORE INSERT ON games FOR EACH ROW WHEN (NEW.slug='transient') EXECUTE FUNCTION fixture_reject_import();
 CREATE TRIGGER fixture_logo_failure BEFORE UPDATE ON sites FOR EACH ROW
- WHEN (NEW.slug='example' AND NEW.logo_asset_key IS DISTINCT FROM OLD.logo_asset_key) EXECUTE FUNCTION fixture_reject_import();`)
+ WHEN (NEW.slug IN ('example','archived-site') AND NEW.logo_asset_key IS DISTINCT FROM OLD.logo_asset_key)
+ EXECUTE FUNCTION fixture_reject_import();`)
 	_, failed, err := Run(ctx, c, apply)
-	if !errors.Is(err, ErrIncomplete) || failed.Counts["retry_pending"] != 2 {
+	if !errors.Is(err, ErrIncomplete) || failed.Counts["retry_pending"] != 3 {
 		for _, p := range failed.Phases {
 			if p.Issue != "" {
 				t.Logf("phase %+v", p)
@@ -403,6 +405,7 @@ CREATE TRIGGER fixture_logo_failure BEFORE UPDATE ON sites FOR EACH ROW
 	}
 	expectInt(t, pool, ctx, 0, "SELECT count(*) FROM legacy_game_ids WHERE legacy_id=6")
 	expectInt(t, pool, ctx, 0, "SELECT count(*) FROM sites WHERE slug='example' AND logo_asset_key IS NOT NULL")
+	expectInt(t, pool, ctx, 1, "SELECT count(*) FROM sites WHERE slug='archived-site' AND status='archived' AND logo_asset_key IS NULL")
 	expectInt(t, pool, ctx, 0, "SELECT count(*) FROM legacy_import_receipts WHERE source_key IN ('gfn_site/1','gfg_game/6') AND ((source_key='gfn_site/1' AND phase='logo') OR source_key='gfg_game/6')")
 	if objects.puts != 1 || failed.Assets["uploaded_objects"] != 1 {
 		t.Fatal("shared verified object should be uploaded once despite binding failure")
@@ -439,10 +442,10 @@ CREATE TRIGGER fixture_logo_failure BEFORE UPDATE ON sites FOR EACH ROW
 		}
 		t.Fatalf("recovery %s %+v: %v", success.Status, success.Counts, err)
 	}
-	if success.Rows == nil || success.SourceRows == 0 || objects.puts != 1 || success.Assets["verified_references"] != 2 {
+	if success.Rows == nil || success.SourceRows == 0 || objects.puts != 1 || success.Assets["verified_references"] != 3 {
 		t.Fatalf("asset and source reconciliation %+v", success.Assets)
 	}
-	expectInt(t, pool, ctx, 2, "SELECT count(*) FROM sites WHERE logo_asset_key=$1", logoKey(logoHash))
+	expectInt(t, pool, ctx, 3, "SELECT count(*) FROM sites WHERE logo_asset_key=$1", logoKey(logoHash))
 	expectInt(t, pool, ctx, 1, "SELECT count(*) FROM sites WHERE slug='archived-site' AND status='archived' AND content_rating='adult' AND first_published_at IS NULL")
 	expectInt(t, pool, ctx, 1, "SELECT count(*) FROM games WHERE slug='adult-fixture' AND publication_blocked AND status='draft'")
 	expectInt(t, pool, ctx, 1, "SELECT count(*) FROM games WHERE slug='indie' AND NOT publication_blocked AND status='draft'")
@@ -495,7 +498,7 @@ CREATE TRIGGER fixture_logo_failure BEFORE UPDATE ON sites FOR EACH ROW
 	objects.mu.Lock()
 	objects.broken = true
 	objects.mu.Unlock()
-	if _, r, err := Run(ctx, c, verify); !errors.Is(err, ErrIncomplete) || r.Assets["pending_references"] != 2 || objects.puts != 1 {
+	if _, r, err := Run(ctx, c, verify); !errors.Is(err, ErrIncomplete) || r.Assets["pending_references"] != 3 || objects.puts != 1 {
 		t.Fatalf("CDN failure should fail verification without re-upload: %+v %v", r.Assets, err)
 	}
 	objects.mu.Lock()

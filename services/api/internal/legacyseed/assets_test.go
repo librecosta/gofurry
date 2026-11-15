@@ -63,7 +63,7 @@ func TestLogoFormatAndAlpha(t *testing.T) {
 		t.Helper()
 		key := "nav/sites/" + id + "/icon/" + sha(raw)[:32] + "." + ext
 		makeObject(t, input, key, raw)
-		obj, err := convertObject(ctx, root, key, dst)
+		obj, err := convertObject(ctx, root, key, dst, "", nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -116,7 +116,7 @@ func TestLogoFormatAndAlpha(t *testing.T) {
 	}
 	key := "nav/sites/7/icon/" + strings.Repeat("a", 32) + ".png"
 	makeObject(t, input, key, samplePNG(t))
-	if got, err := convertObject(ctx, root, key, dst); err != nil || got.Status != "source_checksum_mismatch" {
+	if got, err := convertObject(ctx, root, key, dst, "", nil); err != nil || got.Status != "source_checksum_mismatch" {
 		t.Fatal("wrong bytes under a legacy digest were accepted")
 	}
 	var store *storage.Store
@@ -142,7 +142,7 @@ func TestLogoMirrorDoesNotFollowLinks(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer root.Close()
-	if obj, err := convertObject(context.Background(), root, key, memoryObjects{}); err != nil || obj.Status != "object_read_rejected" {
+	if obj, err := convertObject(context.Background(), root, key, memoryObjects{}, "", nil); err != nil || obj.Status != "object_read_rejected" {
 		t.Fatalf("linked object not rejected: %v %v", obj.Status, err)
 	}
 }

@@ -10,6 +10,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/librecosta/gofurry/services/api/internal/catalog"
 	"github.com/librecosta/gofurry/services/api/internal/database/dbgen"
 	"github.com/librecosta/gofurry/services/api/internal/legacyseed"
@@ -588,7 +589,7 @@ func (e *engine) process(q *dbgen.Queries, it intent, p planItem, phase, intentS
 	case "relations":
 		err = e.relations(q, bound, it, *state)
 	case "logo":
-		_, err = bound.SetSiteAsset(e.ctx, state.PublicID, state.Revision, storage.SiteLogo, logoKey(it.Logo))
+		err = e.bindLogo(q, bound, it, *state)
 	case "lifecycle":
 		err = e.lifecycle(bound, it, *state)
 	}
@@ -637,15 +638,9 @@ func (e *engine) checkLogo(it intent, intentSHA string, apply bool) (string, str
 		if m.Origin != "created" {
 			return "conflict", "phase_target_unavailable", state
 		}
-		row, err := q.FindYearbookSite(e.ctx, state.PublicID)
-		if err != nil {
-			return "retry_pending", "site_logo_state_unavailable", state
-		}
-		if row.Status == catalog.Archived {
-			return "deferred", "archived_site_logo_pending", state
-		}
-		if row.LogoAssetKey.Valid {
-			return "conflict", "site_logo_already_bound", state
+		if _, err := e.logoTarget(q, it, *state); err != nil {
+			result, issue := outcome(err)
+			return result, issue, state
 		}
 	}
 	if e.store == nil {
@@ -674,4 +669,50 @@ func (e *engine) checkLogo(it intent, intentSHA string, apply bool) (string, str
 	e.verified[it.Logo] = true
 	e.report.Assets["uploaded_objects"]++
 	return "", "", state
+}
+
+func (e *engine) logoTarget(q *dbgen.Queries, it intent, state targetState) (dbgen.Site, error) {
+	row, err := q.FindYearbookSite(e.ctx, state.PublicID)
+	if err != nil {
+		return row, retry("site_logo_state_unavailable")
+	}
+	if row.LogoAssetKey.Valid {
+		return row, conflict("site_logo_already_bound")
+	}
+	if row.Status != catalog.Archived {
+		return row, nil
+	}
+	// Only an unchanged, never-published historical archive made by this
+	// importer can fill its missing Logo. Its lifecycle stays archived.
+	if !it.Archive || row.PublishedAt.Valid {
+		return row, deferred("archived_site_logo_pending")
+	}
+	prior, err := q.PriorLegacyImportPhase(e.ctx, dbgen.PriorLegacyImportPhaseParams{
+		SourceKey: it.Key.String(), TargetID: state.ID, Phase: "lifecycle",
+	})
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return row, retry("archived_site_receipt_unavailable")
+	}
+	if err != nil || prior.IntentSha256 != phaseIntent(it, "lifecycle") || prior.Revision != state.Revision || prior.PostSha256 != state.Preimage {
+		return row, deferred("archived_site_logo_pending")
+	}
+	return row, nil
+}
+
+func (e *engine) bindLogo(q *dbgen.Queries, bound *catalog.Service, it intent, state targetState) error {
+	row, err := e.logoTarget(q, it, state)
+	if err != nil {
+		return err
+	}
+	key := logoKey(it.Logo)
+	if row.Status == catalog.Archived {
+		// The transaction already holds the Site lock. Write only the verified
+		// immutable asset reference and revision through the existing query.
+		_, err = q.SetSiteAssets(e.ctx, dbgen.SetSiteAssetsParams{
+			ID: row.ID, LogoAssetKey: pgtype.Text{String: key, Valid: true}, FeaturedCoverAssetKey: row.FeaturedCoverAssetKey,
+		})
+		return err
+	}
+	_, err = bound.SetSiteAsset(e.ctx, state.PublicID, state.Revision, storage.SiteLogo, key)
+	return err
 }

@@ -6,7 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
-
+	"os"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -228,6 +229,17 @@ func extract(ctx context.Context, c Config, b *bundle, inspect bool, s *summary)
 	if total > c.Limits.SourceRows {
 		return fmt.Errorf("source tables exceed configured %d rows", c.Limits.SourceRows)
 	}
+	if !inspect && c.SVGRenderer != "" {
+		info, err := os.Stat(c.SVGRenderer)
+		if !filepath.IsAbs(c.SVGRenderer) || err != nil || !info.Mode().IsRegular() {
+			return errors.New("logo_svg_renderer requires an existing absolute executable path")
+		}
+		logos.renderer = c.SVGRenderer
+		logos.shared, err = sharedLogoDigests(ctx, gfnTX)
+		if err != nil {
+			return errors.New("cannot inventory Site Logo references")
+		}
+	}
 	a, err := readAddresses(ctx, gfnTX)
 	if err != nil {
 		return err
@@ -300,6 +312,26 @@ func extract(ctx context.Context, c Config, b *bundle, inspect bool, s *summary)
 		return ctx.Err()
 	}
 	return nil
+}
+
+func sharedLogoDigests(ctx context.Context, tx pgx.Tx) (map[string]int, error) {
+	rows, err := tx.Query(ctx, "SELECT id, icon FROM public.gfn_site WHERE icon IS NOT NULL")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	counts := map[string]int{}
+	for rows.Next() {
+		var siteID int64
+		var key string
+		if err := rows.Scan(&siteID, &key); err != nil {
+			return nil, err
+		}
+		if logoKeyPattern.MatchString(key) && logoBelongsTo(key, siteID) {
+			counts[logoSourceDigest(key)]++
+		}
+	}
+	return counts, rows.Err()
 }
 
 func scan(ctx context.Context, tx pgx.Tx, t table, receive func(values) error) error {

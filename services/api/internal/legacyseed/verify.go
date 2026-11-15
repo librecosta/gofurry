@@ -468,7 +468,9 @@ func verifyLogo(ctx context.Context, root *os.Root, files map[string]entry, obj 
 			if !logoKeyPattern.MatchString(obj.SourceKey) || logoBelongsTo(obj.SourceKey, obj.SiteID) {
 				return errors.New("invalid mismatched Logo owner")
 			}
-		case "invalid_image", "unsupported_image_format", "source_checksum_mismatch", "conversion_failed", "missing_object", "asset_unavailable", "object_read_rejected", "asset_limit_exceeded", "image_input_limit_exceeded":
+		case "invalid_image", "unsupported_image_format", "source_checksum_mismatch", "conversion_failed", "missing_object", "asset_unavailable",
+			"object_read_rejected", "asset_limit_exceeded", "image_input_limit_exceeded", "logo_suspected_placeholder", "logo_known_placeholder",
+			"logo_svg_rejected", "logo_decode_failed", "logo_quality_rejected":
 			if !logoKeyPattern.MatchString(obj.SourceKey) || !logoBelongsTo(obj.SourceKey, obj.SiteID) {
 				return errors.New("invalid source Logo key")
 			}
@@ -481,7 +483,8 @@ func verifyLogo(ctx context.Context, root *os.Root, files map[string]entry, obj 
 	f := files[obj.Path]
 	if !logoKeyPattern.MatchString(obj.SourceKey) || !logoBelongsTo(obj.SourceKey, obj.SiteID) || !outputLogoPattern.MatchString(obj.Path) || f.Path == "" ||
 		obj.SHA != f.SHA || obj.Key != "sites/logos/"+obj.SHA+".webp" || obj.Bytes != f.Bytes ||
-		(obj.Conversion != "original_webp" && obj.Conversion != "lossless_webp_centered") {
+		(obj.Conversion != "original_webp" && obj.Conversion != "lossless_webp_centered" &&
+			obj.Conversion != "svg_webp_centered" && obj.Conversion != "ico_webp_centered") {
 		return errors.New("Logo index disagrees with object")
 	}
 	if obj.Conversion == "original_webp" && strings.SplitN(filepath.Base(obj.SourceKey), ".", 2)[0] != obj.SHA[:32] {

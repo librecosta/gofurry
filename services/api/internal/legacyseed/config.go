@@ -28,15 +28,16 @@ type Database struct {
 }
 
 type Config struct {
-	Snapshot  string   `yaml:"snapshot_id"`
-	BackupSHA string   `yaml:"backup_sha256"`
-	TargetDB  string   `yaml:"gofurry_database"`
-	Output    string   `yaml:"output_dir"`
-	Logos     string   `yaml:"offline_logo_dir"`
-	GFN       Database `yaml:"gfn"`
-	GFG       Database `yaml:"gfg"`
-	GFA       Database `yaml:"gfa"`
-	Limits    Limits   `yaml:"limits,omitempty"`
+	Snapshot    string   `yaml:"snapshot_id"`
+	BackupSHA   string   `yaml:"backup_sha256"`
+	TargetDB    string   `yaml:"gofurry_database"`
+	Output      string   `yaml:"output_dir"`
+	Logos       string   `yaml:"offline_logo_dir"`
+	SVGRenderer string   `yaml:"logo_svg_renderer,omitempty"`
+	GFN         Database `yaml:"gfn"`
+	GFG         Database `yaml:"gfg"`
+	GFA         Database `yaml:"gfa"`
+	Limits      Limits   `yaml:"limits,omitempty"`
 }
 
 type Limits struct {
@@ -116,6 +117,9 @@ func LoadConfig(path, output string) (Config, error) {
 	}
 	if c.Logos != "" && !filepath.IsAbs(c.Logos) {
 		return Config{}, errors.New("offline_logo_dir must be absolute")
+	}
+	if c.SVGRenderer != "" && (!filepath.IsAbs(c.SVGRenderer) || c.Logos == "") {
+		return Config{}, errors.New("logo_svg_renderer requires an absolute executable path and offline_logo_dir")
 	}
 	absoluteOutput, err := filepath.Abs(c.Output)
 	if err != nil {

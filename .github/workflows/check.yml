@@ -40,7 +40,15 @@ jobs:
         with:
           go-version-file: services/api/go.mod
           cache-dependency-path: services/api/go.sum
-      - run: go -C services/api test -tags=integration ./internal/legacyseed -count=1 -timeout=8m -v
+      - name: Verify and exercise the offline SVG renderer
+        shell: bash
+        run: |
+          curl --fail --location --silent --show-error --retry 3 \
+            https://github.com/linebender/resvg/releases/download/v0.47.0/resvg-linux-x86_64.tar.gz \
+            --output "$RUNNER_TEMP/resvg.tgz"
+          printf '%s  %s\n' '5c84dcbcd032fe7e8d96e616fd6807a2f9df6561d2e6582b37e91e63c6cb4fe7' "$RUNNER_TEMP/resvg.tgz" | sha256sum --check
+          tar -xzf "$RUNNER_TEMP/resvg.tgz" -C "$RUNNER_TEMP" resvg
+          GOFURRY_TEST_RESVG="$RUNNER_TEMP/resvg" go -C services/api test -tags=integration ./internal/legacyseed -count=1 -timeout=8m -v
       - run: go -C services/api test -tags=integration ./internal/legacyimport -count=1 -timeout=8m -v
   check:
     runs-on: ubuntu-latest
