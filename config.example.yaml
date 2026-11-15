@@ -81,7 +81,7 @@ navigation:
   # interaction_hmac_key: <private-unpadded-base64url>
 
 # Disabled unless complete. Generate 32 crypto/rand bytes as unpadded base64url.
-# Token goes only in private YAML. Storage and database are required.
+# Token goes only in private YAML. Database is required. R2 storage is required for media operations.
 # Admin must use the same region/environment. New uploads: 16:9 AVIF + WebP.
 management: null
 # management:

@@ -12,9 +12,10 @@ import (
 )
 
 type Service struct {
-	pool     *pgxpool.Pool
-	publicID func() string
-	assets   *storage.Store
+	pool        *pgxpool.Pool
+	publicID    func() string
+	assets      *storage.Store
+	transaction *dbgen.Queries
 }
 
 func New(pool *pgxpool.Pool) *Service {
@@ -27,6 +28,10 @@ func (s *Service) WithSiteAssets(assets *storage.Store) *Service {
 }
 
 func write[T any](ctx context.Context, s *Service, operation func(context.Context, *dbgen.Queries) (T, error)) (result T, err error) {
+	if s.transaction != nil {
+		result, err = operation(ctx, s.transaction)
+		return result, classify(err)
+	}
 	if s.pool == nil {
 		return result, ErrUnavailable
 	}

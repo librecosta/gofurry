@@ -25,7 +25,7 @@ type actorKey struct{}
 type invalidIDKey struct{}
 
 func Current(c fiber.Ctx) wallpaper.Actor { return fiber.Locals[wallpaper.Actor](c, actorKey{}) }
-func New(logger zerolog.Logger, cfg platform.Config, service *wallpaper.Service) *fiber.App {
+func New(logger zerolog.Logger, cfg platform.Config, service *wallpaper.Service, operations ...*Operations) *fiber.App {
 	var listening atomic.Bool
 	app := fiber.New(fiber.Config{AppName: "gofurry-management", JSONEncoder: platform.MarshalJSON, JSONDecoder: platform.UnmarshalJSON, ErrorHandler: ErrorHandler,
 		ReadTimeout: 30 * time.Second, WriteTimeout: 120 * time.Second, IdleTimeout: 15 * time.Second, BodyLimit: 64 << 20, StreamRequestBody: true, DisablePreParseMultipartForm: true, Concurrency: 16, TrustProxy: false, EnableIPValidation: true})
@@ -56,13 +56,20 @@ func New(logger zerolog.Logger, cfg platform.Config, service *wallpaper.Service)
 		c.SetContext(ctx)
 		return c.Next()
 	})
+	var ops *Operations
+	if len(operations) > 0 {
+		ops = operations[0]
+	}
 	app.Get("/internal/v1/readyz", func(c fiber.Ctx) error {
-		if !listening.Load() || service.Ready(c.Context()) != nil {
+		if !listening.Load() || service.Ready(c.Context()) != nil || ops != nil && !ops.ready(c.Context()) {
 			return fiber.ErrServiceUnavailable
 		}
 		return c.JSON(fiber.Map{"ready": true})
 	})
 	registerWallpapers(app, service)
+	if ops != nil {
+		ops.register(app)
+	}
 	app.Use(func(fiber.Ctx) error { return fiber.ErrNotFound })
 	return app
 }

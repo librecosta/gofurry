@@ -56,6 +56,10 @@ func NormalizeGameSource(source Source) (Source, error) {
 }
 
 func (s *Service) EditGame(ctx context.Context, id uuid.UUID, revision int64, in GameInput) (dbgen.Game, error) {
+	return s.editGame(ctx, id, revision, in, false)
+}
+
+func (s *Service) editGame(ctx context.Context, id uuid.UUID, revision int64, in GameInput, preserveSources bool) (dbgen.Game, error) {
 	hasSources := in.Sources != nil
 	var err error
 	in.Sources, err = normalizeSources(in.Sources)
@@ -74,7 +78,7 @@ func (s *Service) EditGame(ctx context.Context, id uuid.UUID, revision int64, in
 		if err != nil {
 			return row, err
 		}
-		if err = saveGameContent(ctx, q, id, in, hasSources || !row.IntakeManaged); err != nil {
+		if err = saveGameContent(ctx, q, id, in, !preserveSources && (hasSources || !row.IntakeManaged)); err != nil {
 			return row, err
 		}
 		if row.Status == Published {
@@ -90,6 +94,10 @@ func (s *Service) EditGame(ctx context.Context, id uuid.UUID, revision int64, in
 }
 
 func (s *Service) SetGameStatus(ctx context.Context, id uuid.UUID, revision int64, desired string) (dbgen.Game, error) {
+	return s.setGameStatus(ctx, id, revision, desired, PublicationDecision{Actor: "catalog", Reason: "Explicit editorial status change"})
+}
+
+func (s *Service) setGameStatus(ctx context.Context, id uuid.UUID, revision int64, desired string, d PublicationDecision) (dbgen.Game, error) {
 	return write(ctx, s, func(ctx context.Context, q *dbgen.Queries) (dbgen.Game, error) {
 		row, err := q.LockGame(ctx, id)
 		if err != nil {
@@ -101,7 +109,7 @@ func (s *Service) SetGameStatus(ctx context.Context, id uuid.UUID, revision int6
 		if err = canChange(row.Status, desired); err != nil {
 			return row, err
 		}
-		d := PublicationDecision{Actor: "catalog", Reason: "Explicit editorial status change"}
+
 		if desired == Archived {
 			return changeGameVisibility(ctx, q, row, "archive", d)
 		}

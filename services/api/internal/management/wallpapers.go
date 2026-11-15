@@ -70,8 +70,8 @@ func registerWallpapers(app *fiber.App, service *wallpaper.Service) {
 		}
 		return c.JSON(out)
 	})
-	app.Post(base, upload(service))
-	app.Patch(base+"/:id", func(c fiber.Ctx) error {
+	app.Post(base, editOnly, upload(service))
+	app.Patch(base+"/:id", editOnly, func(c fiber.Ctx) error {
 		id, e := pathID(c)
 		if e != nil {
 			return e
@@ -90,7 +90,7 @@ func registerWallpapers(app *fiber.App, service *wallpaper.Service) {
 		return c.JSON(out)
 	})
 	for _, op := range []struct{ path, target string }{{"publish", "published"}, {"archive", "archived"}, {"restore", "draft"}} {
-		app.Post(base+"/:id/"+op.path, func(c fiber.Ctx) error {
+		app.Post(base+"/:id/"+op.path, editOnly, func(c fiber.Ctx) error {
 			id, e := pathID(c)
 			if e != nil {
 				return e
@@ -109,7 +109,7 @@ func registerWallpapers(app *fiber.App, service *wallpaper.Service) {
 			return c.JSON(out)
 		})
 	}
-	app.Delete(base+"/:id", func(c fiber.Ctx) error {
+	app.Delete(base+"/:id", editOnly, func(c fiber.Ctx) error {
 		id, e := pathID(c)
 		if e != nil {
 			return e

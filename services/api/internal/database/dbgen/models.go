@@ -316,6 +316,17 @@ type GameSourceMetadatum struct {
 	Payload       []byte             `json:"payload"`
 }
 
+type ManagementOperation struct {
+	RequestID  uuid.UUID          `json:"request_id"`
+	ActorID    uuid.UUID          `json:"actor_id"`
+	ActorName  string             `json:"actor_name"`
+	ActorRole  string             `json:"actor_role"`
+	Action     string             `json:"action"`
+	Target     string             `json:"target"`
+	Revision   int64              `json:"revision"`
+	OccurredAt pgtype.Timestamptz `json:"occurred_at"`
+}
+
 type Site struct {
 	ID                    uuid.UUID          `json:"id"`
 	PublicID              string             `json:"public_id"`

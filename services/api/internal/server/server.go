@@ -90,15 +90,6 @@ func New(logger zerolog.Logger, cfg platform.Config) *Server {
 		wallpaperObjects = objects
 	}
 	s.Wallpapers = wallpaper.New(pool, wallpaperObjects, cfg.Database != nil)
-	if cfg.Management != nil {
-		if err := cfg.ValidateWallpaperRuntime(); err != nil {
-			s.initErr = err
-		}
-		if s.initErr == nil {
-			s.Management = management.New(logger, cfg, s.Wallpapers)
-			s.managementAddress = cfg.Management.Address
-		}
-	}
 	shared := platform.NewRedis(cfg.Redis)
 	if shared != nil {
 		probe, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
@@ -147,7 +138,8 @@ func New(logger zerolog.Logger, cfg platform.Config) *Server {
 	if cfg.Harvest != nil && cfg.Harvest.IntakeEgressRegion != "" {
 		market.Egress = cfg.Harvest.IntakeEgressRegion
 	}
-	routers.Register(s.App, s.ready.Load, handlers.Backgrounds(s.Wallpapers), handlers.Suggestions(suggestions, logger), handlers.Location(cities), handlers.Weather(cities, weatherService, cityIndex), handlers.Cities(cityIndex), handlers.NearestCity(cityIndex), shared, cfg.Deployment.Region, catalog.New(pool).WithSiteAssets(objects), yearbook.New(pool), discovery, interactions, counter.Enabled(), market)
+	directory := catalog.New(pool).WithSiteAssets(objects)
+	routers.Register(s.App, s.ready.Load, handlers.Backgrounds(s.Wallpapers), handlers.Suggestions(suggestions, logger), handlers.Location(cities), handlers.Weather(cities, weatherService, cityIndex), handlers.Cities(cityIndex), handlers.NearestCity(cityIndex), shared, cfg.Deployment.Region, directory, yearbook.New(pool), discovery, interactions, counter.Enabled(), market)
 	collectionCtx, stopCollection := context.WithCancel(context.Background())
 	var collector *collection.Service
 	var collectionPool *pgxpool.Pool
@@ -184,6 +176,20 @@ func New(logger zerolog.Logger, cfg platform.Config) *Server {
 		intake = collection.NewIntake(pool, cfg.Harvest)
 		if cfg.Harvest.Discovery != nil && cfg.Harvest.Discovery.Enabled {
 			steamDiscovery = collection.NewDiscovery(pool, cfg.Harvest, intake)
+		}
+	}
+	if cfg.Management != nil {
+		if err := cfg.ValidateWallpaperRuntime(); err != nil {
+			s.initErr = err
+		}
+		if s.initErr == nil {
+			ops := &management.Operations{Pool: pool, Catalog: directory, Assets: objects, Intake: intake, Discovery: steamDiscovery, Collector: collector, Region: cfg.Deployment.Region}
+			if collector != nil {
+				ops.Namespace = cfg.Harvest.Namespace
+				ops.ReconcileEnabled = cfg.Harvest.WriterToken != ""
+			}
+			s.Management = management.New(logger, cfg, s.Wallpapers, ops)
+			s.managementAddress = cfg.Management.Address
 		}
 	}
 	var heatPool *pgxpool.Pool

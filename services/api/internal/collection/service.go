@@ -3,6 +3,7 @@ package collection
 import (
 	"context"
 	"errors"
+	"sync/atomic"
 	"time"
 	"uuid"
 
@@ -20,6 +21,7 @@ type Service struct {
 	consumer  uuid.UUID
 	poll      time.Duration
 	pageSize  int
+	health    atomic.Pointer[ConsumerHealth]
 }
 
 func New(pool *pgxpool.Pool, cfg platform.HarvestConfig) *Service {
@@ -120,6 +122,11 @@ func (s *Service) Tick(ctx context.Context) error {
 		var readErr, writeErr error
 		if v7(s.consumer) {
 			readErr = s.consume(ctx, conn, q)
+			status := ConsumerHealth{State: "connected", CheckedAt: time.Now().UTC()}
+			if readErr != nil {
+				status.State, status.Code = "unavailable", Diagnostic(readErr)
+			}
+			s.health.Store(&status)
 		}
 		if s.remote.writer != "" {
 			writeErr = s.reconcile(ctx, q)

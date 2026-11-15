@@ -24,12 +24,17 @@ func TestWallpaperRuntimeConfig(t *testing.T) {
 	if e := valid().ValidateWallpaperRuntime(); e != nil {
 		t.Fatal(e)
 	}
-	for _, change := range []func(*Config){func(c *Config) { c.Management.Address = "0.0.0.0:17324" }, func(c *Config) { c.Management.Address = "localhost:17324" }, func(c *Config) { c.Management.Token = "weak" }, func(c *Config) { c.Database = nil }, func(c *Config) { c.Storage = nil }, func(c *Config) { c.Database.MaxConnections = 1000 }, func(c *Config) { c.Database.ConnectTimeout = time.Hour }} {
+	for _, change := range []func(*Config){func(c *Config) { c.Management.Address = "0.0.0.0:17324" }, func(c *Config) { c.Management.Address = "localhost:17324" }, func(c *Config) { c.Management.Token = "weak" }, func(c *Config) { c.Database = nil }, func(c *Config) { c.Database.MaxConnections = 1000 }, func(c *Config) { c.Database.ConnectTimeout = time.Hour }} {
 		c := valid()
 		change(&c)
 		if c.ValidateWallpaperRuntime() == nil {
 			t.Fatal("accepted unsafe management configuration")
 		}
+	}
+	withoutStorage := valid()
+	withoutStorage.Storage = nil
+	if err := withoutStorage.ValidateWallpaperRuntime(); err != nil {
+		t.Fatal(err)
 	}
 	var off Config
 	if off.ValidateWallpaperRuntime() != nil {

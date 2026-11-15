@@ -262,15 +262,19 @@ func (s *Intake) Retry(ctx context.Context, platform, key string) error {
 		return err
 	}
 	return s.transact(ctx, func(ctx context.Context, q *dbgen.Queries) error {
-		row, err := lockIntakeCandidate(ctx, q, source)
-		if err != nil {
-			return err
-		}
-		if row.State != "deferred" || row.NextAt.Valid {
-			return ErrIntakeState
-		}
-		return q.WakeIntake(ctx, row.ID)
+		return retryIntake(ctx, q, source)
 	})
+}
+
+func retryIntake(ctx context.Context, q *dbgen.Queries, source catalog.Source) error {
+	row, err := lockIntakeCandidate(ctx, q, source)
+	if err != nil {
+		return err
+	}
+	if row.State != "deferred" || row.NextAt.Valid {
+		return ErrIntakeState
+	}
+	return q.WakeIntake(ctx, row.ID)
 }
 
 func (s *Intake) Dismiss(ctx context.Context, platform, key string) error {
