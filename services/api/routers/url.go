@@ -35,7 +35,7 @@ func registerURLs(v1 fiber.Router, backgrounds, suggestions, location, weather, 
 		page, detail fiber.Handler
 	}{
 		{"sites", handlers.CatalogPage(directory.SitePage, true), handlers.SiteDetail(directory, discovery, yearbooks, interactionsEnabled)},
-		{"games", handlers.CatalogPage(directory.GamePage, false), handlers.CatalogDetail(directory.PublishedGame)},
+		{"games", handlers.CatalogPage(directory.GamePage, false), handlers.GameProfile(directory, market)},
 	} {
 		group := v1.Group("/"+route.path, limited(600, func(fiber.Ctx) string { return route.path }),
 			limited(120, func(c fiber.Ctx) string { return c.IP() }), middleware.RedisLimit(shared, region, route.path, 600, 120))
@@ -49,6 +49,8 @@ func registerURLs(v1 fiber.Router, backgrounds, suggestions, location, weather, 
 			group.Get("/directory", handlers.GameChannel(directory, market, "directory"))
 			group.Get("/collections", handlers.GameChannel(directory, market, "collections"))
 			group.Get("/collections/:publicID", handlers.GameChannel(directory, market, "members"))
+			group.Get("/:publicID/insights", handlers.GameProfileSecondary(directory, market, false))
+			group.Get("/:publicID/news", handlers.GameProfileSecondary(directory, market, true))
 		}
 		group.Get("/", route.page)
 		group.Get("/:publicID", route.detail)

@@ -110,6 +110,36 @@ func TestGameChannelScale(t *testing.T) {
 				t.Fatal("collection member keyset broken")
 			}
 		})
+		// One fifth of works have sparse, attributed 30-day history. Profile
+		// and Insights are timed independently against the same catalog.
+		execSQL(t, pool, `INSERT INTO game_player_daily
+ SELECT s.id,'cn',(now() AT TIME ZONE 'UTC')::date-d,jsonb_build_object('0',
+   jsonb_build_array(d%23,now()-make_interval(days=>d),uuidv7(),uuidv7()))
+ FROM game_sources s CROSS JOIN generate_series(0,29,2) d
+ WHERE external_key::bigint-3200000000 BETWEEN $1::int AND $2::int AND (external_key::bigint%5)=1`, prior+1, size)
+		execSQL(t, pool, `INSERT INTO game_price_observations
+ SELECT s.id,uuidv7(),uuidv7(),'cn','us','USD','en',(now() AT TIME ZONE 'UTC')::date-d,
+  now()-make_interval(days=>d),'priced',1999,CASE WHEN d>=10 THEN 1999 ELSE 999 END,CASE WHEN d>=10 THEN 0 ELSE 50 END
+ FROM game_sources s CROSS JOIN generate_series(0,29,3) d
+ WHERE external_key::bigint-3200000000 BETWEEN $1::int AND $2::int AND (external_key::bigint%5)=1`, prior+1, size)
+		execSQL(t, pool, "ANALYZE game_player_daily; ANALYZE game_price_observations")
+		measure("detail + related", func() {
+			p, err := editor.PublicGameProfile(ctx, market, ids[0], "en")
+			must(t, err)
+			if len(p.Related) != 6 || len(p.Sources) != 1 || p.Sources[0].Details == nil {
+				t.Fatalf("scale profile lost a lane: %+v", p)
+			}
+		})
+		measure("insights", func() {
+			out, err := editor.PublicGameInsights(ctx, market, ids[0], "3200000001", "us", "en", 30)
+			must(t, err)
+			if len(out.PriceDays) != 10 || len(out.PlayerDays) != 15 || len(out.PriceChanges) != 1 {
+				t.Fatalf("scale history samples missing: %+v", out)
+			}
+		})
+		var historyBytes int64
+		must(t, pool.QueryRow(ctx, "SELECT pg_total_relation_size('game_player_daily')+pg_total_relation_size('game_price_observations')").Scan(&historyBytes))
+		t.Logf("games=%d D3-C history relations+indexes=%d B", size, historyBytes)
 		var bytes int64
 		must(t, pool.QueryRow(ctx, "SELECT pg_total_relation_size('game_channel_steam')+pg_total_relation_size('game_collections')+pg_total_relation_size('game_collection_members')+pg_relation_size('games_channel_added')").Scan(&bytes))
 		t.Logf("games=%d discovery/collection relations+indexes=%d B", size, bytes)

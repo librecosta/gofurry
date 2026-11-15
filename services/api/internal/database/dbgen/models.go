@@ -263,6 +263,29 @@ type GameLocalization struct {
 	Summary string    `json:"summary"`
 }
 
+type GamePlayerDaily struct {
+	GameSourceID uuid.UUID   `json:"game_source_id"`
+	EgressRegion string      `json:"egress_region"`
+	UtcDay       pgtype.Date `json:"utc_day"`
+	Samples      []byte      `json:"samples"`
+}
+
+type GamePriceObservation struct {
+	GameSourceID  uuid.UUID          `json:"game_source_id"`
+	BindingID     uuid.UUID          `json:"binding_id"`
+	ObservationID uuid.UUID          `json:"observation_id"`
+	EgressRegion  string             `json:"egress_region"`
+	StoreCountry  string             `json:"store_country"`
+	Currency      string             `json:"currency"`
+	Locale        string             `json:"locale"`
+	UtcDay        pgtype.Date        `json:"utc_day"`
+	ObservedAt    pgtype.Timestamptz `json:"observed_at"`
+	State         string             `json:"state"`
+	Original      pgtype.Int8        `json:"original"`
+	Final         pgtype.Int8        `json:"final"`
+	Discount      pgtype.Int4        `json:"discount"`
+}
+
 type GameSource struct {
 	ID           uuid.UUID `json:"id"`
 	GameID       uuid.UUID `json:"game_id"`

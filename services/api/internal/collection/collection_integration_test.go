@@ -200,6 +200,7 @@ func TestCollectionHarvestD(t *testing.T) {
 	count(t, pool, 1, "SELECT count(*) FROM game_evidence_players WHERE players=0")
 	count(t, pool, 1, "SELECT count(*) FROM game_evidence_news WHERE gid='123456'")
 	checkSteamReadModel(t, editor, game.PublicID, without.PublicID)
+	checkGameProfileFromHarvest(t, editor, game.PublicID)
 	replaySteamMetadata(t, pool, state, gameBind.SourceID)
 	checkSteamWithdrawal(t, pool, svc, state, game.PublicID, gameBind.SourceID)
 	runtime.ReadMemStats(&memAfter)
@@ -438,6 +439,11 @@ func TestCollectionHarvestD(t *testing.T) {
 	l.job(req(movedPlan))
 	checkConsumerLifecycle(t, l, cut, goDB, pool, enrolled.ID, siteA.PublicID, reset.Cursor)
 
+	l.catalogPrice.Store(true)
+	l.job(req(priceUS))
+	must(t, svc.Tick(ctx))
+	l.job(req(priceUS))
+	must(t, svc.Tick(ctx))
 	game, err = editor.EditGame(ctx, game.ID, game.Revision, catalog.GameInput{Editorial: text})
 	must(t, err)
 	must(t, svc.Reconcile(ctx))
@@ -445,6 +451,7 @@ func TestCollectionHarvestD(t *testing.T) {
 	count(t, remotePool, 1, "SELECT count(*) FROM harvest.targets WHERE id=$1 AND state='active'", players.TargetID)
 	count(t, pool, 1, "SELECT count(*) FROM collection_bindings WHERE game_id=$1 AND effective_until IS NOT NULL", game.ID)
 
+	checkGameHistoricEvidence(t, pool, editor, game.PublicID, gameBind.SourceID)
 	t.Logf("B1 measured evidence heap=%d indexes=%d toast=%d WAL=%d bytes, real fixture HTTP requests=%d",
 		scalar[int64](t, pool, "SELECT sum(pg_relation_size(oid))::bigint FROM pg_class WHERE relname IN ('site_evidence_changes','site_daily_coverage','collection_current','game_evidence_news','game_evidence_players')"),
 		scalar[int64](t, pool, "SELECT sum(pg_indexes_size(oid))::bigint FROM pg_class WHERE relname IN ('site_evidence_changes','site_daily_coverage','collection_current','game_evidence_news','game_evidence_players')"),

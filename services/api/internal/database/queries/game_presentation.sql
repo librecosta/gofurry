@@ -5,7 +5,7 @@ WITH work AS MATERIALIZED (
  SELECT s.* FROM game_sources s JOIN work g ON s.game_id=g.id
  ORDER BY s.active DESC,s.platform_code,s.external_key LIMIT 16
 )
-SELECT g.public_id,g.slug,(game_presentation(g.id,g.intake_display_source)->'localizations')::jsonb AS localizations,
+SELECT g.public_id,g.slug,g.intake_display_source AS preferred_source,(game_presentation(g.id,g.intake_display_source)->'localizations')::jsonb AS localizations,
  coalesce((SELECT jsonb_agg(jsonb_build_object('locale',a.locale,'game_source_id',a.game_source_id,'observation_id',a.observation_id,
   'observed_at',a.observed_at,'store_country',a.steam_store_country,'egress_region',a.steam_egress_region)
   ORDER BY a.locale) FROM game_approved_presentations a WHERE a.game_id=g.id),'[]')::jsonb AS approved,
@@ -18,7 +18,7 @@ SELECT g.public_id,g.slug,(game_presentation(g.id,g.intake_display_source)->'loc
        AND c.output_schema=m.output_schema AND c.scope_key=m.scope_key AND c.position=m.position AND c.state='present')
      AND NOT EXISTS (SELECT 1 FROM collection_gaps gap WHERE gap.namespace=src.namespace AND gap.prior_generation=cn.generation)
      THEN 'observed' ELSE 'historical' END,
-    'scope_key',m.scope_key,'output_schema',m.output_schema,'ruleset',m.ruleset,'observation_id',m.observation_id,
+    'genre_codes',d.genres,'release_precision',d.precision,'release_day',d.release_day,'scope_key',m.scope_key,'output_schema',m.output_schema,'ruleset',m.ruleset,'observation_id',m.observation_id,
     'content_hash',m.content_hash,'observed_at',m.observed_at,'confirmed_at',m.confirmed_at,
     'binding_id',m.binding_id,'target_id',src.target_id,'namespace',src.namespace,
     'verified_chinese',coalesce(m.payload->>'localized'='true',false),
@@ -26,6 +26,7 @@ SELECT g.public_id,g.slug,(game_presentation(g.id,g.intake_display_source)->'loc
     'media',CASE WHEN m.section='media' THEN m.payload END)
     ORDER BY m.locale,m.store_country,m.section),'[]')
    FROM game_source_metadata m
+   LEFT JOIN game_channel_steam d ON d.game_source_id=m.game_source_id AND d.locale=m.locale AND d.store_country=m.store_country AND d.egress_region=m.egress_region AND d.section=m.section
    LEFT JOIN collection_bindings b ON b.id=m.binding_id AND b.game_source_id=s.id AND b.game_id=g.id
    LEFT JOIN collection_sources src ON src.id=b.source_id
    LEFT JOIN collection_consumer cn ON cn.namespace=src.namespace
@@ -55,7 +56,7 @@ SELECT g.public_id,g.slug,(game_presentation(g.id,g.intake_display_source)->'loc
    SELECT item.* FROM (
    SELECT DISTINCT ON (e.gid) e.gid,e.published_at,e.observed_at,e.observation_id,e.scope_key,e.value
    FROM collection_sources src JOIN game_evidence_news e ON e.source_id=src.id
-   WHERE s.platform_code='steam' AND src.provider='steam' AND src.external_key=s.external_key
+   WHERE NOT sqlc.arg(omit_news)::boolean AND s.platform_code='steam' AND src.provider='steam' AND src.external_key=s.external_key
     AND EXISTS (SELECT 1 FROM collection_bindings b
      JOIN collection_plan_bindings m ON m.binding_id=b.id AND m.source_id=b.source_id
      JOIN collection_plans p ON p.id=m.plan_id AND p.source_id=m.source_id AND p.capability='steam.news'

@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url'
 import { sitesFixtureSQL } from './sites-fixture.mjs'
 import { profileFixtureSQL, profileID } from './site-profile-fixture.mjs'
 import { collectionGame, gamesFixtureSQL, memberTwo } from './game-channel-fixture.mjs'
+import { gameProfileFixtureSQL } from './game-profile-fixture.mjs'
 
 const root = fileURLToPath(new URL('../', import.meta.url))
 const webDir = join(root, 'apps', 'web')
@@ -183,7 +184,7 @@ try {
 
   for (const [region, fixture] of Object.entries(fixtures)) {
     run('docker', ['exec', container, 'psql', '-Xq', '-v', 'ON_ERROR_STOP=1', '-U', 'postgres',
-      '-d', 'gofurry_d1_' + region.toLowerCase() + '_test', '-c', gamesFixtureSQL(region)])
+      '-d', 'gofurry_d1_' + region.toLowerCase() + '_test', '-c', gamesFixtureSQL(region) + gameProfileFixtureSQL])
     const editor = join(scratch, region + '-collection.json')
     const members = join(scratch, region + '-members.json')
     await writeFile(editor, JSON.stringify({ slug: 'fox-volumes', localizations: [
@@ -305,6 +306,7 @@ navigation:
   await waitFor(() => status(fixtures.CN.web + '/sites', 503), 'Discovery SSR database-outage status')
   await waitFor(() => status(fixtures.CN.web + '/sites/directory?category=community', 503), 'Directory SSR database-outage status')
   await waitFor(() => status(fixtures.CN.web + '/games/directory', 503), 'Game directory SSR database-outage status')
+  await waitFor(() => status(fixtures.CN.web + '/games/' + collectionGame + '/game-0', 503), 'Game profile SSR database-outage status')
   await waitFor(() => status(fixtures.CN.web + '/games/collections/' + fixtures.CN.gameCollection + '/fox-volumes', 503), 'Collection SSR database-outage status')
   if (!(await status(fixtures.CN.web + '/start', 200))) throw new Error('Database outage affected Start SSR')
   run('docker', ['unpause', container])

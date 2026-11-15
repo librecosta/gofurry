@@ -234,6 +234,7 @@ type lab struct {
 	http                                    *http.Client
 	plane, worker                           *process
 	mode, dns, news                         atomic.Int32
+	catalogPrice                            atomic.Bool
 	intakeVersion                           atomic.Int32
 	discoveryMode                           atomic.Int32
 	created                                 int64
@@ -489,6 +490,9 @@ func (l *lab) feed(w http.ResponseWriter, r *http.Request) {
 		case "3100000001", "3100000002", "3100000003", "3100000004", "3100000005", "3100000006", "3100000007", "3100000008", "3100000009":
 			name, kind, description, extra = l.eligibilityFixture(app, name, kind, description, extra)
 		case "42":
+			if l.catalogPrice.Load() && q.Get("cc") == "US" {
+				extra = strings.Replace(extra, `"initial":0,"final":0,"discount_percent":0`, `"initial":1999,"final":1499,"discount_percent":25`, 1)
+			}
 			description = "An independent English description."
 			if q.Get("l") == "schinese" && q.Get("cc") != "HK" {
 				name, description = "松林故事", "森林里的狐狸重新打开了图书馆。"

@@ -11,7 +11,7 @@ import type { Page } from './load'
 import { text } from './messages'
 import styles from './games.module.scss'
 
-function Frame({ page, children }: { page: Page; children: ReactNode }) {
+export function GameFrame({ page, children }: { page: Pick<Page, "locale" | "region" | "path" | "criteria">; children: ReactNode }) {
   const { locale, region } = page
   const m = text[locale]
   const alternate = locale === 'en' ? 'zh' : 'en'
@@ -310,7 +310,7 @@ export function GameChannelPage({ page }: { page: Page }) {
   else if ('members' in page.data) body = <CollectionPage page={page} collection={page.data} />
   else if (page.kind === 'directory') body = <DirectoryPage page={page} list={page.data as List<Game>} />
   else body = <CollectionsPage page={page} list={page.data} />
-  return <Frame page={page}>{body}</Frame>
+  return <GameFrame page={page}>{body}</GameFrame>
 }
 
 export function MissingGamePage() {

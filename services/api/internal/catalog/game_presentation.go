@@ -11,6 +11,7 @@ import (
 )
 
 type GamePresentation struct {
+	PreferredSource *uuid.UUID
 	Summary
 	Approved []ApprovedGamePresentation
 	Sources  []GameSourceSnapshot
@@ -56,14 +57,17 @@ type SteamStoreScope struct {
 type SteamMetadata struct {
 	SteamStoreScope
 	SteamObservation
-	Section         string        `json:"section"`
-	State           string        `json:"state"`
-	BindingID       uuid.UUID     `json:"binding_id"`
-	TargetID        *uuid.UUID    `json:"target_id"`
-	Namespace       *string       `json:"namespace"`
-	VerifiedChinese bool          `json:"verified_chinese"`
-	Details         *SteamDetails `json:"details,omitempty"`
-	Media           *SteamMedia   `json:"media,omitempty"`
+	GenreCodes       []string      `json:"genre_codes"`
+	ReleasePrecision *string       `json:"release_precision"`
+	ReleaseDay       *string       `json:"release_day"`
+	Section          string        `json:"section"`
+	State            string        `json:"state"`
+	BindingID        uuid.UUID     `json:"binding_id"`
+	TargetID         *uuid.UUID    `json:"target_id"`
+	Namespace        *string       `json:"namespace"`
+	VerifiedChinese  bool          `json:"verified_chinese"`
+	Details          *SteamDetails `json:"details,omitempty"`
+	Media            *SteamMedia   `json:"media,omitempty"`
 }
 
 type SteamPrice struct {
@@ -109,12 +113,16 @@ func (s *Service) ReadGamePresentation(ctx context.Context, publicID, egressRegi
 	}
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
-	row, err := dbgen.New(s.pool).ReadGamePresentation(ctx, dbgen.ReadGamePresentationParams{PublicID: publicID, EgressRegion: egressRegion})
+	return readGamePresentation(ctx, dbgen.New(s.pool), publicID, egressRegion, true)
+}
+
+func readGamePresentation(ctx context.Context, q *dbgen.Queries, publicID, egressRegion string, news bool) (GamePresentation, error) {
+	row, err := q.ReadGamePresentation(ctx, dbgen.ReadGamePresentationParams{PublicID: publicID, EgressRegion: egressRegion, OmitNews: !news})
 	if err != nil {
 		return GamePresentation{}, classify(err)
 	}
 	base, err := summary(row.PublicID, row.Slug, row.Localizations)
-	out := GamePresentation{Summary: base}
+	out := GamePresentation{Summary: base, PreferredSource: row.PreferredSource}
 	if err != nil || json.Unmarshal(row.Approved, &out.Approved) != nil || json.Unmarshal(row.Sources, &out.Sources) != nil {
 		return GamePresentation{}, ErrUnavailable
 	}

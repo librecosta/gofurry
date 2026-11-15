@@ -203,6 +203,9 @@ func (s *Service) reset(ctx context.Context, conn *pgx.Conn, q *dbgen.Queries, s
 		if err := saveSteamMetadata(ctx, tx, generation, reset.Epoch, nil, ""); err != nil {
 			return err
 		}
+		if err := tx.SaveGamePriceObservations(ctx, dbgen.SaveGamePriceObservationsParams{Generation: generation}); err != nil {
+			return err
+		}
 		if err := saveSiteTechnology(ctx, tx, generation, nil, ""); err != nil {
 			return err
 		}

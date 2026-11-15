@@ -139,6 +139,11 @@ func (s *Service) project(ctx context.Context, q *dbgen.Queries, generation, epo
 				return err
 			}
 		}
+		if r.Capability == intakeCapability && r.Scope.Dimensions["section"] == "price" {
+			if err := q.SaveGamePriceObservations(ctx, dbgen.SaveGamePriceObservationsParams{Generation: generation, SourceID: &src.ID, ScopeKey: r.ScopeKey}); err != nil {
+				return err
+			}
+		}
 		if r.Withdrawn || r.Position <= prior.Position {
 			return nil
 		}
@@ -319,6 +324,11 @@ func (s *Service) sweepPage(ctx context.Context, q *dbgen.Queries, generation, e
 			}
 			if r.Scope.Dimensions["section"] == "details" {
 				if err := refreshIntakeProfiles(ctx, q, generation, nil, r.ScopeKey); err != nil {
+					return err
+				}
+			}
+			if r.Scope.Dimensions["section"] == "price" {
+				if err := q.SaveGamePriceObservations(ctx, dbgen.SaveGamePriceObservationsParams{Generation: generation, ScopeKey: r.ScopeKey}); err != nil {
 					return err
 				}
 			}
