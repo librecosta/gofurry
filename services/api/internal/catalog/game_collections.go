@@ -24,9 +24,10 @@ type PublicCollection struct {
 }
 type CollectionRecord struct {
 	CollectionSummary
-	Status   string   `json:"status"`
-	Revision int64    `json:"revision"`
-	Members  []string `json:"members"`
+	Status                    string   `json:"status"`
+	Revision                  int64    `json:"revision"`
+	Members                   []string `json:"members"`
+	EffectivePublishedMembers *int64   `json:"effective_published_members,omitzero"`
 }
 
 func collectionSummary(id, slug string, text []byte, first pgtype.Timestamptz) (CollectionSummary, error) {
@@ -124,7 +125,13 @@ func (s *Service) InspectGameCollection(ctx context.Context, id string) (Collect
 		if err != nil {
 			return CollectionRecord{}, err
 		}
-		return collectionRecord(ctx, q, row)
+		record, err := collectionRecord(ctx, q, row)
+		if err != nil {
+			return record, err
+		}
+		count, err := q.EffectivePublishedGameCollectionMembers(ctx, row.ID)
+		record.EffectivePublishedMembers = &count
+		return record, err
 	})
 }
 

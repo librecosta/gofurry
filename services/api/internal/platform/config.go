@@ -1,10 +1,12 @@
 package platform
 
 import (
+	"crypto/x509"
 	"fmt"
 	"net"
 	"net/netip"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strconv"
 	"time"
@@ -72,7 +74,12 @@ type StorageConfig struct {
 	AccessKeyID     string `mapstructure:"access_key_id" json:"-"`
 	SecretAccessKey string `mapstructure:"secret_access_key" json:"-"`
 	PublicBaseURL   string `mapstructure:"public_base_url"`
+	CAFile          string `mapstructure:"ca_file" json:"-"`
+	rootCAs         *x509.CertPool
 }
+
+// RootCAs is nil unless the deployment explicitly configured a private CA.
+func (s StorageConfig) RootCAs() *x509.CertPool { return s.rootCAs }
 
 // LoadConfig reads one explicit YAML file. No search paths, environment bindings,
 // business flags or secondary files are merged into it. The documented enabled
@@ -196,6 +203,20 @@ func LoadConfig(path string) (Config, error) {
 		}
 		if s.Region == "" || s.Bucket == "" || s.AccessKeyID == "" || s.SecretAccessKey == "" {
 			return cfg, fmt.Errorf("storage requires region, bucket and explicit credentials")
+		}
+		if s.CAFile != "" {
+			caFile := s.CAFile
+			if !filepath.IsAbs(caFile) {
+				caFile = filepath.Join(filepath.Dir(path), caFile)
+			}
+			pem, err := os.ReadFile(caFile)
+			if err != nil {
+				return cfg, fmt.Errorf("cannot read storage.ca_file")
+			}
+			s.rootCAs = x509.NewCertPool()
+			if !s.rootCAs.AppendCertsFromPEM(pem) {
+				return cfg, fmt.Errorf("storage.ca_file must contain a PEM certificate")
+			}
 		}
 	}
 	if s := cfg.SearchSuggestions; s != nil {

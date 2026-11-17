@@ -82,6 +82,9 @@ func TestStorageConfigExplicitYAML(t *testing.T) {
 	const storageYAML = "storage:\n  endpoint: https://storage.example\n  region: auto\n  bucket: development\n  access_key_id: yaml-key\n  secret_access_key: yaml-secret\n  public_base_url: https://public.example\n"
 	t.Setenv("AWS_ACCESS_KEY_ID", "environment-key")
 	path := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(filepath.Join(filepath.Dir(path), "invalid-ca.pem"), []byte("not a certificate"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	for _, tc := range []struct {
 		value string
 		valid bool
@@ -90,6 +93,8 @@ func TestStorageConfigExplicitYAML(t *testing.T) {
 		{strings.Replace(storageYAML, "yaml-secret", "", 1), false},
 		{strings.Replace(storageYAML, "https://public.example", "http://public.example", 1), false},
 		{strings.Replace(storageYAML, "https://public.example", "https://user:password@public.example", 1), false},
+		{storageYAML + "  ca_file: missing-ca.pem\n", false},
+		{storageYAML + "  ca_file: invalid-ca.pem\n", false},
 		{storageYAML + "  unknown: true\n", false},
 	} {
 		if err := os.WriteFile(path, []byte(validYAML+tc.value), 0600); err != nil {

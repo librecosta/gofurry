@@ -53,6 +53,9 @@ func (s *Store) URL(key string) string {
 }
 
 func New(cfg platform.StorageConfig) *Store {
+	if roots := cfg.RootCAs(); roots != nil {
+		return NewWithRootCAs(cfg, roots)
+	}
 	return newStore(cfg, nil)
 }
 

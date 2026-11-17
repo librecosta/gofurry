@@ -91,6 +91,17 @@ func (q *Queries) EditGameCollection(ctx context.Context, arg EditGameCollection
 	return i, err
 }
 
+const effectivePublishedGameCollectionMembers = `-- name: EffectivePublishedGameCollectionMembers :one
+SELECT count(*) FROM game_collection_effective_members m JOIN game_channel_public g ON g.id=m.game_id WHERE m.collection_id=$1
+`
+
+func (q *Queries) EffectivePublishedGameCollectionMembers(ctx context.Context, collectionID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, effectivePublishedGameCollectionMembers, collectionID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const featuredGameCollections = `-- name: FeaturedGameCollections :many
 SELECT c.public_id,c.slug,c.localizations,c.first_published_at FROM game_channel_features f
 JOIN game_collections c ON c.id=f.entity_id AND c.status='published' WHERE f.slot IN ('collection_1','collection_2','collection_3') ORDER BY f.slot

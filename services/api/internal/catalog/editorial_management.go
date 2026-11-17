@@ -2,6 +2,7 @@ package catalog
 
 import (
 	"context"
+	json "encoding/json/v2"
 	"errors"
 	"regexp"
 	"slices"
@@ -89,6 +90,41 @@ func (s *Service) BulkEditSites(ctx context.Context, in BulkSiteEdit, region, ac
 const maxEditorialRelations = 128
 
 var editorialCode = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
+
+type EditorialTagDefinition struct {
+	Code          string         `json:"code"`
+	Category      string         `json:"category"`
+	Localizations []Localization `json:"localizations"`
+}
+
+func (s *Service) CreateManagementEditorialTag(ctx context.Context, in EditorialTagDefinition) (ManagementResult, error) {
+	if len(in.Code) > 64 || !editorialCode.MatchString(in.Code) ||
+		len(in.Category) > 64 || !editorialCode.MatchString(in.Category) || len(in.Localizations) == 0 {
+		return ManagementResult{}, ErrInvalid
+	}
+	clean, err := normalizeEditorial(Editorial{Slug: in.Code, Localizations: in.Localizations}, "")
+	if err != nil {
+		return ManagementResult{}, err
+	}
+	names, err := json.Marshal(clean.Localizations)
+	if err != nil {
+		return ManagementResult{}, ErrInvalid
+	}
+	return write(ctx, s, func(ctx context.Context, q *dbgen.Queries) (ManagementResult, error) {
+		code, err := q.CreateEditorialTag(ctx, dbgen.CreateEditorialTagParams{TagID: uuid.NewV7(), TagCode: in.Code, CategoryCode: in.Category, Names: names})
+		return ManagementResult{Target: strings.ReplaceAll(code, "-", "_")}, editorialReference(err)
+	})
+}
+
+func (s *Service) ArchiveManagementEditorialTag(ctx context.Context, code string) (ManagementResult, error) {
+	if len(code) > 64 || !editorialCode.MatchString(code) {
+		return ManagementResult{}, ErrInvalid
+	}
+	return write(ctx, s, func(ctx context.Context, q *dbgen.Queries) (ManagementResult, error) {
+		code, err := q.ArchiveEditorialTag(ctx, code)
+		return ManagementResult{Target: strings.ReplaceAll(code, "-", "_")}, err
+	})
+}
 
 type EditorialTagAssignment struct {
 	Code string `json:"code"`

@@ -8,8 +8,77 @@ package dbgen
 import (
 	"context"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"uuid"
 )
+
+const archiveEditorialTag = `-- name: ArchiveEditorialTag :one
+UPDATE game_editorial_tags SET archived_at=now() WHERE code=$1 AND archived_at IS NULL RETURNING code
+`
+
+func (q *Queries) ArchiveEditorialTag(ctx context.Context, code string) (string, error) {
+	row := q.db.QueryRow(ctx, archiveEditorialTag, code)
+	var code_2 string
+	err := row.Scan(&code_2)
+	return code_2, err
+}
+
+const createEditorialTag = `-- name: CreateEditorialTag :one
+INSERT INTO game_editorial_tags (id,category_id,code,localizations)
+SELECT $1::uuid,c.id,$2::text,$3::jsonb
+FROM game_editorial_tag_categories c WHERE c.code=$4 AND c.archived_at IS NULL
+RETURNING game_editorial_tags.code
+`
+
+type CreateEditorialTagParams struct {
+	TagID        uuid.UUID `json:"tag_id"`
+	TagCode      string    `json:"tag_code"`
+	Names        []byte    `json:"names"`
+	CategoryCode string    `json:"category_code"`
+}
+
+func (q *Queries) CreateEditorialTag(ctx context.Context, arg CreateEditorialTagParams) (string, error) {
+	row := q.db.QueryRow(ctx, createEditorialTag,
+		arg.TagID,
+		arg.TagCode,
+		arg.Names,
+		arg.CategoryCode,
+	)
+	var code string
+	err := row.Scan(&code)
+	return code, err
+}
+
+const listEditorialTagCategories = `-- name: ListEditorialTagCategories :many
+SELECT code,coalesce((SELECT l->>'name' FROM jsonb_array_elements(localizations) l
+ ORDER BY (l->>'locale'='zh') DESC LIMIT 1),code)::text AS name
+FROM game_editorial_tag_categories WHERE archived_at IS NULL ORDER BY sort_order,code LIMIT 128
+`
+
+type ListEditorialTagCategoriesRow struct {
+	Code string `json:"code"`
+	Name string `json:"name"`
+}
+
+func (q *Queries) ListEditorialTagCategories(ctx context.Context) ([]ListEditorialTagCategoriesRow, error) {
+	rows, err := q.db.Query(ctx, listEditorialTagCategories)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListEditorialTagCategoriesRow{}
+	for rows.Next() {
+		var i ListEditorialTagCategoriesRow
+		if err := rows.Scan(&i.Code, &i.Name); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
 
 const managementCollectionExclusions = `-- name: ManagementCollectionExclusions :many
 SELECT g.public_id,coalesce((SELECT name FROM game_channel_locales l
@@ -44,16 +113,18 @@ func (q *Queries) ManagementCollectionExclusions(ctx context.Context, collection
 }
 
 const managementCollectionTags = `-- name: ManagementCollectionTags :many
-SELECT t.code,
+SELECT t.code, (t.archived_at IS NOT NULL OR c.id IS NULL OR c.archived_at IS NOT NULL) AS archived,
  coalesce((SELECT l->>'name' FROM jsonb_array_elements(t.localizations) l
   ORDER BY (l->>'locale'='zh') DESC LIMIT 1),t.code)::text AS name
 FROM game_collection_tag_rules r JOIN game_editorial_tags t ON t.id=r.tag_id
+LEFT JOIN game_editorial_tag_categories c ON c.id=t.category_id
 WHERE r.collection_id=$1 ORDER BY t.code
 `
 
 type ManagementCollectionTagsRow struct {
-	Code string `json:"code"`
-	Name string `json:"name"`
+	Code     string      `json:"code"`
+	Archived pgtype.Bool `json:"archived"`
+	Name     string      `json:"name"`
 }
 
 func (q *Queries) ManagementCollectionTags(ctx context.Context, collectionID uuid.UUID) ([]ManagementCollectionTagsRow, error) {
@@ -65,7 +136,7 @@ func (q *Queries) ManagementCollectionTags(ctx context.Context, collectionID uui
 	items := []ManagementCollectionTagsRow{}
 	for rows.Next() {
 		var i ManagementCollectionTagsRow
-		if err := rows.Scan(&i.Code, &i.Name); err != nil {
+		if err := rows.Scan(&i.Code, &i.Archived, &i.Name); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -77,17 +148,19 @@ func (q *Queries) ManagementCollectionTags(ctx context.Context, collectionID uui
 }
 
 const managementGameTags = `-- name: ManagementGameTags :many
-SELECT t.code, a.role,
+SELECT t.code, a.role, (t.archived_at IS NOT NULL OR c.id IS NULL OR c.archived_at IS NOT NULL) AS archived,
  coalesce((SELECT l->>'name' FROM jsonb_array_elements(t.localizations) l
   ORDER BY (l->>'locale'='zh') DESC LIMIT 1),t.code)::text AS name
 FROM game_editorial_tag_members a JOIN game_editorial_tags t ON t.id=a.tag_id
+LEFT JOIN game_editorial_tag_categories c ON c.id=t.category_id
 WHERE a.game_id=$1 ORDER BY a.role,t.code
 `
 
 type ManagementGameTagsRow struct {
-	Code string `json:"code"`
-	Role string `json:"role"`
-	Name string `json:"name"`
+	Code     string      `json:"code"`
+	Role     string      `json:"role"`
+	Archived pgtype.Bool `json:"archived"`
+	Name     string      `json:"name"`
 }
 
 func (q *Queries) ManagementGameTags(ctx context.Context, gameID uuid.UUID) ([]ManagementGameTagsRow, error) {
@@ -99,7 +172,12 @@ func (q *Queries) ManagementGameTags(ctx context.Context, gameID uuid.UUID) ([]M
 	items := []ManagementGameTagsRow{}
 	for rows.Next() {
 		var i ManagementGameTagsRow
-		if err := rows.Scan(&i.Code, &i.Role, &i.Name); err != nil {
+		if err := rows.Scan(
+			&i.Code,
+			&i.Role,
+			&i.Archived,
+			&i.Name,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

@@ -217,6 +217,9 @@ UPDATE game_collections SET revision=revision+1,updated_at=statement_timestamp()
 -- name: PrivateGameCollectionMembers :many
 SELECT g.public_id FROM game_collection_members m JOIN games g ON g.id=m.game_id WHERE m.collection_id=$1 ORDER BY m.position;
 
+-- name: EffectivePublishedGameCollectionMembers :one
+SELECT count(*) FROM game_collection_effective_members m JOIN game_channel_public g ON g.id=m.game_id WHERE m.collection_id=$1;
+
 -- name: ReadGameChannelFeatures :many
 SELECT f.slot,f.revision,coalesce(g.public_id,c.public_id,'')::text AS public_id FROM game_channel_features f
 LEFT JOIN games g ON g.id=f.entity_id AND f.slot IN ('primary','secondary_1','secondary_2')
