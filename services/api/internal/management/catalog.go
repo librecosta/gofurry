@@ -21,6 +21,10 @@ type publication struct {
 	Revision   int64  `json:"revision"`
 	ConfirmSFW bool   `json:"confirm_sfw"`
 }
+type revisionOnly struct {
+	Revision int64 `json:"revision"`
+}
+
 type policy struct {
 	Rating   string `json:"rating"`
 	Reason   string `json:"reason"`
@@ -80,6 +84,14 @@ func (o *Operations) sites(g fiber.Router) {
 	save := func(ctx context.Context, s *catalog.Service, _ *dbgen.Queries, id string, in catalog.SiteManagementEdit, d catalog.PublicationDecision) (catalog.ManagementResult, error) {
 		return s.SaveManagementSite(ctx, id, in, o.Region, d.Actor)
 	}
+	g.Post("/sites/bulk", editOnly, writeOperation(o, "site.bulk", func(ctx context.Context, s *catalog.Service, _ *dbgen.Queries, _ string, in catalog.BulkSiteEdit, d catalog.PublicationDecision) (catalog.ManagementResult, error) {
+		return s.BulkEditSites(ctx, in, o.Region, d.Actor)
+	}))
+	g.Delete("/sites/:id/logo", editOnly, writeOperation(o, "site.logo.clear", func(ctx context.Context, s *catalog.Service, _ *dbgen.Queries, id string, in revisionOnly, _ catalog.PublicationDecision) (catalog.ManagementResult, error) {
+		next, err := s.SetSiteAsset(ctx, id, in.Revision, storage.SiteLogo, "")
+		return catalog.ManagementResult{Target: id, Revision: next}, err
+	}))
+
 	g.Post("/sites", editOnly, writeOperation(o, "site.create", save))
 	g.Patch("/sites/:id", editOnly, writeOperation(o, "site.edit", save))
 	for _, action := range []string{"publish", "archive", "restore", "unpublish"} {
@@ -239,6 +251,22 @@ func (o *Operations) games(g fiber.Router) {
 		return c.JSON(rows)
 	})
 	o.features(g, "/games/features/:slot", "game.feature", false)
+	g.Get("/games/editorial-tags", func(c fiber.Ctx) error {
+		v, err := search(c, "q")
+		if err != nil {
+			return err
+		}
+		items, err := dbgen.New(o.Pool).SearchEditorialTags(c.Context(), v.Get("q"))
+		if err != nil {
+			return failure(err)
+		}
+		return c.JSON(items)
+	})
+	g.Get("/games/:id/tags", readOperation(o.Catalog.ManagementGameTags))
+	g.Patch("/games/:id/tags", editOnly, writeOperation(o, "game.tags", func(ctx context.Context, s *catalog.Service, _ *dbgen.Queries, id string, in catalog.EditorialTagEdit, _ catalog.PublicationDecision) (catalog.ManagementResult, error) {
+		return s.EditManagementGameTags(ctx, id, in)
+	}))
+
 	g.Get("/games/:id", readOperation(o.game))
 	save := func(ctx context.Context, s *catalog.Service, _ *dbgen.Queries, id string, in catalog.GameManagementEdit, _ catalog.PublicationDecision) (catalog.ManagementResult, error) {
 		return s.SaveManagementGame(ctx, id, in)
@@ -290,6 +318,11 @@ func (o *Operations) collections(g fiber.Router) {
 		rows, err := dbgen.New(o.Pool).ManagementCollections(c.Context(), dbgen.ManagementCollectionsParams{AfterID: v.Get("after"), Keyword: v.Get("q"), State: v.Get("status"), TakeRows: pageSize + 1})
 		return page(c, rows, err, func(row dbgen.ManagementCollectionsRow) string { return row.PublicID })
 	})
+	g.Get(base+"/:id/rules", readOperation(o.Catalog.ManagementCollectionRules))
+	g.Patch(base+"/:id/rules", editOnly, writeOperation(o, "collection.rules", func(ctx context.Context, s *catalog.Service, _ *dbgen.Queries, id string, in catalog.CollectionRulesEdit, _ catalog.PublicationDecision) (catalog.ManagementResult, error) {
+		return s.EditManagementCollectionRules(ctx, id, in)
+	}))
+
 	g.Get(base+"/:id", readOperation(o.Catalog.InspectGameCollection))
 	save := func(ctx context.Context, s *catalog.Service, _ *dbgen.Queries, id string, in collectionEdit, _ catalog.PublicationDecision) (catalog.ManagementResult, error) {
 		editorial := catalog.Editorial{Slug: in.Slug, Localizations: in.Localizations}

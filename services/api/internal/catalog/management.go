@@ -15,6 +15,7 @@ import (
 type ManagementResult struct {
 	Target   string `json:"target"`
 	Revision int64  `json:"revision"`
+	Affected *int   `json:"affected,omitempty"`
 }
 
 // Manage commits one verified operator receipt with all local catalogue changes.
@@ -41,6 +42,7 @@ type SiteManagement struct {
 	PreviouslyPublished bool                               `json:"previously_published"`
 	Localizations       []dbgen.ManagementSiteTextRow      `json:"localizations"`
 	Addresses           []dbgen.ManagementSiteAddressesRow `json:"addresses"`
+	HasLogo             bool                               `json:"has_logo"`
 	LogoURL             string                             `json:"logo_url"`
 	CoverURL            string                             `json:"cover_url"`
 }
@@ -61,6 +63,7 @@ func (s *Service) ManagementSite(ctx context.Context, id string) (out SiteManage
 			return out, err
 		}
 		out.Addresses, err = q.ManagementSiteAddresses(ctx, row.ID)
+		out.HasLogo = row.LogoAssetKey.Valid
 		out.LogoURL = s.assets.SiteAssetURL(storage.SiteLogo, row.LogoAssetKey.String)
 		out.CoverURL = s.assets.SiteAssetURL(storage.SiteCover, row.FeaturedCoverAssetKey.String)
 		return out, err

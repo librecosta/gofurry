@@ -149,6 +149,20 @@ func TestManagedSiteAsset(t *testing.T) {
 		!strings.HasPrefix(after.CoverURL, server.URL+"/public/sites/covers/") {
 		t.Fatalf("verified images were not bound: %+v %v", after, err)
 	}
+	if !after.HasLogo {
+		t.Fatal("bound Logo is not visible in the Management DTO")
+	}
+	clearBody := func(revision int64) []byte {
+		return []byte(`{"revision":` + strconv.FormatInt(revision, 10) + `}`)
+	}
+	call("DELETE", path+"/logo", "application/json", clearBody(current-1), 409)
+	rid := call("DELETE", path+"/logo", "application/json", clearBody(current), 200)
+	call("GET", "/internal/v1/ops/receipts/"+rid, "", nil, 200)
+	cleared, err := sites.ManagementSite(t.Context(), site.PublicID)
+	if err != nil || cleared.HasLogo || cleared.LogoURL != "" || cleared.CoverURL != after.CoverURL || cleared.Revision != current+1 {
+		t.Fatal("Logo clear failed to preserve other assets and revision")
+	}
+
 	mu.Lock()
 	defer mu.Unlock()
 	if len(written) != 2 {
