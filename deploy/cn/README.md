@@ -31,17 +31,22 @@ CN_ADMIN_PORT=18444
 
 ## 迁移、启动和恢复
 
+共享 PostgreSQL 与 Redis 的建库、角色、ACL 及授权顺序见 [OPS-S2-C 数据库初始化契约](database/README.md)。迁移 YAML 存在运行容器挂载目录之外，沿用同一配置结构并使用各库的 Migrator。
+
 本机、SSH 本地转发或核准的 Tailscale 接入都应保留 Compose 的宿主环回端口。Admin 使用独立 `18444` HTTPS，公开站点入口候选为 `18443`。Nginx、API、Admin 共享项目内网络命名空间，Admin HTTP 和 GoFurry Management 仍分别只监听 `127.0.0.1:8082` 和 `127.0.0.1:17324`。SSR 只连项目内的公开 API。保持默认网络专用，并用 Docker Engine 28+ 的环回端口隔离行为。 [Compose 网络模式](https://docs.docker.com/reference/compose-file/services/#network_mode) · [Docker 端口发布](https://docs.docker.com/engine/network/port-publishing/)
 
 ```sh
 # 在 GoFurry 仓库根目录，以 shell 函数固定项目与配置文件。
 cn() { docker compose -f deploy/cn/compose.yaml --env-file /srv/gofurry-cn/compose.env "$@"; }
 cn config --quiet
-cn run --rm api-maintenance
-cn run --rm api-maintenance migrate up --config /etc/gofurry/config.yaml
+cn run --rm -v /srv/gofurry-cn/maintenance/gofurry.yaml:/run/maintenance.yaml:ro \
+  api-maintenance migrate up --config /run/maintenance.yaml
 
-# 如使用 Admin，先迁移，且仅在新库交互式初始化一次 Owner。
-cn run --rm admin-maintenance migrate up --dir /app/migrations --config /run/admin/config.yaml
+# 启用 Admin 时也显式迁移其数据库。
+cn run --rm -v /srv/gofurry-cn/maintenance/admin.yaml:/run/maintenance.yaml:ro \
+  admin-maintenance migrate up --dir /app/migrations --config /run/maintenance.yaml
+
+# 分别给已迁移的数据库执行 database/grants.sql。启用 Admin 时交互初始化一次 Owner。
 cn run --rm admin-maintenance account init-owner --config /run/admin/config.yaml
 
 cn up -d --wait

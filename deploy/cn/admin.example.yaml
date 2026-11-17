@@ -7,7 +7,7 @@ database:
   host: postgres.internal.example
   port: 5432
   name: librecosta_admin_cn
-  user: librecosta_admin_cn
+  user: librecosta_admin_runtime
   password: "<private PostgreSQL password>"
   ssl_mode: verify-full
   # ssl_root_cert: /run/admin/postgres-ca.pem

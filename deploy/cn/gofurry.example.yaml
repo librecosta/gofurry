@@ -10,7 +10,7 @@ database:
   host: postgres.internal.example
   port: 5432
   name: gofurry_cn
-  user: gofurry_cn
+  user: gofurry_cn_runtime
   password: "<private PostgreSQL password>"
   ssl_mode: verify-full
   # ssl_root_cert: /etc/gofurry/postgres-ca.pem

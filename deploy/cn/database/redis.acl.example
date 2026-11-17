@@ -1,0 +1,3 @@
+user identity_cn off resetpass resetkeys resetchannels clearselectors -@all ~lcid:cn:v1:* +hello +ping +eval +get +incr +pexpire +pttl +set +getdel +del
+user ai_gateway_cn off resetpass resetkeys resetchannels clearselectors -@all ~aigw:{runtime}:* ~aigw:cache:* +hello +ping +client|setinfo +eval +evalsha +get +getrange +set +incr +pexpire +pttl +del +time +hget +hset +zadd +zrem +zremrangebyscore +zcard +zrange +zscore
+user gofurry_cn off resetpass resetkeys resetchannels clearselectors -@all ~gofurry:v1:{CN}:* +hello +ping +client|setinfo +eval +evalsha +get +set +incr +expire +del +time +zadd +zremrangebyscore +zcard +zrange +zrem +pttl +pexpire
