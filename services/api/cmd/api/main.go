@@ -48,6 +48,7 @@ func newCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			req.Close = true
 			res, err := client.Do(req)
 			if err != nil {
 				return fmt.Errorf("healthcheck failed")

@@ -41,7 +41,8 @@ func TestCLIYAMLStartAndProbe(t *testing.T) {
 	cmd.SetArgs([]string{"--config", path})
 	stopped := make(chan error, 1)
 	go func() { stopped <- cmd.ExecuteContext(ctx) }()
-	client := http.Client{Timeout: time.Second}
+	// Probes are complete before this test measures listener shutdown.
+	client := http.Client{Timeout: time.Second, Transport: &http.Transport{DisableKeepAlives: true}}
 	deadline := time.Now().Add(5 * time.Second)
 	for {
 		response, err := client.Get("http://" + address + "/readyz")
