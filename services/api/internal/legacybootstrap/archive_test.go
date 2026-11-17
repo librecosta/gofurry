@@ -19,7 +19,7 @@ import (
 func TestArchiveVerificationRejectsUnsafeInput(t *testing.T) {
 	const data = "fixture"
 	makeManifest := func() Manifest {
-		m := Manifest{Version: 1, Purpose: purpose, Region: "CN", Deployment: legacyimport.BootstrapDeployment,
+		m := Manifest{Version: legacyimport.BootstrapInitialization, Purpose: initializationPurpose, Region: "CN", Deployment: legacyimport.BootstrapDeployment,
 			SeedSchema: legacyseed.SchemaVersion, PlanVersion: legacyimport.BootstrapPlanVersion, GooseVersion: legacyimport.BootstrapGooseVersion,
 			Seed: Seed{Snapshot: "fixture", Content: sum([]byte("content")), Backup: sum([]byte("backup"))}}
 		for _, name := range []string{decisionsName, "seed/SHA256SUMS", "seed/assets/site-logos/" + strings.Repeat("a", 64) + ".webp", "seed/manifest.json"} {
@@ -41,6 +41,8 @@ func TestArchiveVerificationRejectsUnsafeInput(t *testing.T) {
 		"canonical":           {},
 		"wrong_archive_sha":   {wrongSHA: true, want: "archive SHA256"},
 		"broken_compression":  {truncate: true, want: "corrupt or truncated"},
+		"legacy_v1":           {manifest: func(m *Manifest) { m.Version, m.Purpose = legacyimport.BootstrapAcceptance, acceptancePurpose }},
+		"mixed_contract":      {manifest: func(m *Manifest) { m.Purpose = acceptancePurpose }, want: "incompatible"},
 		"wrong_schema":        {manifest: func(m *Manifest) { m.SeedSchema++ }, want: "incompatible"},
 		"release_marker":      {manifest: func(m *Manifest) { m.Purpose = "production_ready" }, want: "incompatible"},
 		"path_traversal":      {header: func(h *tar.Header) { h.Name = "seed/../../outside" }, want: "TAR structure"},

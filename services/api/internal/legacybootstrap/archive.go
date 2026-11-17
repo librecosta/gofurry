@@ -21,13 +21,14 @@ import (
 )
 
 const (
-	purpose       = "isolated_acceptance"
-	manifestName  = "bootstrap.json"
-	decisionsName = "decisions.json"
-	archiveLimit  = 1088 << 20
-	manifestLimit = 2 << 20
-	decisionLimit = 32 << 20
-	fileLimit     = 5035
+	acceptancePurpose     = "isolated_acceptance"
+	initializationPurpose = "catalog_initialization"
+	manifestName          = "bootstrap.json"
+	decisionsName         = "decisions.json"
+	archiveLimit          = 1088 << 20
+	manifestLimit         = 2 << 20
+	decisionLimit         = 32 << 20
+	fileLimit             = 5035
 )
 
 var (
@@ -58,28 +59,30 @@ type Manifest struct {
 }
 
 type Report struct {
-	Status     string               `json:"status"`
-	PackageSHA string               `json:"package_sha256,omitempty"`
-	Manifest   *Manifest            `json:"manifest,omitempty"`
-	Import     *legacyimport.Report `json:"import,omitempty"`
+	Status               string               `json:"status"`
+	BootstrapReadiness   string               `json:"bootstrap_readiness,omitempty"`
+	PublicationReadiness string               `json:"publication_readiness,omitempty"`
+	PackageSHA           string               `json:"package_sha256,omitempty"`
+	Manifest             *Manifest            `json:"manifest,omitempty"`
+	Import               *legacyimport.Report `json:"import,omitempty"`
 }
 
 func Build(ctx context.Context, c BuildConfig) (Report, error) {
 	report := Report{Status: "failed"}
 	if !filepath.IsAbs(c.Archive) || filepath.Base(c.Archive) != Filename ||
 		!filepath.IsAbs(c.SeedDir) || !filepath.IsAbs(c.DecisionsFile) {
-		return report, errors.New("build requires absolute private input paths and the v1 archive filename")
+		return report, errors.New("build requires absolute private input paths and the v2 archive filename")
 	}
 	decisions, err := privateFile(c.DecisionsFile, decisionLimit)
 	if err != nil {
 		return report, err
 	}
-	b, inventory, err := openSeed(ctx, c.SeedDir, c.Seed, decisions)
+	b, inventory, err := openSeed(ctx, c.SeedDir, c.Seed, decisions, legacyimport.BootstrapInitialization)
 	if err != nil {
 		return report, err
 	}
 	defer b.Close()
-	m := Manifest{Version: 1, Purpose: purpose, Region: "CN", SeedSchema: legacyseed.SchemaVersion,
+	m := Manifest{Version: legacyimport.BootstrapInitialization, Purpose: initializationPurpose, Region: "CN", SeedSchema: legacyseed.SchemaVersion,
 		PlanVersion: legacyimport.BootstrapPlanVersion, GooseVersion: legacyimport.BootstrapGooseVersion,
 		Deployment: legacyimport.BootstrapDeployment, Seed: c.Seed, Inventory: inventory,
 		Files: []member{{decisionsName, int64(len(decisions)), sum(decisions)}}}
@@ -96,16 +99,17 @@ func Build(ctx context.Context, c BuildConfig) (Report, error) {
 	if err != nil {
 		return report, err
 	}
-	report.Status, report.Manifest = "built_for_isolated_acceptance", &m
+	report.Status, report.Manifest = "built_for_initialization", &m
+	report.PublicationReadiness = "INCOMPLETE"
 	return report, nil
 }
 
-func openSeed(ctx context.Context, path string, identity Seed, decisions []byte) (*legacyseed.Bundle, legacyimport.BootstrapInventory, error) {
+func openSeed(ctx context.Context, path string, identity Seed, decisions []byte, version int) (*legacyseed.Bundle, legacyimport.BootstrapInventory, error) {
 	b, err := legacyseed.OpenBundle(ctx, path, identity.Snapshot, identity.Backup, identity.Content)
 	if err != nil {
 		return nil, legacyimport.BootstrapInventory{}, err
 	}
-	inventory, err := legacyimport.InspectBootstrap(ctx, b, identity.Content, decisions)
+	inventory, err := legacyimport.InspectBootstrap(ctx, b, identity.Content, decisions, version)
 	if err == nil {
 		err = screen(ctx, b, decisions)
 	}
@@ -117,7 +121,9 @@ func openSeed(ctx context.Context, path string, identity Seed, decisions []byte)
 }
 
 func validateManifest(m Manifest) error {
-	if m.Version != 1 || m.Purpose != purpose || m.Region != "CN" || m.Deployment != legacyimport.BootstrapDeployment ||
+	validPurpose := m.Version == legacyimport.BootstrapAcceptance && m.Purpose == acceptancePurpose ||
+		m.Version == legacyimport.BootstrapInitialization && m.Purpose == initializationPurpose
+	if !validPurpose || m.Region != "CN" || m.Deployment != legacyimport.BootstrapDeployment ||
 		m.SeedSchema != legacyseed.SchemaVersion || m.PlanVersion != legacyimport.BootstrapPlanVersion || m.GooseVersion != legacyimport.BootstrapGooseVersion {
 		return errors.New("incompatible bootstrap package, Seed schema, importer or Goose version")
 	}

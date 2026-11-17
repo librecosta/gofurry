@@ -153,7 +153,7 @@ CREATE DATABASE gofurry_d5b1_fixture;`)
 		t.Fatal(err)
 	}
 	defer b.Close()
-	built, err := build(ctx, b, nil)
+	built, err := build(ctx, b, nil, false)
 	if err != nil {
 		t.Fatal(err)
 	}

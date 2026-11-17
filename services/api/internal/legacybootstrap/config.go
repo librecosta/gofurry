@@ -12,7 +12,7 @@ import (
 	"go.yaml.in/yaml/v3"
 )
 
-const Filename = "gofurry-bootstrap-v1.tar.zst"
+const Filename = "gofurry-bootstrap-v2.tar.zst"
 
 var digestPattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
 

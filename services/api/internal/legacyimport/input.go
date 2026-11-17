@@ -64,6 +64,7 @@ type Config struct {
 		Secret        string `yaml:"secret_access_key" json:"-"`
 		CAFile        string `yaml:"ca_file"`
 	} `yaml:"storage"`
+	bootstrapPackage string
 }
 
 func readFile(path string, limit int64) ([]byte, error) {
@@ -138,7 +139,11 @@ func (c Config) target() string {
 	if s := c.Storage; s != nil {
 		asset = []string{s.Endpoint, s.PublicBaseURL, s.Bucket, s.Region}
 	}
-	return digest(encode([]any{c.Deployment, c.Region, c.Environment, c.Isolation, c.Database.Name, schemaVersion, asset}))
+	scope := []any{c.Deployment, c.Region, c.Environment, c.Isolation, c.Database.Name, schemaVersion, asset}
+	if c.bootstrapPackage != "" {
+		scope = append(scope, c.bootstrapPackage, c.Database.Host, c.Database.Port)
+	}
+	return digest(encode(scope))
 }
 
 func (c Config) open(ctx context.Context) (*pgxpool.Pool, error) {

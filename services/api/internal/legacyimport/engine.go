@@ -65,10 +65,11 @@ type engine struct {
 }
 
 func Run(ctx context.Context, c Config, opts Options) (Plan, Report, error) {
-	return run(ctx, c, opts, false)
+	return run(ctx, c, opts, 0)
 }
 
-func run(ctx context.Context, c Config, opts Options, bootstrap bool) (Plan, Report, error) {
+func run(ctx context.Context, c Config, opts Options, bootstrapVersion int) (Plan, Report, error) {
+	bootstrap := bootstrapVersion != 0
 	var plan Plan
 	report := Report{Status: "failed", Content: c.Content, Target: c.target(), Counts: map[string]int{}, Assets: map[string]int{}}
 	if err := c.validate(); err != nil {
@@ -86,12 +87,12 @@ func run(ctx context.Context, c Config, opts Options, bootstrap bool) (Plan, Rep
 	if err != nil {
 		return plan, report, err
 	}
-	b, err := build(ctx, bundle, ds)
+	b, err := build(ctx, bundle, ds, bootstrapVersion == BootstrapInitialization)
 	if err != nil {
 		return plan, report, err
 	}
 	if bootstrap {
-		if _, err = bootstrapInventory(b, ds); err != nil {
+		if _, err = bootstrapInventory(b, ds, bootstrapVersion); err != nil {
 			return plan, report, err
 		}
 	}

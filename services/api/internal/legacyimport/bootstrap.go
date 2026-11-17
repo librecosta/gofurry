@@ -12,6 +12,11 @@ import (
 	"github.com/librecosta/gofurry/services/api/internal/storage"
 )
 
+const (
+	BootstrapAcceptance     = 1
+	BootstrapInitialization = 2
+)
+
 type BootstrapInventory struct {
 	SeedRows       int            `json:"seed_rows"`
 	SourceExcluded int            `json:"source_excluded"`
@@ -19,23 +24,28 @@ type BootstrapInventory struct {
 	Projection     map[string]int `json:"projection"`
 }
 
-func InspectBootstrap(ctx context.Context, seed *legacyseed.Bundle, content string, decisions []byte) (BootstrapInventory, error) {
+func InspectBootstrap(ctx context.Context, seed *legacyseed.Bundle, content string, decisions []byte, version int) (BootstrapInventory, error) {
 	ds, _, err := parseDecisions(decisions, content)
 	if err != nil {
 		return BootstrapInventory{}, err
 	}
-	b, err := build(ctx, seed, ds)
+	b, err := build(ctx, seed, ds, version == BootstrapInitialization)
 	if err != nil {
 		return BootstrapInventory{}, err
 	}
-	return bootstrapInventory(b, ds)
+	return bootstrapInventory(b, ds, version)
 }
 
-func bootstrapInventory(b blueprint, ds []decision) (BootstrapInventory, error) {
+func bootstrapInventory(b blueprint, ds []decision, version int) (BootstrapInventory, error) {
 	for _, d := range ds {
 		switch d.Operation {
 		case "allow_publish", "link_existing", "alias_existing":
-			return BootstrapInventory{}, errors.New("acceptance package cannot include public release or existing target adoption decisions")
+			return BootstrapInventory{}, errors.New("bootstrap package cannot include public release or existing target adoption decisions")
+		}
+	}
+	if version == BootstrapInitialization {
+		if err := checkInitializationContent(b); err != nil {
+			return BootstrapInventory{}, err
 		}
 	}
 	inventory := BootstrapInventory{SourceTables: map[string]int{}, Projection: map[string]int{}}
@@ -51,7 +61,7 @@ func bootstrapInventory(b blueprint, ds []decision) (BootstrapInventory, error) 
 	logos := map[string]bool{}
 	for _, it := range b.Items {
 		if it.IdentityIssue != "" || it.RelationIssue != "" || it.LogoIssue == "logo_approval_pending" {
-			return BootstrapInventory{}, errors.New("acceptance package has unresolved identity, relation or ready Logo approvals")
+			return BootstrapInventory{}, errors.New("bootstrap package has unresolved identity, relation or ready Logo approvals")
 		}
 		totals[kind(it.Key.Table)]++
 		totals["game_sources"] += len(it.Sources)
@@ -62,7 +72,11 @@ func bootstrapInventory(b blueprint, ds []decision) (BootstrapInventory, error) 
 		}
 		if it.Key.Table == sites {
 			if it.Logo == "" {
-				totals["logo_gaps"]++
+				if version == BootstrapInitialization {
+					totals["sites_using_default_logo"]++
+				} else {
+					totals["logo_gaps"]++
+				}
 			} else {
 				totals["logo_references"]++
 				logos[it.Logo] = true
@@ -73,6 +87,35 @@ func bootstrapInventory(b blueprint, ds []decision) (BootstrapInventory, error) 
 	return inventory, nil
 }
 
+func checkInitializationContent(b blueprint) error {
+	for _, row := range b.Rows {
+		if row.Disposition == "deferred" {
+			return errors.New("bootstrap Seed has invalid source identities or unresolved references")
+		}
+	}
+	catalogCategories := make(map[string]bool)
+	for _, it := range b.Items {
+		if it.Key.Table == categories {
+			catalogCategories[it.Key.String()] = true
+		}
+	}
+	for _, it := range b.Items {
+		if len(it.Editorial.Localizations) == 0 {
+			return errors.New("bootstrap entity requires a valid editorial name")
+		}
+		if it.Key.Table == tags && !catalogCategories[it.Category.String()] {
+			return errors.New("bootstrap editorial tag has no mapped category")
+		}
+		if it.LogoIssue != "" {
+			return errors.New("bootstrap has a declared Site Logo without valid bytes or binding")
+		}
+		if it.LifecycleIssue != "" {
+			return errors.New("bootstrap has inconsistent legacy lifecycle evidence")
+		}
+	}
+	return nil
+}
+
 func flag(value bool) int {
 	if value {
 		return 1
@@ -81,8 +124,16 @@ func flag(value bool) int {
 }
 
 // RunBootstrap uses the D5-B1 engine with an empty-target or same-plan guard.
-func RunBootstrap(ctx context.Context, c Config, opts Options) (Plan, Report, error) {
-	return run(ctx, c, opts, true)
+func RunBootstrap(ctx context.Context, c Config, opts Options, version int, packageSHA string) (Plan, Report, error) {
+	if version == BootstrapInitialization {
+		if !digestPattern.MatchString(packageSHA) {
+			return Plan{}, Report{Status: "failed"}, errors.New("initialization requires a verified package SHA256")
+		}
+		c.bootstrapPackage = packageSHA
+	} else if version != BootstrapAcceptance {
+		return Plan{}, Report{Status: "failed"}, errors.New("unsupported bootstrap contract")
+	}
+	return run(ctx, c, opts, version)
 }
 
 // These are the base tables the acceptance import can populate. Other

@@ -26,16 +26,16 @@ func main() {
 
 func command() *cobra.Command {
 	var config, reportPath string
-	root := &cobra.Command{Use: "legacy-bootstrap", Short: "Build and validate an isolated GoFurry Bootstrap v1 package",
+	root := &cobra.Command{Use: "legacy-bootstrap", Short: "Build and install the GoFurry catalog bootstrap package",
 		SilenceUsage: true, SilenceErrors: true}
 	root.SetFlagErrorFunc(func(*cobra.Command, error) error { return errors.New("invalid bootstrap flags; see --help") })
 	root.PersistentFlags().StringVar(&config, "config", "", "explicit private YAML file")
 	root.PersistentFlags().StringVar(&reportPath, "report", "", "new absolute private report path")
 	for _, operation := range []struct{ name, help string }{
-		{"build", "build a deterministic v1 archive from a sealed Seed"},
+		{"build", "build a deterministic v2 archive from a sealed Seed"},
 		{"verify", "verify the archive offline"},
 		{"plan", "read-only check of packaged inputs and the fresh target"},
-		{"apply", "initialize or resume the independently approved isolated plan"},
+		{"apply", "initialize or resume the independently confirmed plan"},
 		{"verify-target", "read back the plan receipts and assets without writes"},
 	} {
 		var planPath, planSHA string
@@ -85,11 +85,14 @@ func command() *cobra.Command {
 				return errors.New("cannot persist bootstrap operation report")
 			}
 			summary := struct {
-				Status  string         `json:"status"`
-				Package string         `json:"package_sha256,omitempty"`
-				Plan    string         `json:"plan_sha256,omitempty"`
-				Counts  map[string]int `json:"counts,omitempty"`
-			}{Status: report.Status, Package: report.PackageSHA}
+				Status               string         `json:"status"`
+				BootstrapReadiness   string         `json:"bootstrap_readiness,omitempty"`
+				PublicationReadiness string         `json:"publication_readiness,omitempty"`
+				Package              string         `json:"package_sha256,omitempty"`
+				Plan                 string         `json:"plan_sha256,omitempty"`
+				Counts               map[string]int `json:"counts,omitempty"`
+			}{Status: report.Status, Package: report.PackageSHA, BootstrapReadiness: report.BootstrapReadiness,
+				PublicationReadiness: report.PublicationReadiness}
 			if report.Import != nil {
 				summary.Plan, summary.Counts = report.Import.PlanSHA, report.Import.Counts
 			}

@@ -116,7 +116,7 @@ func (b *blueprint) issue(k key, code string) {
 
 func fromSource(s legacyseed.Source) key { return makeKey(s.Table, s.Key...) }
 
-func build(ctx context.Context, bundle *legacyseed.Bundle, ds []decision) (blueprint, error) {
+func build(ctx context.Context, bundle *legacyseed.Bundle, ds []decision, acceptDefaultLogos bool) (blueprint, error) {
 	b := blueprint{Rows: map[string]sourceResult{}}
 	rows := map[string]seedRow{}
 	order := []key{}
@@ -305,7 +305,11 @@ func build(ctx context.Context, bundle *legacyseed.Bundle, ds []decision) (bluep
 					it.LogoIssue = "logo_approval_pending"
 				}
 				if logo.Status != "ready" && logo.SourceKey != "" && r.link == nil {
-					it.LogoIssue = "logo_unavailable_in_seed"
+					if acceptDefaultLogos && logo.Status == "logo_known_placeholder" {
+						b.issue(k, "default_logo_from_legacy")
+					} else {
+						it.LogoIssue = "logo_unavailable_in_seed"
+					}
 				}
 				if r.logo != "" {
 					if logo.Status != "ready" || r.logo != logo.SHA {
