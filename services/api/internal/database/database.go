@@ -23,7 +23,7 @@ func PoolConfig(c platform.DatabaseConfig) (*pgxpool.Config, error) {
 		}
 	}
 	u := url.URL{Scheme: "postgres", Host: net.JoinHostPort(c.Host, strconv.Itoa(int(c.Port))), Path: "/" + c.Name, User: url.UserPassword(c.User, "unused-parser-password")}
-	q := url.Values{"sslmode": {c.SSLMode}, "sslcert": {""}, "sslkey": {""}, "sslrootcert": {""}, "application_name": {"gofurry"}}
+	q := url.Values{"sslmode": {c.SSLMode}, "sslcert": {""}, "sslkey": {""}, "sslrootcert": {c.SSLRootCert}, "application_name": {"gofurry"}}
 	u.RawQuery = q.Encode()
 	pc, err := pgxpool.ParseConfig(u.String())
 	if err != nil {

@@ -125,7 +125,7 @@ If Docker Hub is unreachable, the equivalent official image mirror is supported:
 docker compose -f deploy/compose/compose.yaml build --build-arg NODE_IMAGE=public.ecr.aws/docker/library/node:24.22.1-bookworm-slim --build-arg GO_IMAGE=public.ecr.aws/docker/library/golang:1.27.3-bookworm
 ```
 
-`deploy/nginx/gofurry.conf.example` remains inactive. No Docker daemon settings or production deployments are managed here.
+`deploy/nginx/gofurry.conf.example` remains the local proxy example. The separate [CN deployment runbook](deploy/cn/README.md) covers private TLS staging, external PostgreSQL, optional Admin and explicit migration.
 
 ## Verification
 

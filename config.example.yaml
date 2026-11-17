@@ -63,6 +63,7 @@ database: null
 #   user: gofurry_cn
 #   password: ""
 #   ssl_mode: disable
+#   ssl_root_cert: /run/gofurry/postgres-ca.pem # Optional absolute CA file for verify-full
 #   connect_timeout: 3s
 #   max_connections: 5
 #   min_connections: 0

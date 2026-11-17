@@ -1,0 +1,38 @@
+server:
+  address: 0.0.0.0:8080
+  environment: production
+  trusted_proxies: [127.0.0.1]
+deployment:
+  region: CN
+logging:
+  slow_request: 1s
+database:
+  host: postgres.internal.example
+  port: 5432
+  name: gofurry_cn
+  user: gofurry_cn
+  password: "<private PostgreSQL password>"
+  ssl_mode: verify-full
+  # ssl_root_cert: /etc/gofurry/postgres-ca.pem
+  connect_timeout: 3s
+  max_connections: 8
+  min_connections: 0
+  max_connection_lifetime: 30m
+  max_connection_idle_time: 5m
+redis:
+  address: ""
+  username: ""
+  password: ""
+  db: 0
+storage: null
+# For imported and new assets use the approved CN S3 endpoint/bucket and HTTPS
+# delivery origin. Copy the storage keys from the root config.example.yaml.
+management: null
+# Enable for the ops profile. Use the same random token on both services.
+# management:
+#   address: 127.0.0.1:17324
+#   token: "<private 32-byte unpadded base64url>"
+yearbook:
+  enabled: false
+search_suggestions:
+  enabled: false

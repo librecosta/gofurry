@@ -57,3 +57,23 @@ func TestWallpaperYAMLNumericBounds(t *testing.T) {
 		}
 	}
 }
+
+func TestPostgresCARequiresVerifiedTLS(t *testing.T) {
+	c := Config{Database: &DatabaseConfig{
+		Host: "postgres.internal", Port: 5432, Name: "gofurry_cn", User: "gofurry",
+		SSLMode: "verify-full", SSLRootCert: filepath.Join(t.TempDir(), "postgres-ca.pem"),
+		ConnectTimeout: time.Second, MaxConnections: 5, MaxConnectionLifetime: time.Hour, MaxConnectionIdleTime: time.Minute,
+	}}
+	if err := c.ValidateWallpaperRuntime(); err != nil {
+		t.Fatal(err)
+	}
+	c.Database.SSLMode = "require"
+	if err := c.ValidateWallpaperRuntime(); err == nil {
+		t.Fatal("accepted custom CA without verified TLS")
+	}
+	c.Database.SSLMode = "verify-full"
+	c.Database.SSLRootCert = "relative.pem"
+	if err := c.ValidateWallpaperRuntime(); err == nil {
+		t.Fatal("accepted a CA path relative to the working directory")
+	}
+}

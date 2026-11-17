@@ -21,3 +21,6 @@
 **/*_test.go
 **/playwright*.ts
 **/config.yaml
+**/.local
+**/*.pem
+**/*.key

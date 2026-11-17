@@ -5,7 +5,9 @@ import (
 	"errors"
 	"github.com/spf13/viper"
 	"net"
+	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -16,6 +18,7 @@ type DatabaseConfig struct {
 	User                  string        `mapstructure:"user"`
 	Password              string        `mapstructure:"password" json:"-"`
 	SSLMode               string        `mapstructure:"ssl_mode"`
+	SSLRootCert           string        `mapstructure:"ssl_root_cert"`
 	ConnectTimeout        time.Duration `mapstructure:"connect_timeout"`
 	MaxConnections        int32         `mapstructure:"max_connections"`
 	MinConnections        int32         `mapstructure:"min_connections"`
@@ -45,6 +48,11 @@ func validateWallpaperSource(v *viper.Viper) error {
 		}
 	}
 	if v.IsSet("database") {
+		if value := v.Get("database.ssl_root_cert"); value != nil {
+			if _, ok := value.(string); !ok {
+				return invalid
+			}
+		}
 		if value := v.Get("database.password"); value != nil {
 			if _, ok := value.(string); !ok {
 				return invalid
@@ -77,6 +85,9 @@ func (c Config) ValidateWallpaperRuntime() error {
 	if d := c.Database; d != nil {
 		if d.Host == "" || d.Port == 0 || d.Name == "" || d.User == "" || (d.SSLMode != "disable" && d.SSLMode != "require" && d.SSLMode != "verify-full") || d.ConnectTimeout < time.Second || d.ConnectTimeout > 10*time.Second || d.MaxConnections < 1 || d.MaxConnections > 20 || d.MinConnections < 0 || d.MinConnections > d.MaxConnections || d.MaxConnectionLifetime < time.Minute || d.MaxConnectionLifetime > 24*time.Hour || d.MaxConnectionIdleTime < time.Second || d.MaxConnectionIdleTime > time.Hour {
 			return errors.New("invalid bounded database configuration")
+		}
+		if d.SSLRootCert != "" && (d.SSLMode != "verify-full" || !filepath.IsAbs(d.SSLRootCert) || strings.ContainsRune(d.SSLRootCert, 0)) {
+			return errors.New("database.ssl_root_cert requires an absolute path and verify-full")
 		}
 	}
 	if m := c.Management; m != nil {

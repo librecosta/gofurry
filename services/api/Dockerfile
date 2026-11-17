@@ -8,7 +8,9 @@ COPY services/api .
 RUN go build -trimpath -ldflags="-s -w" -o /out/api ./cmd/api
 
 FROM gcr.io/distroless/static-debian13:nonroot AS runtime
+WORKDIR /app
 COPY --from=build /out/api /api
+COPY --from=build /src/migrations /app/migrations
 EXPOSE 8080
 STOPSIGNAL SIGTERM
 HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=3 CMD ["/api", "healthcheck", "--config", "/etc/gofurry/config.yaml"]

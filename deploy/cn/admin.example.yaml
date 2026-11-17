@@ -1,0 +1,34 @@
+server:
+  address: 127.0.0.1:8082
+  environment: production
+deployment:
+  region: CN
+database:
+  host: postgres.internal.example
+  port: 5432
+  name: librecosta_admin_cn
+  user: librecosta_admin_cn
+  password: "<private PostgreSQL password>"
+  ssl_mode: verify-full
+  # ssl_root_cert: /run/admin/postgres-ca.pem
+  connect_timeout: 3s
+  max_connections: 5
+  min_connections: 0
+  max_connection_lifetime: 30m
+  max_connection_idle_time: 5m
+logging:
+  level: info
+  slow_request: 1s
+auth:
+  trusted_origins: ["https://127.0.0.1:18444"]
+  session_lifetime: 12h
+  kdf:
+    memory_kib: 65536
+    iterations: 3
+    parallelism: 1
+    concurrency: 2
+gofurry:
+  enabled: true
+  base_url: http://127.0.0.1:17324
+  public_origin: https://127.0.0.1:18443
+  token: "<private 32-byte unpadded base64url>"
