@@ -4,7 +4,12 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
+	"errors"
 	"fmt"
+	"net"
+	"net/url"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -13,13 +18,58 @@ import (
 // One YAML-configured client belongs to the server lifecycle. Redis failures are
 // bounded and optional; domain services retain their bounded local fallback.
 func NewRedis(cfg *RedisConfig) *redis.Client {
-	if cfg == nil || cfg.Address == "" {
+	options, err := redisOptions(cfg)
+	if err != nil || options == nil {
 		return nil
 	}
-	return redis.NewClient(&redis.Options{Addr: cfg.Address, Username: cfg.Username, Password: cfg.Password, DB: cfg.DB,
-		DialTimeout: 400 * time.Millisecond, ReadTimeout: 200 * time.Millisecond, WriteTimeout: 200 * time.Millisecond,
-		PoolTimeout: 200 * time.Millisecond, PoolSize: 8, MaxActiveConns: 16, MaxRetries: -1,
-		ContextTimeoutEnabled: true, DisableIdentity: true})
+	options.DialTimeout = 400 * time.Millisecond
+	options.ReadTimeout = 200 * time.Millisecond
+	options.WriteTimeout = 200 * time.Millisecond
+	options.PoolTimeout = 200 * time.Millisecond
+	options.PoolSize = 8
+	options.MaxActiveConns = 16
+	options.MaxRetries = -1
+	options.ContextTimeoutEnabled = true
+	options.DisableIdentity = true
+	return redis.NewClient(options)
+}
+
+func redisOptions(cfg *RedisConfig) (*redis.Options, error) {
+	if cfg == nil || (cfg.Address == "" && cfg.URL == "") {
+		return nil, nil
+	}
+	if cfg.URL == "" {
+		host, port, err := net.SplitHostPort(cfg.Address)
+		n, parseErr := strconv.ParseUint(port, 10, 16)
+		if err != nil || host == "" || parseErr != nil || n == 0 || cfg.DB < 0 {
+			return nil, errors.New("redis requires address host:port and a non-negative db")
+		}
+		return &redis.Options{Addr: cfg.Address, Username: cfg.Username, Password: cfg.Password, DB: cfg.DB}, nil
+	}
+	if cfg.Address != "" || cfg.Username != "" || cfg.Password != "" || cfg.DB != 0 {
+		return nil, errors.New("redis.url cannot be combined with address, credentials or a non-zero db")
+	}
+	invalid := errors.New("redis.url must identify one redis or rediss endpoint with ACL credentials")
+	u, err := url.Parse(cfg.URL)
+	if err != nil || (u.Scheme != "redis" && u.Scheme != "rediss") || u.Hostname() == "" ||
+		strings.Contains(u.Host, ",") || strings.HasSuffix(u.Host, ":") || u.User == nil || u.User.Username() == "" ||
+		u.RawQuery != "" || u.ForceQuery || u.Fragment != "" {
+		return nil, invalid
+	}
+	if password, _ := u.User.Password(); password == "" {
+		return nil, invalid
+	}
+	if u.Port() != "" {
+		n, err := strconv.ParseUint(u.Port(), 10, 16)
+		if err != nil || n == 0 {
+			return nil, invalid
+		}
+	}
+	options, err := redis.ParseURL(cfg.URL)
+	if err != nil || options.DB < 0 {
+		return nil, invalid
+	}
+	return options, nil
 }
 
 // Keys never contain search text, raw IPs or coordinates. The deployment tag

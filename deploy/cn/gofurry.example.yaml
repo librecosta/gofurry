@@ -7,12 +7,13 @@ deployment:
 logging:
   slow_request: 1s
 database:
-  host: postgres.internal.example
+  host: librecosta-postgres
   port: 5432
   name: gofurry_cn
   user: gofurry_cn_runtime
   password: "<private PostgreSQL password>"
-  ssl_mode: verify-full
+  ssl_mode: disable
+  # For an internal TLS deployment, set ssl_mode: verify-full.
   # ssl_root_cert: /etc/gofurry/postgres-ca.pem
   connect_timeout: 3s
   max_connections: 8
@@ -20,9 +21,9 @@ database:
   max_connection_lifetime: 30m
   max_connection_idle_time: 5m
 redis:
-  address: ""
-  username: ""
-  password: ""
+  address: librecosta-redis:6379
+  username: gofurry_cn
+  password: "<private Redis password>"
   db: 0
 storage: null
 # For imported and new assets use the approved CN S3 endpoint/bucket and HTTPS

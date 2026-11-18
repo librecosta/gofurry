@@ -33,17 +33,17 @@ AI Gateway 和 Identity 已有独立的迁移 DSN。Admin、GoFurry 和 Harvest 
 | `identity` | `identity_migrator` → `identity_runtime` | 账号、凭据、Session 与挑战读写。投递账目允许删过期记录。外部身份仅可读、插入与更新 `unlinked_at`。应用注册资料只读，`applications.updated_at` 列更新权限用于现有行锁。 |
 | `identity` | `identity_app_operator` 继承 `identity_application_admin`（NOLOGIN） | `identity-appctl` 维护应用、回调与凭据，可撤销相应授权码、应用会话和 refresh token。部署绑定行只读。 |
 
-运行账号不拥有 Schema 或业务对象，没有 DDL、TRUNCATE、角色管理或跨库授权。业务库撤销 PUBLIC 的 CONNECT/TEMP 及业务 Schema 和对象公共授权。共享实例若保留其他旧库的 PUBLIC CONNECT，在获批网段的 `pg_hba.conf` 中对每个数据库和角色用 `hostssl <db> <role> <approved-subnet> scram-sha-256` 精确放行，对这些角色的其余连接明确拒绝。拒绝规则须排在既有泛化放行之前，覆盖实际走的 TCP 和本地 socket 路径，避免公开 ACL 或认证回退绕过数据库边界。管理员的维护通道沿用实例已有规则。
+运行账号不拥有 Schema 或业务对象，没有 DDL、TRUNCATE、角色管理或跨库授权。业务库撤销 PUBLIC 的 CONNECT/TEMP 及业务 Schema 和对象公共授权。共享实例若保留其他旧库的 PUBLIC CONNECT，在获批网段的 `pg_hba.conf` 中对每个数据库和角色用 `host <db> <role> <approved-subnet> scram-sha-256` 精确放行（仅 TLS 的其他部署用 `hostssl`），对这些角色的其余连接明确拒绝。拒绝规则须排在既有泛化放行之前，覆盖实际走的 TCP 和本地 socket 路径，避免公开 ACL 或认证回退绕过数据库边界。管理员的维护通道沿用实例已有规则。
 
 ## Redis ACL
 
-使用 DB 0。**必需账号 2 个**，GoFurry 的共享缓存或站点计数获准后增至 **3 个**。 [Redis ACL](https://redis.io/docs/latest/management/security/acl/) · [Redis TLS 与访问边界](https://redis.io/docs/latest/management/security/)
+CN 已配置三个独立 ACL，使用 DB 0。GoFurry 的 Redis 依赖仍可选。 [Redis ACL](https://redis.io/docs/latest/management/security/acl/) · [Redis TLS 与访问边界](https://redis.io/docs/latest/management/security/)
 
 | ACL 用户 | 允许的键空间 | 权限与配置 |
 | --- | --- | --- |
-| `identity_cn` | `lcid:cn:v1:*` | `HELLO/PING`、准入和短期状态所需的 KV、TTL 及 Lua。`redis.url` 用 `rediss://`，`trust.ca_file` 包含核准 CA。Redis 客户端池上限 4。 |
-| `ai_gateway_cn` | `aigw:{runtime}:*`、`aigw:cache:*` | KV、TTL、Lua、熔断 Hash、租约/限流 ZSET、`TIME`。前缀没有区域字段，CN Redis 实例不得与 INTL 共用。用 `redis.url` 的 `rediss://`，CA 由镜像系统信任链提供。`redis.url` 可带 `pool_size=4&max_active_conns=8` 作为起步值。 |
-| `gofurry_cn` | `gofurry:v1:{CN}:*` | KV、TTL、Lua 与限额 ZSET。配置 `redis.address/username/password/db`，池基准 8、活动连接上限 16。现有客户端只支持明文。 |
+| `identity_cn` | `lcid:cn:v1:*` | `HELLO/PING`、准入和短期状态所需的 KV、TTL 及 Lua。CN 用 `redis://`。需要内部 TLS 时使用 `rediss://` 并按需设置 `trust.ca_file`。Redis 客户端池上限 4。 |
+| `ai_gateway_cn` | `aigw:{runtime}:*`、`aigw:cache:*` | KV、TTL、Lua、熔断 Hash、租约/限流 ZSET、`TIME`。前缀没有区域字段，CN Redis 实例不得与 INTL 共用。CN 用 `redis://`。选用 `rediss://` 时，CA 由镜像系统信任链提供。`redis.url` 可带 `pool_size=4&max_active_conns=8` 作为起步值。 |
+| `gofurry_cn` | `gofurry:v1:{CN}:*` | KV、TTL、Lua 与限额 ZSET。配置 `redis.address/username/password/db`，池基准 8、活动连接上限 16。也可单独设置 `redis.url` 为 `redis://` 或 `rediss://`。 |
 
 [redis.acl.example](redis.acl.example) 提供精确命令表，初始账号禁用且无密码。先确认名称未占用，按现有实例管理方式把需要的行合入私有 ACL 文件，保留已有运维账号和规则。获批启用时在对应行末加入 `on #<独立随机密码的 SHA256>`，应用私有 YAML 保存对应明文。禁止把带密码哈希的 ACL 文件提交 Git。新实例关闭默认免密用户。既有实例先确认无依赖，再按运维变更流程处理。使用现有 Redis ACL 装载/校验方式，逐个账号验证认证、键读写及 TTL，确认其他前缀、`SELECT 1`、`FLUSHALL`、`CONFIG`、发布订阅均被拒绝。模板不授予全局键扫描或管理命令。共享实例建议保留 `noeviction` 并监测内存和拒写，避免缓存挤掉安全状态及活动租约。
 
@@ -52,15 +52,15 @@ AI Gateway 和 Identity 已有独立的迁移 DSN。Admin、GoFurry 和 Harvest 
 | 服务 | 显式连接配置 | 建议起步上限 / 副本 |
 | --- | --- | --- |
 | Admin | `database.host/port/name/user/password/ssl_mode/ssl_root_cert`。迁移与运行文件同 Schema、账号不同。 | PG 5，最小 0，连接超时 3s、空闲 5m、寿命 30m。迁移 1。 |
-| AI Gateway | `database.url` 运行、`database.migration_url` 维护。DSN 显式 `sslmode=verify-full` 与核准 CA。 | `database.max_connections: 4`，代码连接超时 3s。维护命令单次运行。 |
+| AI Gateway | `database.url` 运行、`database.migration_url` 维护。CN DSN 使用 `sslmode=disable`。需要内部 TLS 时用 `verify-full` 与核准 CA。 | `database.max_connections: 4`，代码连接超时 3s。维护命令单次运行。 |
 | GoFurry | 与 Admin 相同的字段名和 TLS 策略，使用 GoFurry 自己的数据库与 YAML。 | PG 8，最小 0，连接超时 3s、空闲 5m、寿命 30m。启用 Consumer、Yearbook、Heat 各再预留 1，合计最多 11。SSR 无 DB 池，迁移 1。 |
 | Harvest | `database.host/port/name/user/password/tls_mode/max_connections`。`verify-full` 的 CA 由镜像系统信任链提供。维护另用 YAML。 | Server PG 4（代码范围 2–32）。迁移也设 4 以保留 Goose 会话锁连接，Worker 0。 |
-| Identity | `database.url` 运行、`database.migration_url` 迁移及绑定、`database.application_admin_url` 应用维护。PG DSN 用 `sslmode=verify-full` 和显式 `sslrootcert`。 | 运行 PG 4（代码固定），连接超时 3s、空闲 5m、寿命 1h。迁移 1，绑定/Appctl 短期池 4。 |
+| Identity | `database.url` 运行、`database.migration_url` 迁移及绑定、`database.application_admin_url` 应用维护。CN 使用 `sslmode=disable`。需要内部 TLS 时用 `verify-full` 和按需设置的 `sslrootcert`。 | 运行 PG 4（代码固定），连接超时 3s、空闲 5m、寿命 1h。迁移 1，绑定/Appctl 短期池 4。 |
 
-五个服务各一副本并以 GoFurry 全部后台任务计，运行态 PG 预算为 **28 个连接**，另留维护、备份和监控余量。先查同实例旧业务峰值、`max_connections`、保留连接及逐库活动，再批准扩副本。所有连接用与证书 SAN 匹配的私网别名，校验 CA 和 SCRAM。配置、DSN、密钥仅保存在仓库外的受限文件中。
+五个服务各一副本并以 GoFurry 全部后台任务计，运行态 PG 预算为 **28 个连接**，另留维护、备份和监控余量。先查同实例旧业务峰值、`max_connections`、保留连接及逐库活动，再批准扩副本。CN 应用通过 `librecosta-postgres:5432` 使用直接 TCP 与 SCRAM，通过 `librecosta-redis:6379` 使用各自的 ACL。选用 TLS 时校验证书 SAN 和信任链。配置、DSN、密钥仅保存在仓库外的受限文件中。
 
 1. 从可信维护通道确认 CN 实例版本、备份、网络及名称余量后，以 PostgreSQL 集群管理员运行 `psql -X -d postgres -v confirm_cn=librecosta-cn -f provision.sql`。[provision.sql](provision.sql) 只为这五个库建立无密码的角色和带标记的 UTF-8 数据库，串行建库，先关闭新库连接、撤销 PUBLIC 权限再开放。重复执行保留数据、密码及人工关闭的连接状态，遇无标记同名对象或异常所属/成员关系即停止。若中断在 CREATE DATABASE 与打标之间，先人工核实那个仍禁止连接的空库及其所有者再处理。现有同名库需要独立审查，禁止补标后直接接管。
-2. 独立录入 11 个 SCRAM 密码，完成 HBA 和 TLS，先准备 Identity 与 AI Gateway 的 Redis ACL。五套迁移互不依赖，建议逐库执行以便故障归属。命令中的可执行文件名为逻辑名称，容器使用已有 ENTRYPOINT 或维护命令（GoFurry 为 /api，AI Gateway 镜像内用 --entrypoint /gatewayctl）。源码执行时将 /app/migrations 换为对应仓库的迁移目录。
+2. 独立录入 11 个 SCRAM 密码，完成 HBA，先准备服务的 Redis ACL。五套迁移互不依赖，建议逐库执行以便故障归属。命令中的可执行文件名为逻辑名称，容器使用已有 ENTRYPOINT 或维护命令（GoFurry 为 /api，AI Gateway 镜像内用 --entrypoint /gatewayctl）。源码执行时将 /app/migrations 换为对应仓库的迁移目录。
 
    | 服务 | 显式迁移命令 |
    | --- | --- |
@@ -76,11 +76,10 @@ AI Gateway 和 Identity 已有独立的迁移 DSN。Admin、GoFurry 和 Harvest 
 
 ## 实施前需确认
 
-- **当前名称与私有网络。** `gateway`、`harvest`、`identity` 沿用仓库实例命名。核实生产集群是否同名、占用者和已有授权，尤其是旧站同实例时。D7 的 GoFurry API 与 Admin 共享 edge 的网络命名空间，接数据私网时实际应给 edge 和各迁移容器加入已建的 `librecosta-backend`。Identity 现有候选 Compose 也须核对数据面和维护容器的网络附件，保留原入站限制。
-- **Redis 与证书。** 如果生产 Redis 只允许 TLS，GoFurry 共享功能暂不可启用。若要求它上线即计数，先确认可接受经隔离的内部明文监听，或在独立变更中补客户端 TLS。两种必需 Redis 连接保持 TLS，并在镜像里验证 CA。Harvest PostgreSQL 的系统 CA 信任同样需要实测。数据库初始化无需等待 GoFurry Redis 决策。
-- **Identity 和内容。** Identity 既有认证端到端夹具仍为 PG17。PG18 已跑原生迁移和隔离绑定，正式启动前仍需带实际 CA 和权限在 PG18 上跑注册、会话、撤销与应用操作员验收。真实 CN Issuer 必须在首次绑定前确认。D5-C2 的 Bootstrap Ready 为 PASS，现有 CLI 有隔离目标守卫，内容提升和 Publication 审批与建库分别执行。
+- **私有网络。** 现有 CN 实例已完成迁移及授权，切换应用连接时沿用既有数据库、角色和三套 ACL。应用侧使用外部网络 `librecosta-backend`，中间件无宿主机端口。Tailscale 保留给 SSH。
+- **Identity 和内容。** Identity 既有认证端到端夹具仍为 PG17。PG18 已跑原生迁移和隔离绑定，正式启动前仍需带实际部署权限在 PG18 上跑注册、会话、撤销与应用操作员验收。真实 CN Issuer 必须在首次绑定前确认。D5-C2 的 Bootstrap Ready 为 PASS，现有 CLI 有隔离目标守卫，内容提升和 Publication 审批与建库分别执行。
 
-**五库方案可进入获批的空库 Provisioning。** 执行前核实名称、网络、TLS 和现有授权。业务放流量仍以对应服务验收为准。
+上面的建库步骤仅用于新环境。已完成迁移和授权的 CN 实例直接切换应用连接。业务放流量仍以对应服务验收为准。
 
 ## 证据
 

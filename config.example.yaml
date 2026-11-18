@@ -37,6 +37,7 @@ search_suggestions:
 
 # Existing regional Redis, optional local fallback if blank/unavailable.
 # Username is only needed for ACL authentication. Credentials stay in private YAML.
+# Alternatively set only redis.url with an authenticated redis:// or rediss:// URL.
 redis:
   address: ""
   username: ""

@@ -4,12 +4,13 @@ server:
 deployment:
   region: CN
 database:
-  host: postgres.internal.example
+  host: librecosta-postgres
   port: 5432
   name: librecosta_admin_cn
   user: librecosta_admin_runtime
   password: "<private PostgreSQL password>"
-  ssl_mode: verify-full
+  ssl_mode: disable
+  # For an internal TLS deployment, set ssl_mode: verify-full.
   # ssl_root_cert: /run/admin/postgres-ca.pem
   connect_timeout: 3s
   max_connections: 5

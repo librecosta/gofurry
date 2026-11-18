@@ -41,6 +41,9 @@ services:
     image: nginx:1.30.6-alpine@sha256:0e52bd054126cdc040b1276c0af347aeb02a41b9cfe305d6094767ac30e97949
     user: '101:101'
     entrypoint: [nginx, -g, 'daemon off;']
+    networks:
+      default: {gw_priority: 1}
+      backend: {}
     ports:
       - '127.0.0.1:${CN_HTTPS_PORT:-18443}:8443'
       - '127.0.0.1:${CN_ADMIN_PORT:-18444}:9443'
@@ -90,10 +93,17 @@ services:
     profiles: [maintenance]
     restart: 'no'
     healthcheck: {disable: true}
-    command: [migrate, status, --config, /etc/gofurry/config.yaml]
+    networks: [backend]
+    command: [migrate, status, --config, /run/maintenance.yaml]
   admin-maintenance:
     <<: *admin
     profiles: [maintenance]
     restart: 'no'
     healthcheck: {disable: true}
-    command: [migrate, status, --dir, /app/migrations, --config, /run/admin/config.yaml]
+    networks: [backend]
+    command: [migrate, status, --dir, /app/migrations, --config, /run/maintenance.yaml]
+
+networks:
+  backend:
+    name: librecosta-backend
+    external: true

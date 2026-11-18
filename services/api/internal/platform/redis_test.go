@@ -4,6 +4,8 @@ import (
 	"context"
 	"crypto/rand"
 	"flag"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -84,5 +86,56 @@ func TestRedisConfigSingleYAML(t *testing.T) {
 	_, hit, available := RedisRead(context.Background(), client, "test")
 	if hit || available || time.Since(start) > time.Second {
 		t.Fatal("Redis outage is unbounded")
+	}
+}
+
+func TestCNRedisTransport(t *testing.T) {
+	cfg, err := LoadConfig("../../../../deploy/cn/gofurry.example.yaml")
+	if err != nil || cfg.Server.Environment != "production" || cfg.Redis == nil {
+		t.Fatal("production configuration failed to load", err)
+	}
+	plain := NewRedis(cfg.Redis)
+	defer plain.Close()
+	o := plain.Options()
+	if o.Addr != "librecosta-redis:6379" || o.Username != "gofurry_cn" || o.Password != cfg.Redis.Password || o.TLSConfig != nil {
+		t.Fatal("split Redis configuration changed")
+	}
+	for _, mode := range []string{"redis", "rediss"} {
+		t.Run(mode, func(t *testing.T) {
+			yaml := strings.Replace(validYAML, "environment: development", "environment: production", 1) +
+				"redis:\n  url: " + mode + "://gofurry_cn:synthetic@librecosta-redis:6379/0\n"
+			file := filepath.Join(t.TempDir(), "config.yaml")
+			if err := os.WriteFile(file, []byte(yaml), 0600); err != nil {
+				t.Fatal(err)
+			}
+			cfg, err := LoadConfig(file)
+			if err != nil || cfg.Server.Environment != "production" {
+				t.Fatal("production Redis URL rejected", err)
+			}
+			client := NewRedis(cfg.Redis)
+			defer client.Close()
+			o := client.Options()
+			if o.Addr != "librecosta-redis:6379" || o.Username != "gofurry_cn" || o.Password != "synthetic" ||
+				o.MaxActiveConns != 16 || o.MaxRetries != 0 || (o.TLSConfig != nil) != (mode == "rediss") {
+				t.Fatal("configured Redis connection or pool options changed")
+			}
+			if o.TLSConfig != nil && (o.TLSConfig.InsecureSkipVerify || o.TLSConfig.ServerName != "librecosta-redis") {
+				t.Fatal("Redis TLS identity verification changed")
+			}
+		})
+	}
+}
+
+func TestRedisRejectsInvalidURLs(t *testing.T) {
+	for _, cfg := range []RedisConfig{
+		{URL: "redis://gofurry_cn@librecosta-redis:6379/0"},
+		{URL: "redis://gofurry_cn:synthetic@librecosta-redis:65536/0"},
+		{URL: "rediss://gofurry_cn:synthetic@librecosta-redis:6379/0?skip_verify=true"},
+		{URL: "unix:///path/redis.sock"},
+		{URL: "redis://gofurry_cn:synthetic@librecosta-redis:6379/0", Address: "other:6379"},
+	} {
+		if _, err := redisOptions(&cfg); err == nil || strings.Contains(err.Error(), "synthetic") {
+			t.Fatal("accepted an invalid Redis connection or disclosed its password")
+		}
 	}
 }

@@ -44,6 +44,7 @@ type YearbookConfig struct {
 }
 
 type RedisConfig struct {
+	URL      string `mapstructure:"url" json:"-"`
 	Address  string `mapstructure:"address" json:"-"`
 	Username string `mapstructure:"username" json:"-"`
 	Password string `mapstructure:"password" json:"-"`
@@ -117,12 +118,8 @@ func LoadConfig(path string) (Config, error) {
 	if !v.IsSet("search_suggestions.enabled") {
 		cfg.SearchSuggestions.Enabled = true
 	}
-	if r := cfg.Redis; r != nil && r.Address != "" {
-		host, port, err := net.SplitHostPort(r.Address)
-		n, parseErr := strconv.Atoi(port)
-		if err != nil || host == "" || parseErr != nil || n < 1 || n > 65535 || r.DB < 0 {
-			return cfg, fmt.Errorf("redis requires address host:port and a non-negative db")
-		}
+	if _, err := redisOptions(cfg.Redis); err != nil {
+		return cfg, err
 	}
 	host, port, err := net.SplitHostPort(cfg.Server.Address)
 	if err != nil || net.ParseIP(host) == nil {

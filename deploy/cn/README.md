@@ -15,7 +15,7 @@ docker build -f apps/web/Dockerfile -t gofurry-web:<revision> .
 docker build -f services/api/Dockerfile -t librecosta-admin:<revision> .
 ```
 
-在仓库外创建配置目录。从 `gofurry.example.yaml`、`admin.example.yaml` 和 `nginx.conf.example` 分别复制成 `gofurry/config.yaml`、`admin/config.yaml`、`nginx/nginx.conf`，按需挂载数据库 CA。Nginx 读取 `site.crt`、`site.key`、`admin.crt`、`admin.key`。保持目录及密钥最小权限，在 Debian 用容器所需的组 65532 或 101 配置只读访问。独立签发或在两个名称一致时为私有演练使用同一张带相应 SAN 的证书。Admin 的信任来源须与实际环回 HTTPS 端口完全相同。数据库的 `verify-full` 校验名称和证书，GoFurry 与 Admin 各用自己的角色和库。显式配置的存储写入端点及交付地址均须从 API 可达。配置文件变更随应用重启生效。
+在仓库外创建配置目录。从 `gofurry.example.yaml`、`admin.example.yaml` 和 `nginx.conf.example` 分别复制成 `gofurry/config.yaml`、`admin/config.yaml`、`nginx/nginx.conf`，按需挂载数据库 CA。Nginx 读取 `site.crt`、`site.key`、`admin.crt`、`admin.key`。保持目录及密钥最小权限，在 Debian 用容器所需的组 65532 或 101 配置只读访问。独立签发或在两个名称一致时为私有演练使用同一张带相应 SAN 的证书。Admin 的信任来源须与实际环回 HTTPS 端口完全相同。CN 两套运行 YAML 使用各自的 PostgreSQL 角色及 `ssl_mode: disable`，GoFurry Redis 使用自己的 ACL。内部 TLS 部署可选 `verify-full` 与 `redis.url: rediss://…`。显式配置的存储写入端点及交付地址均须从 API 可达。配置文件变更随应用重启生效。
 
 以下是 `/srv/gofurry-cn/compose.env` 示例。值仅用于镜像、路径、端口和既有 SSR 运行选项。应用密钥、数据库和存储连接放在受限 YAML。
 
@@ -33,7 +33,7 @@ CN_ADMIN_PORT=18444
 
 共享 PostgreSQL 与 Redis 的建库、角色、ACL 及授权顺序见 [OPS-S2-C 数据库初始化契约](database/README.md)。迁移 YAML 存在运行容器挂载目录之外，沿用同一配置结构并使用各库的 Migrator。
 
-本机、SSH 本地转发或核准的 Tailscale 接入都应保留 Compose 的宿主环回端口。Admin 使用独立 `18444` HTTPS，公开站点入口候选为 `18443`。Nginx、API、Admin 共享项目内网络命名空间，Admin HTTP 和 GoFurry Management 仍分别只监听 `127.0.0.1:8082` 和 `127.0.0.1:17324`。SSR 只连项目内的公开 API。保持默认网络专用，并用 Docker Engine 28+ 的环回端口隔离行为。 [Compose 网络模式](https://docs.docker.com/reference/compose-file/services/#network_mode) · [Docker 端口发布](https://docs.docker.com/engine/network/port-publishing/)
+本机、SSH 本地转发或核准的 Tailscale 接入都应保留 Compose 的宿主环回端口。Admin 使用独立 `18444` HTTPS，公开站点入口候选为 `18443`。Nginx、API、Admin 共享项目内网络命名空间，Admin HTTP 和 GoFurry Management 仍分别只监听 `127.0.0.1:8082` 和 `127.0.0.1:17324`。SSR 只连项目内的公开 API。保留默认网络作为应用入口和默认出口。Compose 2.33.1+ 为 edge 附加已有 `librecosta-backend`，API 与 Admin 共享该网络命名空间。两个 maintenance 服务独立接入后端网，SSR 只在默认网络。使用 Docker Engine 28+ 的环回端口隔离行为。 [Compose 网络模式](https://docs.docker.com/reference/compose-file/services/#network_mode) · [Docker 端口发布](https://docs.docker.com/engine/network/port-publishing/)
 
 ```sh
 # 在 GoFurry 仓库根目录，以 shell 函数固定项目与配置文件。
