@@ -5,6 +5,7 @@ env:
 
 vars:
   CONFIG: '{{.ROOT_DIR}}/config.yaml'
+  NODE_IMAGE: node:24.22.1-bookworm-slim
 
 tasks:
   tools:
@@ -133,19 +134,27 @@ tasks:
     cmds:
       - go -C services/api build -trimpath -ldflags="-s -w" -o ../../bin/linux/{{.ARCH}}/api ./cmd/api
   build:web:
+    desc: Build SSR in a disposable Node container and export runtime artifacts
     cmds:
-      - pnpm --filter @gofurry/web build
+      - >-
+        docker run --rm --network none
+        --mount "type=bind,source={{.ROOT_DIR}}/apps/web,target=/output"
+        "{{.NODE_IMAGE}}" node -e "require('fs').rmSync('/output/.output',{recursive:true,force:true})"
+      - >-
+        docker build --build-arg "NODE_IMAGE={{.NODE_IMAGE}}" --target artifacts
+        --output "type=local,dest={{.ROOT_DIR}}/apps/web/.output"
+        -f apps/web/build.Dockerfile .
   check:hmr:
     desc: Verify SCSS Modules HMR and React Fast Refresh in the dev server
     cmds:
       - pnpm --filter @gofurry/web test:hmr
   check:docker:
-    desc: Build host artifacts, validate Compose and package runtime images
+    desc: Build the Go API on the host and SSR in Docker, then package runtime images
     cmds:
       - task: build:linux
       - task: build:web
       - docker compose -f deploy/compose/compose.yaml config --quiet
-      - docker compose -f deploy/compose/compose.yaml build
+      - docker compose -f deploy/compose/compose.yaml build --build-arg "NODE_IMAGE={{.NODE_IMAGE}}"
   check:containers:
     desc: Smoke-test prebuilt images on random ports in an isolated disposable Compose project
     cmds:

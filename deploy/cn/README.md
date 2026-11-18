@@ -6,10 +6,11 @@
 - 默认在宿主 `127.0.0.1` 发布 Web 17320、API 17321、Admin 8082。应用在容器内分别监听 3000、8080、8082。SSR 通过 `http://gofurry-api:8080` 访问 GoFurry API。配置公开站点时，设定实际的 `public_origin`，由现有宿主入口按同源转发 Web 和浏览器请求的 `/api/`。只有在该入口覆写转发头时才配置实际的受信代理地址。
 - 启用 Admin 时，两侧 YAML 使用同一个私有管理令牌，Admin 的 `gofurry.base_url` 指向 `http://gofurry-api:17324`。管理端口仅在容器网内使用。生产 Admin 登录使用与 `auth.trusted_origins` 完全一致的受信 HTTPS 环回来源，保留 Secure Session Cookie 和 Origin/CSRF 校验。
 
-在宿主机运行 `task build:linux` 和 `task build:web`，再用现有 Dockerfile 打包。API 使用静态 Linux 二进制，Web 仅需要 Node Runtime。Admin 镜像在 Admin 仓库完成宿主机 Web 与 Embed 编译后打包，启用时以 `ADMIN_IMAGE` 指定。Go 工具链必须预装在 PATH，Task 禁止自动下载工具链。
+生产宿主机需要 Go 1.27.3、Task、Docker 和 Git。在仓库运行 `task build:linux` 进行原生 Go 编译，`task build:web` 使用一次性 Docker Node 24.22.1 / pnpm 12.8.1 构建 SSR 并导出 `.output`，再用现有单阶段运行 Dockerfile 打包。Web 运行镜像只需要 Node Runtime。Admin 在其仓库使用 Docker 构建前端、宿主 Go Embed 后打包，通过 `ADMIN_IMAGE` 指定。Task 禁止自动下载 Go 工具链。
 
 ```sh
 docker compose -f deploy/compose/compose.yaml config --quiet
 docker compose -f deploy/compose/compose.yaml up -d --build --wait api web
 docker compose -f deploy/compose/compose.yaml --profile ops up -d --wait admin
 ```
+服务器入口由 `/srv/ops/scripts/gofurry-deploy.sh` 提供，通过根目录 `deploy.sh` 符号链接调用。默认执行更新与构建，`restart`、`status`、`logs` 使用已有应用容器和 `/srv/apps/gofurry/` 外部配置。存在新增 Migration 时使用独立 Migrator 配置执行向前迁移。

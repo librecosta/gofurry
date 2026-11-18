@@ -19,7 +19,7 @@ Stop local services with `task stop`, or only one with `task stop:web` / `task s
 - API: <http://127.0.0.1:17321/api/v1/status>. Both expose `/livez` and `/readyz`.
 - Official wallpapers need `database` and development `storage` configured in the same root `config.yaml` used by `task dev:api`, with PostgreSQL running and explicit migrations applied. `/readyz` can remain healthy while this optional feature is unavailable. A missing database makes detail/random return 503; it never silently loads `.local` integration YAML or static JSON. Keep daily development databases separate from resettable `_test` databases. See [wallpaper setup and development import](docs/wallpapers.md).
 - Standalone API: `bin/api --config config.yaml` (`bin/api.exe` on Windows). Probe: `bin/api healthcheck --config config.yaml`. The probe derives host/port from that YAML, including wildcard listeners.
-- Production Web: `task build:web`, then `pnpm --filter @gofurry/web start`. For local Node, set `HOST=127.0.0.1 PORT=17320` (PowerShell: `$env:HOST='127.0.0.1'; $env:PORT='17320'`). The container retains internal port 3000.
+- Production Web: `task build:web` compiles SSR in Docker; package with `apps/web/Dockerfile` and run the Node-only image. Native development can still use `pnpm --filter @gofurry/web build` and `pnpm --filter @gofurry/web start`. For local Node, set `HOST=127.0.0.1 PORT=17320` (PowerShell: `$env:HOST='127.0.0.1'; $env:PORT='17320'`). The container retains internal port 3000.
 
 ## API configuration and JSON
 
@@ -127,7 +127,7 @@ If Docker Hub is unreachable, the equivalent official image mirror is supported:
 docker compose -f deploy/compose/compose.yaml build --build-arg NODE_IMAGE=public.ecr.aws/docker/library/node:24.22.1-bookworm-slim
 ```
 
-All compilation runs on the host. `task build:linux` writes the static API to `bin/linux/amd64/api`; `ARCH=arm64` selects an ARM64 artifact and requires the matching Docker `--platform linux/arm64`. The API Dockerfile copies that binary and the existing migration SQL. The Web Dockerfile copies the host-built `apps/web/.output` into a Node-only runtime. `task check:docker` builds both artifacts before packaging. Docker contexts allow only these artifacts and migration files. Runtime YAML, secrets and data remain read-only external mounts.
+Production Go compilation runs on the host with Go 1.27.3 and `GOTOOLCHAIN=local`; frontend compilation uses a disposable Node 24.22.1 / pnpm 12.8.1 container. The host needs Go, Task and Docker. `task build:linux` writes the static API to `bin/linux/amd64/api`; `ARCH=arm64` selects an ARM64 artifact and requires the matching Docker `--platform linux/arm64`. The API Dockerfile copies that binary and the existing migration SQL. `task build:web` clears old output, builds SSR from the lockfile in Docker with a dependency cache, then exports `apps/web/.output`. The Web runtime Dockerfile copies that output into a Node-only runtime. `task check:docker` builds both artifacts before packaging. Runtime Docker contexts allow only artifacts and migration files; the separate frontend build context allows the required source and lockfiles. Runtime YAML, secrets and data remain read-only external mounts.
 
 The [container notes](deploy/cn/README.md) cover the shared middleware network, optional Admin and explicit database maintenance.
 
