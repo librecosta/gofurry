@@ -12,10 +12,11 @@ assert.ok(process.env.npm_config_user_agent?.startsWith(`pnpm/${pnpm} `), 'Run v
 assert.match(execFileSync('go', ['version'], { encoding: 'utf8' }), new RegExp(`go${read('.go-version').replaceAll('.', '\\.')} `))
 assert.ok(execFileSync('task', ['--version'], { encoding: 'utf8' }).includes(read('.task-version')), 'Task version')
 assert.ok(read('services/api/go.mod').includes(`go ${read('.go-version')}`))
-assert.ok(read('Taskfile.yml').includes(`GOTOOLCHAIN: go${read('.go-version')}`))
+assert.ok(read('Taskfile.yml').includes('GOTOOLCHAIN: local'), 'Use the installed host Go toolchain without automatic downloads')
 assert.ok(read('apps/web/Dockerfile').includes(`node:${read('.node-version')}-`))
-assert.ok(read('apps/web/Dockerfile').includes(`pnpm@${pnpm}`))
-assert.ok(read('services/api/Dockerfile').includes(`golang:${read('.go-version')}-`))
+for (const path of ['apps/web/Dockerfile', 'services/api/Dockerfile']) {
+  assert.doesNotMatch(read(path), /(?:^|\n)(?:RUN|# syntax=)|golang:|COPY --from=/, `Package host artifacts only: ${path}`)
+}
 assert.ok(!read('services/api/go.mod').includes('bytedance/sonic'), 'Use standard-library JSON v2')
 const checkGo = (dir) => {
   for (const file of readdirSync(new URL(`../${dir}`, import.meta.url), { withFileTypes: true })) {

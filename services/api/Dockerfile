@@ -1,16 +1,9 @@
-ARG GO_IMAGE=golang:1.27.3-bookworm
-FROM ${GO_IMAGE} AS build
-ENV GOTOOLCHAIN=local CGO_ENABLED=0
-WORKDIR /src
-COPY services/api/go.mod services/api/go.sum ./
-RUN go mod download
-COPY services/api .
-RUN go build -trimpath -ldflags="-s -w" -o /out/api ./cmd/api
-
-FROM gcr.io/distroless/static-debian13:nonroot AS runtime
+FROM gcr.io/distroless/static-debian13:nonroot@sha256:25ac8f0c3b2334a9eb05452266bd4697864a8c8ef0ef71e5e6480d7f92868329
+ARG TARGETARCH
 WORKDIR /app
-COPY --from=build /out/api /api
-COPY --from=build /src/migrations /app/migrations
+COPY --chmod=0555 bin/linux/${TARGETARCH}/api /api
+COPY services/api/migrations/*.sql /app/migrations/
+USER 65532:65532
 EXPOSE 8080
 STOPSIGNAL SIGTERM
 HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=3 CMD ["/api", "healthcheck", "--config", "/etc/gofurry/config.yaml"]

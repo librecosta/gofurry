@@ -1,7 +1,7 @@
 version: '3'
 
 env:
-  GOTOOLCHAIN: go1.27.3
+  GOTOOLCHAIN: local
 
 vars:
   CONFIG: '{{.ROOT_DIR}}/config.yaml'
@@ -122,6 +122,16 @@ tasks:
       - go vet ./...
       - go test ./...
       - go build -o ../../bin/api{{exeExt}} ./cmd/api
+  build:linux:
+    desc: Build the static Linux API on the host for Docker packaging
+    vars:
+      ARCH: '{{default "amd64" .ARCH}}'
+    env:
+      CGO_ENABLED: '0'
+      GOOS: linux
+      GOARCH: '{{.ARCH}}'
+    cmds:
+      - go -C services/api build -trimpath -ldflags="-s -w" -o ../../bin/linux/{{.ARCH}}/api ./cmd/api
   build:web:
     cmds:
       - pnpm --filter @gofurry/web build
@@ -130,8 +140,10 @@ tasks:
     cmds:
       - pnpm --filter @gofurry/web test:hmr
   check:docker:
-    desc: Validate Compose and build independent local images (does not start services)
+    desc: Build host artifacts, validate Compose and package runtime images
     cmds:
+      - task: build:linux
+      - task: build:web
       - docker compose -f deploy/compose/compose.yaml config --quiet
       - docker compose -f deploy/compose/compose.yaml build
   check:containers:

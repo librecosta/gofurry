@@ -4,7 +4,7 @@ The current `/start` retains its layout, search, theme, weather and local quick 
 
 ## Setup and development
 
-Pinned tools: Node **24.22.1**, pnpm **12.8.1**, Go **1.27.3**, Task **3.53.1**. Root version files and `package.json` are authoritative; `task tools` checks consistency and Go configuration/JSON rules. Task selects `GOTOOLCHAIN=go1.27.3`; direct Go commands must use that version too.
+Pinned tools: Node **24.22.1**, pnpm **12.8.1**, Go **1.27.3**, Task **3.53.1**. Root version files and `package.json` are authoritative; `task tools` checks consistency and Go configuration/JSON rules. Install the required Go toolchain on PATH. Task sets `GOTOOLCHAIN=local` and refuses automatic toolchain downloads.
 
 Run `task install`. Copy `config.example.yaml` to `config.yaml` once (PowerShell: `Copy-Item config.example.yaml config.yaml`), checking first that no private file exists. Then use separate terminals:
 
@@ -110,6 +110,8 @@ Live checks, with the configured API running: `pnpm --filter @gofurry/web exec p
 Copy `deploy/compose/config.example.yaml` to `deploy/compose/config.yaml` and `deploy/compose/web.example.yaml` to `deploy/compose/web.yaml`. Use the same region in both files. The API listens on port 8080 inside the container. Containers use the existing `librecosta-backend` network.
 
 ```sh
+task build:linux
+task build:web
 docker compose -f deploy/compose/compose.yaml config --quiet
 docker compose -f deploy/compose/compose.yaml up --build --wait
 docker compose -f deploy/compose/compose.yaml down
@@ -122,8 +124,10 @@ Images run non-root, have readiness probes and a 20-second stop window. Logs go 
 If Docker Hub is unreachable, the equivalent official image mirror is supported:
 
 ```sh
-docker compose -f deploy/compose/compose.yaml build --build-arg NODE_IMAGE=public.ecr.aws/docker/library/node:24.22.1-bookworm-slim --build-arg GO_IMAGE=public.ecr.aws/docker/library/golang:1.27.3-bookworm
+docker compose -f deploy/compose/compose.yaml build --build-arg NODE_IMAGE=public.ecr.aws/docker/library/node:24.22.1-bookworm-slim
 ```
+
+All compilation runs on the host. `task build:linux` writes the static API to `bin/linux/amd64/api`; `ARCH=arm64` selects an ARM64 artifact and requires the matching Docker `--platform linux/arm64`. The API Dockerfile copies that binary and the existing migration SQL. The Web Dockerfile copies the host-built `apps/web/.output` into a Node-only runtime. `task check:docker` builds both artifacts before packaging. Docker contexts allow only these artifacts and migration files. Runtime YAML, secrets and data remain read-only external mounts.
 
 The [container notes](deploy/cn/README.md) cover the shared middleware network, optional Admin and explicit database maintenance.
 
