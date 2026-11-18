@@ -9,6 +9,14 @@ import (
 
 const validYAML = "server:\n  address: 127.0.0.1:17321\ndeployment:\n  region: CN\nlogging:\n  slow_request: 1s\n"
 
+func TestRuntimeExamples(t *testing.T) {
+	for _, relative := range []string{"config.example.yaml", "deploy/compose/config.example.yaml"} {
+		if _, err := LoadConfig(filepath.Join("..", "..", "..", "..", relative)); err != nil {
+			t.Fatalf("%s: %v", relative, err)
+		}
+	}
+}
+
 func TestConfigSingleSource(t *testing.T) {
 	t.Setenv("API_ADDR", "bad-env-address")
 	t.Setenv("APP_ENV", "bad-env-mode")
@@ -23,6 +31,10 @@ func TestConfigSingleSource(t *testing.T) {
 		{"invalid environment", strings.Replace(validYAML, "server:", "server:\n  environment: development", 1), false},
 		{"missing region", strings.ReplaceAll(validYAML, "  region: CN", ""), false},
 		{"unknown option", validYAML + "nsfw: true\n", false},
+		{"test gate", validYAML + "d4: {}\n", false},
+		{"development launcher", validYAML + "development: {}\n", false},
+		{"empty unknown", validYAML + "fixture: {}\n", false},
+		{"maintenance credential", validYAML + "database:\n  migration_url: rejected-maintenance-value\n", false},
 		{"unknown nested option", strings.ReplaceAll(validYAML, "region: CN", "region: CN\n  nsfw: true"), false},
 		{"invalid port", strings.ReplaceAll(validYAML, "17321", "70000"), false},
 		{"invalid duration", strings.ReplaceAll(validYAML, "1s", "0s"), false},

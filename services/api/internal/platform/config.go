@@ -1,6 +1,7 @@
 package platform
 
 import (
+	"bytes"
 	"crypto/x509"
 	"fmt"
 	"net"
@@ -89,10 +90,16 @@ func LoadConfig(path string) (Config, error) {
 	if path == "" {
 		return cfg, fmt.Errorf("--config must name a YAML file")
 	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return cfg, fmt.Errorf("cannot read explicit YAML configuration")
+	}
+	if err := validateConfigKeys(raw); err != nil {
+		return cfg, err
+	}
 	v := viper.New()
-	v.SetConfigFile(path)
 	v.SetConfigType("yaml")
-	if err := v.ReadInConfig(); err != nil {
+	if err := v.ReadConfig(bytes.NewReader(raw)); err != nil {
 		return cfg, fmt.Errorf("cannot read explicit YAML configuration")
 	}
 	if err := validateWallpaperSource(v); err != nil {
