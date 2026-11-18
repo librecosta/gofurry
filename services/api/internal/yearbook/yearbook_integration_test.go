@@ -72,7 +72,7 @@ func fixture(t *testing.T, yaml, region, name string) (platform.DatabaseConfig, 
 	cfg, err := platform.LoadConfig(yaml)
 	checked(t, err)
 	d := cfg.Database
-	if cfg.Deployment.Region != region || cfg.Server.Environment != "development" || d == nil ||
+	if cfg.Deployment.Region != region || d == nil ||
 		d.Host != "127.0.0.1" || d.Name != name || d.Port == 5432 || d.User != "postgres" ||
 		cfg.Storage != nil || cfg.Redis != nil || cfg.Harvest != nil || cfg.Management != nil {
 		t.Fatal("not a disposable yearbook fixture")

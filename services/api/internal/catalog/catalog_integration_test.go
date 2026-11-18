@@ -327,7 +327,7 @@ func openFixture(t *testing.T, ctx context.Context, path, region string) *pgxpoo
 	cfg, err := platform.LoadConfig(path)
 	ok(t, err)
 	d := cfg.Database
-	if cfg.Deployment.Region != region || cfg.Server.Environment != "development" || d == nil || d.Host != "127.0.0.1" ||
+	if cfg.Deployment.Region != region || d == nil || d.Host != "127.0.0.1" ||
 		d.Name != "gofurry_d1_"+strings.ToLower(region)+"_test" || d.User != "postgres" || d.Port == 5432 ||
 		cfg.Storage != nil || cfg.Redis != nil || cfg.Management != nil {
 		t.Fatal("not an isolated catalog fixture")

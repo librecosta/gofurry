@@ -462,7 +462,6 @@ func writeIntakeYAML(t *testing.T, path, addr, redis string, db platform.Databas
 	t.Helper()
 	yaml := fmt.Sprintf(`server:
   address: %q
-  environment: development
 deployment:
   region: CN
 logging:

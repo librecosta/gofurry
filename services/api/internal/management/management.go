@@ -39,7 +39,7 @@ func New(logger zerolog.Logger, cfg platform.Config, service *wallpaper.Service,
 		}
 		return c.Next()
 	})
-	middleware.Register(app, logger, cfg.Server.Environment == "production", cfg.Logging.SlowRequest)
+	middleware.Register(app, logger, cfg.Logging.SlowRequest)
 	app.Hooks().OnListen(func(fiber.ListenData) error {
 		listening.Store(true)
 		logger.Info().Msg("management listening")
@@ -93,7 +93,7 @@ func authenticate(cfg platform.Config) fiber.Handler {
 			return fiber.ErrUnsupportedMediaType
 		}
 		// These are trusted-service assertions, never independently trusted credentials.
-		if c.Get("X-LC-Region") != cfg.Deployment.Region || c.Get("X-LC-Environment") != cfg.Server.Environment {
+		if c.Get("X-LC-Region") != cfg.Deployment.Region {
 			return fiber.ErrForbidden
 		}
 		id, e := uuid.Parse(c.Get("X-LC-Actor-ID"))

@@ -1,0 +1,3 @@
+region: CN
+api_origin: http://gofurry-api:8080
+# public_origin: https://gofurry.example

@@ -11,10 +11,10 @@ import (
 	"github.com/librecosta/gofurry/services/api/internal/platform"
 )
 
-func TestProductionLogPolicy(t *testing.T) {
+func TestLogPolicy(t *testing.T) {
 	var logs bytes.Buffer
 	app := fiber.New()
-	Register(app, platform.NewLogger(&logs, "production"), true, 10*time.Millisecond)
+	Register(app, platform.NewLogger(&logs), 10*time.Millisecond)
 	app.Get("/livez", func(c fiber.Ctx) error { return c.SendStatus(200) })
 	app.Get("/fast", func(c fiber.Ctx) error { return c.SendStatus(200) })
 	app.Get("/slow", func(c fiber.Ctx) error { time.Sleep(20 * time.Millisecond); return c.SendStatus(200) })

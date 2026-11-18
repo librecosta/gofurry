@@ -20,7 +20,7 @@ func TestNearestCityHTTPPrivacyAndLimits(t *testing.T) {
 		var cfg platform.Config
 		cfg.Deployment.Region = region
 		var logs bytes.Buffer
-		s := New(platform.NewLogger(&logs, "development"), cfg)
+		s := New(platform.NewLogger(&logs), cfg)
 		for i := range 7 {
 			req := httptest.NewRequest("POST", "/api/v1/start/cities/nearest?region=OTHER", strings.NewReader(`{"latitude":30.671234,"longitude":104.071234}`))
 			req.Header.Set("Content-Type", "application/json")
@@ -59,7 +59,7 @@ func TestNearestCityHTTPPrivacyAndLimits(t *testing.T) {
 	var cfg platform.Config
 	cfg.Deployment.Region = "CN"
 	cfg.Server.TrustedProxies = []string{"127.0.0.1"}
-	s := New(platform.NewLogger(io.Discard, "production"), cfg)
+	s := New(platform.NewLogger(io.Discard), cfg)
 	base := listenLocationTest(t, s)
 	client := &http.Client{Timeout: 2 * time.Second, Transport: &http.Transport{Proxy: nil}}
 	defer client.CloseIdleConnections()
@@ -87,7 +87,7 @@ func TestCitiesHTTPBoundaryAndLimit(t *testing.T) {
 		var cfg platform.Config
 		cfg.Deployment.Region = region
 		cfg.Cities = &platform.CitiesConfig{IndexPath: filepath.Join(t.TempDir(), "missing.json")}
-		s := New(platform.NewLogger(io.Discard, "production"), cfg)
+		s := New(platform.NewLogger(io.Discard), cfg)
 		for i := range 41 {
 			req := httptest.NewRequest("GET", "/api/v1/start/cities?q=Chengdu&region=OTHER", nil)
 			req.Header.Set("X-GoFurry-Region", "OTHER")
@@ -127,7 +127,7 @@ func TestCitiesCorruptCatalogDegrades(t *testing.T) {
 	var cfg platform.Config
 	cfg.Deployment.Region = "CN"
 	cfg.Cities = &platform.CitiesConfig{IndexPath: path}
-	s := New(platform.NewLogger(io.Discard, "production"), cfg)
+	s := New(platform.NewLogger(io.Discard), cfg)
 	for _, path := range []string{"/api/v1/status", "/api/v1/start/weather", "/api/v1/start/location"} {
 		res, _ := s.App.Test(httptest.NewRequest("GET", path, nil))
 		res.Body.Close()

@@ -2,8 +2,6 @@ package platform
 
 import (
 	"errors"
-	"net/netip"
-	"net/url"
 	"regexp"
 	"time"
 	"uuid"
@@ -31,16 +29,11 @@ func (c *Config) validateHarvest() error {
 	if h == nil {
 		return nil
 	}
-	if c.Deployment.Region != "CN" || c.Database == nil {
-		return errors.New("harvest requires the CN deployment and a regional database")
+	if c.Database == nil {
+		return errors.New("harvest requires a regional database")
 	}
-	u, err := url.Parse(h.URL)
-	if err != nil || u.Hostname() == "" || u.User != nil || (u.Path != "" && u.Path != "/") || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" {
-		return errors.New("harvest.url requires a private origin without credentials")
-	}
-	ip, _ := netip.ParseAddr(u.Hostname())
-	if u.Scheme != "https" && !(u.Scheme == "http" && c.Server.Environment == "development" && ip.IsLoopback()) {
-		return errors.New("harvest.url requires HTTPS or development loopback HTTP")
+	if !validServiceOrigin(h.URL) {
+		return errors.New("harvest.url requires an HTTPS or private HTTP origin")
 	}
 	if !harvestNamespace.MatchString(h.Namespace) || h.WriterToken != "" && !harvestToken.MatchString(h.WriterToken) {
 		return errors.New("invalid harvest namespace or writer credential")

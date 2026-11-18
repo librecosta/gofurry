@@ -101,7 +101,7 @@ func navigationResponse(c fiber.Ctx, result any, err error) error {
 	return catalogResponse(c, nil, err)
 }
 
-func NavigationInteraction(counter *navigation.Counter, origin string, production, trustedPeers bool) fiber.Handler {
+func NavigationInteraction(counter *navigation.Counter, origin string, trustedPeers bool) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		c.Set("Cache-Control", "no-store")
 		if c.Path() != "/api/v1/sites/"+c.Params("publicID")+"/interactions" {
@@ -122,7 +122,7 @@ func NavigationInteraction(counter *navigation.Counter, origin string, productio
 			len(params) > 0 && (len(params) != 1 || !strings.EqualFold(params["charset"], "utf-8")) {
 			return fiber.ErrUnsupportedMediaType
 		}
-		ip, ok := interactionIP(c, production, trustedPeers)
+		ip, ok := interactionIP(c, trustedPeers)
 		if !ok {
 			return fiber.ErrForbidden
 		}
@@ -148,13 +148,13 @@ func NavigationInteraction(counter *navigation.Counter, origin string, productio
 	}
 }
 
-func interactionIP(c fiber.Ctx, production, trustedPeers bool) (netip.Addr, bool) {
+func interactionIP(c fiber.Ctx, trustedPeers bool) (netip.Addr, bool) {
 	forwarded := c.Get(fiber.HeaderXForwardedFor)
 	var raw string
 	if trustedPeers && c.IsProxyTrusted() {
 		// The edge supplies exactly one address, replacing inbound forwarding headers.
 		raw = forwarded
-	} else if !production && forwarded == "" && c.Get("Forwarded") == "" && c.Get("X-Real-IP") == "" {
+	} else if !trustedPeers && c.RequestCtx().RemoteIP().IsLoopback() && forwarded == "" && c.Get("Forwarded") == "" && c.Get("X-Real-IP") == "" {
 		raw = c.RequestCtx().RemoteIP().String()
 	} else {
 		return netip.Addr{}, false

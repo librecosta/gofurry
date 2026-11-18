@@ -1,6 +1,5 @@
 server:
   address: 0.0.0.0:8082
-  environment: production
 deployment:
   region: CN
 database:

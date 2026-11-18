@@ -35,12 +35,13 @@ func TestHarvestExplicitYAML(t *testing.T) {
 	}{
 		{"default disabled", validYAML + db, true, false},
 		{"explicit reader", validYAML + db + h, true, true},
-		{"development loopback", validYAML + db + strings.Replace(h, "https://harvest.example", "http://127.0.0.1:3210", 1), true, true},
+		{"explicit loopback", validYAML + db + strings.Replace(h, "https://harvest.example", "http://127.0.0.1:3210", 1), true, true},
+		{"Docker DNS", validYAML + db + strings.Replace(h, "https://harvest.example", "http://harvest:8080", 1), true, true},
 		{"remote HTTP", validYAML + db + strings.Replace(h, "https://", "http://", 1), false, false},
 		{"URL credentials", validYAML + db + strings.Replace(h, "https://", "https://user:password@", 1), false, false},
 		{"distinct roles", validYAML + db + h + "  writer_token: fixture_reader_012345678901234567890\n", false, false},
 		{"unknown key", validYAML + db + h + "  operator_token: ignored\n", false, false},
-		{"INTL isolation", strings.Replace(validYAML, "region: CN", "region: INTL", 1) + db + h, false, false},
+		{"INTL regional deployment", strings.Replace(validYAML, "region: CN", "region: INTL", 1) + db + h, true, true},
 		{"no regional DB", validYAML + h, false, false},
 	}
 	for _, tc := range tests {

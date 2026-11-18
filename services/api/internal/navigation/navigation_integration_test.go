@@ -67,7 +67,7 @@ func TestNavigationPostgreSQLRedis(t *testing.T) {
 	host, port, err := net.SplitHostPort(*fixtureRedis)
 	must(t, err)
 	if d == nil || d.Name != "gofurry_d2_navigation_test" || d.Host != "127.0.0.1" || d.Port == 5432 ||
-		d.User != "postgres" || cfg.Server.Environment != "development" || cfg.Deployment.Region != "CN" ||
+		d.User != "postgres" || cfg.Deployment.Region != "CN" ||
 		host != "127.0.0.1" || port == "6379" || cfg.Harvest != nil || cfg.Redis != nil {
 		t.Fatal("isolated local fixtures required")
 	}

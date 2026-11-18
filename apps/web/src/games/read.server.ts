@@ -1,3 +1,4 @@
+import { webConfig } from '../web-config.server'
 import type { Locale, Region } from '../preferences'
 import { criteriaQuery, publicID, publicSlug, type Collection, type Criteria, type Game, type Home, type Kind, type List, type Summary } from './data'
 
@@ -45,9 +46,9 @@ function decode(kind: Kind, value: unknown): Home | List<Game> | List<Summary> |
 }
 
 export async function readGames(kind: Kind, locale: Locale, region: Region, criteria: Criteria, signal: AbortSignal, id?: string) {
-  if ((process.env.WEB_REGION ?? 'CN') !== region) throw new Error('Game deployment mismatch')
+  if ((webConfig().region) !== region) throw new Error('Game deployment mismatch')
   const resource = kind === 'members' ? 'collections/' + id : kind === 'home' ? 'discovery' : kind
-  const url = new URL('/api/v1/games/' + resource, process.env.WEB_API_BASE_URL ?? 'http://127.0.0.1:17321')
+  const url = new URL('/api/v1/games/' + resource, webConfig().api_origin)
   url.search = criteriaQuery(criteria)
   url.searchParams.set('locale', locale)
   const response = await fetch(url, { redirect: 'error', signal: AbortSignal.any([signal, AbortSignal.timeout(3000)]) })

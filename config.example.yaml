@@ -1,6 +1,5 @@
 server:
   address: 127.0.0.1:17321
-  environment: development
   # Empty by default. List only your actual proxy peer IPs/CIDRs, never 0.0.0.0/0.
   trusted_proxies: []
 deployment:
@@ -84,7 +83,7 @@ navigation:
 
 # Disabled unless complete. Generate 32 crypto/rand bytes as unpadded base64url.
 # Token goes only in private YAML. Database is required. R2 storage is required for media operations.
-# Admin must use the same region/environment. New uploads: 16:9 AVIF + WebP.
+# Admin must use the same region. New uploads: 16:9 AVIF + WebP.
 management: null
 # management:
 #   address: 127.0.0.1:17324

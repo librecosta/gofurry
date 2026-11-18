@@ -17,7 +17,7 @@ func wallpaperImportCommand(cfg *platform.Config) *cobra.Command {
 	var reviewed bool
 	cmd := &cobra.Command{Use: "wallpaper-import FILE", Short: "Import reviewed static catalog from confirmed development storage; never uploads", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
 		host, _, e := net.SplitHostPort(cfg.Server.Address)
-		if e != nil || !net.ParseIP(host).IsLoopback() || cfg.Server.Environment != "development" || cfg.Database == nil || net.ParseIP(cfg.Database.Host) == nil || !net.ParseIP(cfg.Database.Host).IsLoopback() || cfg.Storage == nil || bucket == "" || public == "" || cfg.Storage.Bucket != bucket || cfg.Storage.PublicBaseURL != public || !reviewed {
+		if e != nil || !net.ParseIP(host).IsLoopback() || cfg.Database == nil || net.ParseIP(cfg.Database.Host) == nil || !net.ParseIP(cfg.Database.Host).IsLoopback() || cfg.Storage == nil || bucket == "" || public == "" || cfg.Storage.Bucket != bucket || cfg.Storage.PublicBaseURL != public || !reviewed {
 			return errors.New("wallpaper-import requires explicit local development database/storage, matching bucket/public-base confirmation and reviewed-SFW confirmation")
 		}
 		f, e := os.Open(args[0])

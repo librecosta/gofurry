@@ -56,9 +56,6 @@ func TestQWeatherLive(t *testing.T) {
 	if err != nil {
 		t.Fatal("explicit development YAML could not be loaded; check configuration locally")
 	}
-	if cfg.Server.Environment != "development" {
-		t.Fatal("live test only permits development configuration")
-	}
 	if missing := cfg.QWeather.MissingFields(); len(missing) > 0 {
 		t.Skip("real QWeather call blocked: missing qweather." + strings.Join(missing, ", qweather."))
 	}

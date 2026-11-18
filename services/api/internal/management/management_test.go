@@ -20,9 +20,9 @@ func TestBearerAndActorBoundary(t *testing.T) {
 	var cfg platform.Config
 	cfg.Management = &platform.ManagementConfig{Token: token}
 	cfg.Deployment.Region = "CN"
-	cfg.Server.Environment = "development"
+
 	var logs bytes.Buffer
-	app := New(platform.NewLogger(&logs, "development"), cfg, wallpaper.New(nil, nil, true))
+	app := New(platform.NewLogger(&logs), cfg, wallpaper.New(nil, nil, true))
 	cases := []struct {
 		name, auth, field, value string
 		status                   int
@@ -30,7 +30,7 @@ func TestBearerAndActorBoundary(t *testing.T) {
 		{"missing", "", "", "", 401}, {"wrong", "Bearer incorrect", "", "", 401}, {"query only", "", "", "", 401},
 		{"valid", "Bearer " + token, "", "", 503},
 		{"query with header", "Bearer " + token, "", "", 400},
-		{"region", "Bearer " + token, "X-LC-Region", "INTL", 403}, {"environment", "Bearer " + token, "X-LC-Environment", "production", 403},
+		{"region", "Bearer " + token, "X-LC-Region", "INTL", 403},
 		{"actor", "Bearer " + token, "X-LC-Actor-ID", "invalid", 400}, {"role", "Bearer " + token, "X-LC-Actor-Role", "root", 400}, {"id", "Bearer " + token, "X-Request-ID", "invalid", 400},
 	}
 	for _, tc := range cases {
@@ -47,7 +47,7 @@ func TestBearerAndActorBoundary(t *testing.T) {
 			req.Header.Set("X-LC-Actor-Role", "operator")
 			req.Header.Set("X-Request-ID", uuid.NewV7().String())
 			req.Header.Set("X-LC-Region", "CN")
-			req.Header.Set("X-LC-Environment", "development")
+
 			if tc.field != "" {
 				req.Header.Set(tc.field, tc.value)
 			}

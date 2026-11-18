@@ -11,6 +11,7 @@ test-results/
 !.env.example
 *.log
 config.yaml
+/deploy/compose/web.yaml
 /data/geoip/
 /data/cities/
 /data/private/

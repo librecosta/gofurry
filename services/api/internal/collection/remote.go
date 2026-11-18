@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -39,7 +38,7 @@ type client struct {
 
 func newClient(c platform.HarvestConfig) *client {
 	tr := &http.Transport{
-		DialContext:     (&net.Dialer{Timeout: 3 * time.Second, KeepAlive: 30 * time.Second}).DialContext,
+		DialContext:     platform.ServiceDialer(c.URL, 3*time.Second, 30*time.Second).DialContext,
 		TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS12}, ForceAttemptHTTP2: true,
 		TLSHandshakeTimeout: 3 * time.Second, ResponseHeaderTimeout: 8 * time.Second,
 		MaxIdleConns: 2, MaxIdleConnsPerHost: 2, MaxConnsPerHost: 2, IdleConnTimeout: 30 * time.Second,

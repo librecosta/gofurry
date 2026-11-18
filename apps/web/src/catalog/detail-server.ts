@@ -1,3 +1,4 @@
+import { webConfig } from '../web-config.server'
 import { createServerFn } from '@tanstack/react-start'
 import { setResponseStatus } from '@tanstack/react-start/server'
 import type { Region } from '../preferences'
@@ -57,9 +58,9 @@ export const readCatalogDetail = createServerFn({ method: 'GET' }).validator((in
   return input
 }).handler(async ({ data: { kind, publicId, region } }): Promise<Result> => {
   try {
-    const deployment = process.env.WEB_REGION ?? 'CN'
+    const deployment = webConfig().region
     if (deployment !== region) throw new Error('Region mismatch')
-    const url = new URL(`/api/v1/${kind}/${publicId}`, process.env.WEB_API_BASE_URL ?? 'http://127.0.0.1:17321')
+    const url = new URL(`/api/v1/${kind}/${publicId}`, webConfig().api_origin)
     if (kind === 'sites') url.searchParams.set('profile', '1')
     const response = await fetch(url, { signal: AbortSignal.timeout(3000), redirect: 'error' })
     if (response.headers.get('x-gofurry-region') !== deployment || response.headers.get('x-gofurry-content-mode') !== 'SFW') {

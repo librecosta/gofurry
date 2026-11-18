@@ -26,7 +26,7 @@ func TestC4PublicCatalog(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Server.Environment != "development" || cfg.Database == nil || !strings.HasPrefix(cfg.Database.Name, "gofurry_") || !strings.HasSuffix(cfg.Database.Name, "_test") {
+	if cfg.Database == nil || !strings.HasPrefix(cfg.Database.Name, "gofurry_") || !strings.HasSuffix(cfg.Database.Name, "_test") {
 		t.Fatal("development database required")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)

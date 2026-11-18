@@ -22,7 +22,7 @@ import (
 
 func TestHTTPRuntime(t *testing.T) {
 	var logs bytes.Buffer
-	s := New(platform.NewLogger(&logs, "production"), platform.Config{})
+	s := New(platform.NewLogger(&logs), platform.Config{})
 	// Startup diagnostics are emitted before an HTTP request has a request ID.
 	logs.Reset()
 	s.App.Post("/test/json", func(c fiber.Ctx) error {

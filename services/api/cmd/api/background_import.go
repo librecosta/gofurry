@@ -14,8 +14,8 @@ import (
 
 func backgroundImportCommand(cfg *platform.Config) *cobra.Command {
 	return &cobra.Command{Use: "background-import FILE", Short: "Import one fully validated development object without creating a wallpaper record", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
-		if cfg.Server.Environment != "development" || cfg.Storage == nil {
-			return errors.New("background-import requires development YAML with explicit storage configuration")
+		if cfg.Storage == nil {
+			return errors.New("background-import requires explicit storage configuration")
 		}
 		file, e := os.Open(args[0])
 		if e != nil {

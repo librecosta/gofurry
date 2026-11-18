@@ -32,16 +32,20 @@ func (c Config) validateNavigation() error {
 	if n.Origin != "" {
 		u, err := url.Parse(n.Origin)
 		if err != nil || u.User != nil || u.Hostname() == "" || n.Origin != u.Scheme+"://"+u.Host ||
-			u.Scheme != "https" && !(u.Scheme == "http" && c.Server.Environment == "development" &&
-				(net.ParseIP(u.Hostname()).IsLoopback() || u.Hostname() == "localhost")) {
-			return errors.New("navigation.interaction_origin must be an exact HTTPS origin or a loopback development origin")
+			u.Scheme != "https" && !(u.Scheme == "http" && (net.ParseIP(u.Hostname()).IsLoopback() || u.Hostname() == "localhost")) {
+			return errors.New("navigation.interaction_origin must be an exact HTTPS origin or a loopback HTTP origin")
 		}
 	}
 	if n.HMACKey != "" && (n.Origin == "" || len(n.InteractionKey()) != 32 || len(n.HMACKey) != 43) {
 		return errors.New("navigation.interaction_hmac_key requires an origin and exactly 32 unpadded base64url bytes")
 	}
-	if n.HMACKey != "" && c.Server.Environment == "production" && len(c.Server.TrustedProxies) == 0 {
-		return errors.New("navigation interactions require an explicitly trusted production edge")
+	if n.HMACKey != "" && len(c.Server.TrustedProxies) == 0 && !loopbackOrigin(n.Origin) {
+		return errors.New("navigation interactions require a trusted proxy for a non-loopback origin")
 	}
 	return nil
+}
+
+func loopbackOrigin(raw string) bool {
+	u, err := url.Parse(raw)
+	return err == nil && (u.Hostname() == "localhost" || net.ParseIP(u.Hostname()).IsLoopback())
 }

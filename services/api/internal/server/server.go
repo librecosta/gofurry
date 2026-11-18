@@ -59,7 +59,7 @@ func New(logger zerolog.Logger, cfg platform.Config) *Server {
 		ProxyHeader:        fiber.HeaderXForwardedFor,
 		EnableIPValidation: true,
 	})
-	middleware.Register(s.App, logger, cfg.Server.Environment == "production", cfg.Logging.SlowRequest)
+	middleware.Register(s.App, logger, cfg.Logging.SlowRequest)
 	s.App.Use(func(c fiber.Ctx) error {
 		c.Set("X-GoFurry-Region", cfg.Deployment.Region)
 		c.Set("X-GoFurry-Content-Mode", "SFW")
@@ -133,7 +133,7 @@ func New(logger zerolog.Logger, cfg platform.Config) *Server {
 	}
 	counter := navigation.NewCounter(discovery, shared, cfg.Navigation.InteractionKey(), cfg.Deployment.Region)
 	discovery.Presentation(objects, counter.Enabled())
-	interactions := handlers.NavigationInteraction(counter, interactionOrigin, cfg.Server.Environment == "production", len(cfg.Server.TrustedProxies) != 0)
+	interactions := handlers.NavigationInteraction(counter, interactionOrigin, len(cfg.Server.TrustedProxies) != 0)
 	market := catalog.ChannelMarket{Region: cfg.Deployment.Region, Egress: strings.ToLower(cfg.Deployment.Region)}
 	if cfg.Harvest != nil && cfg.Harvest.IntakeEgressRegion != "" {
 		market.Egress = cfg.Harvest.IntakeEgressRegion

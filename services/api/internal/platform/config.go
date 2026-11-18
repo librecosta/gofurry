@@ -17,7 +17,6 @@ import (
 type Config struct {
 	Server struct {
 		Address        string   `mapstructure:"address"`
-		Environment    string   `mapstructure:"environment"`
 		TrustedProxies []string `mapstructure:"trusted_proxies"`
 	} `mapstructure:"server"`
 	Deployment struct {
@@ -128,9 +127,6 @@ func LoadConfig(path string) (Config, error) {
 	number, err := strconv.Atoi(port)
 	if err != nil || number < 1 || number > 65535 {
 		return cfg, fmt.Errorf("server.address port must be 1..65535")
-	}
-	if cfg.Server.Environment != "development" && cfg.Server.Environment != "production" {
-		return cfg, fmt.Errorf("server.environment must be development or production")
 	}
 	if cfg.Deployment.Region != "CN" && cfg.Deployment.Region != "INTL" {
 		return cfg, fmt.Errorf("deployment.region must be CN or INTL")

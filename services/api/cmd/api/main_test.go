@@ -30,7 +30,7 @@ func TestCLIYAMLStartAndProbe(t *testing.T) {
 	address := listener.Addr().String()
 	listener.Close()
 	path := filepath.Join(t.TempDir(), "config.yaml")
-	data := "server:\n  address: " + address + "\n  environment: production\ndeployment:\n  region: INTL\nlogging:\n  slow_request: 1s\n"
+	data := "server:\n  address: " + address + "\ndeployment:\n  region: INTL\nlogging:\n  slow_request: 1s\n"
 	if err := os.WriteFile(path, []byte(data), 0600); err != nil {
 		t.Fatal(err)
 	}

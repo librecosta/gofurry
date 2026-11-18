@@ -1,3 +1,4 @@
+import { webConfig } from '../web-config.server'
 import { createServerFn } from '@tanstack/react-start'
 import { setResponseStatus } from '@tanstack/react-start/server'
 import { isPublicID } from '../catalog/detail-server'
@@ -87,8 +88,8 @@ export const readYearbook = createServerFn({ method: 'GET' }).validator((input: 
   return input
 }).handler(async ({ data }): Promise<Read> => {
   try {
-    if ((process.env.WEB_REGION ?? 'CN') !== data.region) throw new Error('Region mismatch')
-    const url = new URL(`/api/v1/sites/${data.id}/yearbooks/${data.year}`, process.env.WEB_API_BASE_URL ?? 'http://127.0.0.1:17321')
+    if ((webConfig().region) !== data.region) throw new Error('Region mismatch')
+    const url = new URL(`/api/v1/sites/${data.id}/yearbooks/${data.year}`, webConfig().api_origin)
     const response = await fetch(url, { signal: AbortSignal.timeout(3000), redirect: 'error' })
     if (response.headers.get('x-gofurry-region') !== data.region || response.headers.get('x-gofurry-content-mode') !== 'SFW') {
       await response.body?.cancel()

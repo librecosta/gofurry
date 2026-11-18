@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-const validYAML = "server:\n  address: 127.0.0.1:17321\n  environment: development\ndeployment:\n  region: CN\nlogging:\n  slow_request: 1s\n"
+const validYAML = "server:\n  address: 127.0.0.1:17321\ndeployment:\n  region: CN\nlogging:\n  slow_request: 1s\n"
 
 func TestConfigSingleSource(t *testing.T) {
 	t.Setenv("API_ADDR", "bad-env-address")
@@ -20,7 +20,7 @@ func TestConfigSingleSource(t *testing.T) {
 		{"CN", validYAML, true},
 		{"INTL", strings.ReplaceAll(validYAML, "region: CN", "region: INTL"), true},
 		{"invalid region", strings.ReplaceAll(validYAML, "region: CN", "region: other"), false},
-		{"invalid environment", strings.ReplaceAll(validYAML, "environment: development", "environment: other"), false},
+		{"invalid environment", strings.Replace(validYAML, "server:", "server:\n  environment: development", 1), false},
 		{"missing region", strings.ReplaceAll(validYAML, "  region: CN", ""), false},
 		{"unknown option", validYAML + "nsfw: true\n", false},
 		{"unknown nested option", strings.ReplaceAll(validYAML, "region: CN", "region: CN\n  nsfw: true"), false},
@@ -147,7 +147,7 @@ func TestGeoIPAndTrustedProxyConfig(t *testing.T) {
 		{"[proxy.example]", false}, {"[0.0.0.0/0]", false}, {"['::/0']", false},
 		{"[0.0.0.0]", false}, {"[10.0.0.0/99]", false}, {"['fe80::1%eth0']", false},
 	} {
-		data := strings.Replace(validYAML, "  environment: development", "  environment: development\n  trusted_proxies: "+tc.proxies, 1)
+		data := strings.Replace(validYAML, "server:", "server:\n  trusted_proxies: "+tc.proxies, 1)
 		if err := os.WriteFile(path, []byte(data), 0600); err != nil {
 			t.Fatal(err)
 		}

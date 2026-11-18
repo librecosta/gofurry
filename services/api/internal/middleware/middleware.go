@@ -13,7 +13,7 @@ import (
 
 type logStartKey struct{}
 
-func Register(app *fiber.App, logger zerolog.Logger, production bool, slowAfter time.Duration) {
+func Register(app *fiber.App, logger zerolog.Logger, slowAfter time.Duration) {
 	// ID -> access logger -> recover -> headers -> handlers. Recover converts panics
 	// before the outer access logger renders the unified error and records its status.
 	app.Use(requestid.New())
@@ -23,7 +23,7 @@ func Register(app *fiber.App, logger zerolog.Logger, production bool, slowAfter 
 	})
 	app.Use(fiberzerolog.New(fiberzerolog.Config{
 		Skip: func(c fiber.Ctx) bool {
-			return production && c.Response().StatusCode() < 400 && time.Since(fiber.Locals[time.Time](c, logStartKey{})) < slowAfter
+			return c.Response().StatusCode() < 400 && time.Since(fiber.Locals[time.Time](c, logStartKey{})) < slowAfter
 		},
 		Logger:          &logger,
 		FieldsSnakeCase: true,

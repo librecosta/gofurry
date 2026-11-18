@@ -24,7 +24,7 @@ func TestLocationUnavailableAndRateLimit(t *testing.T) {
 		cfg.Deployment.Region = "CN"
 		cfg.GeoIP = &platform.GeoIPConfig{DatabasePath: database}
 		var logs bytes.Buffer
-		s := New(platform.NewLogger(&logs, "production"), cfg)
+		s := New(platform.NewLogger(&logs), cfg)
 		for i := range 31 {
 			req := httptest.NewRequest("GET", "/api/v1/start/location?ip=8.8.8.8&region=INTL", nil)
 			req.Header.Set("X-Forwarded-For", "8.8.8.8")
@@ -75,7 +75,7 @@ func TestLocationCorruptDatabaseDegrades(t *testing.T) {
 	cfg.Deployment.Region = "INTL"
 	cfg.GeoIP = &platform.GeoIPConfig{DatabasePath: path}
 	var logs bytes.Buffer
-	s := New(platform.NewLogger(&logs, "production"), cfg)
+	s := New(platform.NewLogger(&logs), cfg)
 	res, err := s.App.Test(httptest.NewRequest("GET", "/api/v1/start/location", nil))
 	if err != nil {
 		t.Fatal(err)

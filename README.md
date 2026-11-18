@@ -23,7 +23,7 @@ Stop local services with `task stop`, or only one with `task stop:web` / `task s
 
 ## API configuration and JSON
 
-`config.example.yaml` defines one schema: required `server.address`, `server.environment` (`development` / `production`), `deployment.region` (`CN` / `INTL`) and positive `logging.slow_request` (e.g. `1s`), plus optional `storage`, `search_suggestions`, `geoip`, `cities`, `qweather`, `redis`, `database` and `management`. `server.trusted_proxies` defaults to empty; only explicit IPs/CIDRs may supply forwarded client IPs. Unknown YAML fields fail. Cobra requires `--config` for serving, probing and importing. Viper reads exactly that file: no automatic search, merging, environment bindings, .env, or individual business-field flag overrides. Private `config.yaml` is ignored everywhere and excluded from build contexts.
+`config.example.yaml` defines one schema: required `server.address`, `deployment.region` (`CN` / `INTL`) and positive `logging.slow_request` (e.g. `1s`), plus optional `storage`, `search_suggestions`, `geoip`, `cities`, `qweather`, `redis`, `database` and `management`. `server.trusted_proxies` defaults to empty; only explicit IPs/CIDRs may supply forwarded client IPs. Unknown YAML fields fail. Cobra requires `--config` for serving, probing and importing. Viper reads exactly that file: no automatic search, merging, environment bindings, .env, or individual business-field flag overrides. Private `config.yaml` is ignored everywhere and excluded from build contexts.
 
 Fiber uses standard-library `encoding/json/v2` and `encoding/json/jsontext` through non-variadic adapters. Existing status/error fields and null collections are preserved. Invalid UTF-8, duplicate JSON names and trailing JSON values are rejected; no Sonic dependency or JSON experiment flags remain.
 
@@ -35,7 +35,7 @@ Manual weather cities are optional: run `task cities:init` (Python 3.10+, one-ti
 
 ## Region, language and theme
 
-`WEB_REGION=CN` (default) or `WEB_REGION=INTL` selects the Web deployment. Set it in the local shell or Web Compose environment. API region is selected only in its YAML. Operators must keep them in the same region and use separate hosts, secrets, databases and user-data storage for CN/INTL. Reviewed public SFW backgrounds may be shared between regions. Data clients stay within their deployment with no cross-region fallback.
+The Web server reads one YAML selected by GOFURRY_WEB_CONFIG_FILE. Copy apps/web/config.example.yaml for native use, set region and api_origin, and set public_origin for a public hostname. Compose mounts deploy/compose/web.yaml, based on web.example.yaml. Keep Web and API in the same region with separate regional databases and credentials. Vite uses the checked-in loopback example when no path is selected.
 
 CN defaults to `zh`, INTL to `en`; both offer both languages. Locale never selects a region. Both APIs currently expose SFW policy metadata; CN remains permanently SFW. INTL may remember an SFW/NSFW preference, while actual backend content remains SFW. Search queries/suggestions are independent of site-published content; both regions share the same search behavior and capabilities. No adult-content query module or account integration exists.
 
@@ -107,7 +107,7 @@ Live checks, with the configured API running: `pnpm --filter @gofurry/web exec p
 
 ## Containers and logs
 
-Copy `deploy/compose/config.example.yaml` to `deploy/compose/config.yaml` once. Its schema is identical to local configuration, with internal port 8080 and production logging. Select its region to match `WEB_REGION`. Containers use the existing `librecosta-backend` network. Native Go and Vite development uses the commands above.
+Copy `deploy/compose/config.example.yaml` to `deploy/compose/config.yaml` and `deploy/compose/web.example.yaml` to `deploy/compose/web.yaml`. Use the same region in both files. The API listens on port 8080 inside the container. Containers use the existing `librecosta-backend` network.
 
 ```sh
 docker compose -f deploy/compose/compose.yaml config --quiet
@@ -115,9 +115,9 @@ docker compose -f deploy/compose/compose.yaml up --build --wait
 docker compose -f deploy/compose/compose.yaml down
 ```
 
-The Compose project manages GoFurry API, Web, and the optional Admin service. Host ports default to loopback **17320/17321**, overridable with `WEB_PORT` / `API_PORT`; internal ports stay 3000/8080. `API_CONFIG_FILE` optionally chooses the bind-mount source path, not application fields. YAML is mounted read-only at `/etc/gofurry/config.yaml`; there is no API Compose `environment` / `env_file`. Missing files fail instead of creating directories. Web region is a server-only Node setting, not a client-controlled Vite variable.
+The Compose project manages GoFurry API, Web, and the optional Admin service. Host ports default to loopback **17320/17321**, overridable with `WEB_PORT` / `API_PORT`; internal ports stay 3000/8080. `API_CONFIG_FILE` optionally chooses the bind-mount source path, not application fields. YAML is mounted read-only at `/etc/gofurry/config.yaml`; there is no API Compose `environment` / `env_file`. Missing files fail instead of creating directories. Web reads its separate YAML mounted at /etc/gofurry/web.yaml. WEB_CONFIG_FILE selects the host mount path.
 
-Images run non-root, have readiness probes and a 20-second stop window. Logs go to stdout/stderr; Docker `local` rotates at **5m × 3**, compressed. Production suppresses fast successful requests and probes; errors (including failed probes), slow requests and lifecycle events remain. API slow threshold comes from YAML; Web uses one second. Request logs allowlist route templates/status/duration/IDs, excluding credentials and bodies. Framework banner lines may remain plain text.
+Images run non-root, have readiness probes and a 20-second stop window. Logs go to stdout/stderr; Docker `local` rotates at **5m × 3**, compressed. Runtime logging suppresses fast successful requests and probes; errors (including failed probes), slow requests and lifecycle events remain. API slow threshold comes from YAML; Web uses one second. Request logs allowlist route templates/status/duration/IDs, excluding credentials and bodies. Framework banner lines may remain plain text.
 
 If Docker Hub is unreachable, the equivalent official image mirror is supported:
 

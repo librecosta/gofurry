@@ -1,12 +1,14 @@
 import { randomUUID } from 'node:crypto'
 import { definePlugin } from 'nitro'
+import { webConfig } from '../../src/web-config.server'
 
 function log(message: string, fields: Record<string, unknown> = {}) {
   const entry = { time: new Date().toISOString(), service: 'gofurry-web', message, ...fields }
-  console.log(process.env.NODE_ENV === 'production' ? JSON.stringify(entry) : `${entry.time} ${message} ${JSON.stringify(fields)}`)
+  console.log(JSON.stringify(entry))
 }
 
 export default definePlugin((app) => {
+  webConfig()
   const requests = new WeakMap<Request, { id: string; start: number }>()
   log('starting')
   app.hooks.hook('request', (event) => {
@@ -17,7 +19,7 @@ export default definePlugin((app) => {
     if (request) res.headers.set('X-Request-ID', request.id)
     const path = new URL(event.req.url).pathname
     const duration = Math.round(performance.now() - (request?.start ?? performance.now()))
-    if (process.env.NODE_ENV === 'production' && res.status < 400 && duration < 1000) return
+    if (res.status < 400 && duration < 1000) return
     // Log only the currently known routes, never query strings or raw user paths.
     log('request', {
       request_id: request?.id,

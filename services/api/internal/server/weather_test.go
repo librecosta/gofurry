@@ -19,7 +19,7 @@ func TestWeatherHTTPBoundaryLimitAndDegradation(t *testing.T) {
 		cfg.Deployment.Region = region
 		cfg.QWeather = &platform.QWeatherConfig{Enabled: true} // Missing values degrade, never stop the API.
 		var logs bytes.Buffer
-		s := New(platform.NewLogger(&logs, "production"), cfg)
+		s := New(platform.NewLogger(&logs), cfg)
 		for i := range 21 {
 			req := httptest.NewRequest("GET", "/api/v1/start/weather?lang=en&ip=223.5.5.5&latitude=30&longitude=104&region=OTHER", nil)
 			req.Header.Set("X-Forwarded-For", "223.5.5.5")
@@ -59,7 +59,7 @@ func TestWeatherHTTPBoundaryLimitAndDegradation(t *testing.T) {
 	}
 	var cfg platform.Config
 	cfg.Deployment.Region = "CN"
-	s := New(platform.NewLogger(io.Discard, "production"), cfg)
+	s := New(platform.NewLogger(io.Discard), cfg)
 	res, err := s.App.Test(httptest.NewRequest(http.MethodGet, "/api/v1/start/weather?lang=fr", nil))
 	if err != nil {
 		t.Fatal(err)
@@ -74,7 +74,7 @@ func TestWeatherHTTPGlobalLimit(t *testing.T) {
 	var cfg platform.Config
 	cfg.Deployment.Region = "CN"
 	cfg.Server.TrustedProxies = []string{"127.0.0.1"}
-	s := New(platform.NewLogger(io.Discard, "production"), cfg)
+	s := New(platform.NewLogger(io.Discard), cfg)
 	base := listenLocationTest(t, s)
 	client := &http.Client{Timeout: 2 * time.Second, Transport: &http.Transport{Proxy: nil}}
 	defer client.CloseIdleConnections()

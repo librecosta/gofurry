@@ -22,7 +22,7 @@ func newCommand() *cobra.Command {
 		Args:              cobra.NoArgs,
 		PersistentPreRunE: func(*cobra.Command, []string) (err error) { cfg, err = platform.LoadConfig(path); return err },
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			logger := platform.NewLogger(cmd.OutOrStdout(), cfg.Server.Environment)
+			logger := platform.NewLogger(cmd.OutOrStdout())
 			return server.New(logger, cfg).Listen(cmd.Context(), cfg.Server.Address)
 		},
 	}

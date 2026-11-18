@@ -1,3 +1,4 @@
+import { webConfig } from '../web-config.server'
 import type { Locale, Region } from '../preferences'
 import { apiQuery, decodeDirectory, decodeHome, normalizeCriteria, type Criteria } from './data'
 
@@ -5,13 +6,13 @@ const unavailable = () => new Response(null, { status: 503, headers: { 'Cache-Co
 const queryKeys = ['q', 'category', 'tags', 'language', 'sort', 'locale', 'cursor']
 
 export function navigationRegion(): Region {
-  const region = process.env.WEB_REGION ?? 'CN'
+  const region = webConfig().region
   if (region !== 'CN' && region !== 'INTL') throw new Error('Invalid Sites deployment')
   return region
 }
 
 export async function navigationAPI(path: 'discovery' | 'directory', query: string, signal?: AbortSignal) {
-  const base = process.env.WEB_API_BASE_URL ?? 'http://127.0.0.1:17321'
+  const base = webConfig().api_origin
   const url = new URL('/api/v1/sites/' + path, base)
   url.search = query
   const deadline = AbortSignal.timeout(3000)

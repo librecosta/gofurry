@@ -5,7 +5,6 @@ import (
 	"context"
 	json "encoding/json/v2"
 	"io"
-	"net"
 	"net/http"
 	"regexp"
 	"slices"
@@ -94,7 +93,7 @@ func newEligibilityAI(cfg *platform.DiscoveryAIConfig) *eligibilityAI {
 	}
 	return &eligibilityAI{*cfg, &http.Client{
 		Timeout:       6 * time.Second,
-		Transport:     &http.Transport{DialContext: (&net.Dialer{Timeout: 2 * time.Second}).DialContext, TLSHandshakeTimeout: 2 * time.Second, MaxIdleConns: 1, IdleConnTimeout: 30 * time.Second},
+		Transport:     &http.Transport{DialContext: platform.ServiceDialer(cfg.URL, 2*time.Second, 0).DialContext, TLSHandshakeTimeout: 2 * time.Second, MaxIdleConns: 1, IdleConnTimeout: 30 * time.Second},
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 	}}
 }

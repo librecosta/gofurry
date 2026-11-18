@@ -28,7 +28,7 @@ func integration(t *testing.T, real bool) (context.Context, *Service, platform.C
 	if e != nil {
 		t.Fatal(e)
 	}
-	if cfg.Server.Environment != "development" || cfg.Database == nil || !strings.HasPrefix(cfg.Database.Name, "gofurry_c2_") || !strings.HasSuffix(cfg.Database.Name, "_test") {
+	if cfg.Database == nil || !strings.HasPrefix(cfg.Database.Name, "gofurry_c2_") || !strings.HasSuffix(cfg.Database.Name, "_test") {
 		t.Fatal("refusing non-exclusive test database")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)

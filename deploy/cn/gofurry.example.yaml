@@ -1,6 +1,5 @@
 server:
   address: 0.0.0.0:8080
-  environment: production
   # Add only the exact peer if a trusted host ingress forwards client IPs.
   trusted_proxies: []
 deployment:

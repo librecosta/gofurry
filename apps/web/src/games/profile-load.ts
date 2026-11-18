@@ -1,3 +1,4 @@
+import { webConfig } from '../web-config.server'
 import { createServerFn } from '@tanstack/react-start'
 import { getRequest, setResponseStatus } from '@tanstack/react-start/server'
 import { notFound, redirect } from '@tanstack/react-router'
@@ -21,9 +22,9 @@ function validate<T extends Identity>(input: T): T {
 }
 
 async function fetchProfile(input: Identity, suffix: string, query: URLSearchParams) {
-  const region = process.env.WEB_REGION ?? 'CN'
+  const region = webConfig().region
   if (region !== input.region) throw new Error('Game API region mismatch')
-  const url = new URL('/api/v1/games/' + input.id + suffix, process.env.WEB_API_BASE_URL ?? 'http://127.0.0.1:17321')
+  const url = new URL('/api/v1/games/' + input.id + suffix, webConfig().api_origin)
   url.search = query.toString()
   const response = await fetch(url, { signal: AbortSignal.any([AbortSignal.timeout(3000), getRequest().signal]), redirect: 'error' })
   if (response.headers.get('x-gofurry-region') !== region || response.headers.get('x-gofurry-content-mode') !== 'SFW' || !response.ok) {

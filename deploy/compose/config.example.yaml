@@ -1,7 +1,6 @@
-# Copy to config.yaml here and select CN or INTL to match WEB_REGION.
+# Copy to config.yaml here and select CN or INTL to match Web YAML.
 server:
   address: 0.0.0.0:8080
-  environment: production
 deployment:
   region: CN
 logging:

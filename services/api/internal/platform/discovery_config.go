@@ -2,8 +2,6 @@ package platform
 
 import (
 	"errors"
-	"net/netip"
-	"net/url"
 	"time"
 )
 
@@ -66,13 +64,8 @@ func (c *Config) validateDiscovery(h *HarvestConfig) error {
 		}
 	}
 	if a := d.AI; a != nil {
-		u, err := url.Parse(a.URL)
-		if err != nil || u.Hostname() == "" || u.User != nil || u.Path != "" && u.Path != "/" || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" {
-			return errors.New("discovery.ai.url requires a dedicated AI Gateway origin")
-		}
-		ip, _ := netip.ParseAddr(u.Hostname())
-		if u.Scheme != "https" && !(u.Scheme == "http" && c.Server.Environment == "development" && ip.IsLoopback()) {
-			return errors.New("discovery.ai.url requires HTTPS or development loopback HTTP")
+		if !validServiceOrigin(a.URL) {
+			return errors.New("discovery.ai.url requires an HTTPS or private HTTP origin")
 		}
 		if !harvestToken.MatchString(a.Token) || !harvestNamespace.MatchString(a.Model) || a.CallsPerDay < 1 || a.CallsPerDay > 64 {
 			return errors.New("discovery.ai requires an explicit Gateway token, logical model and daily budget")

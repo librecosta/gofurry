@@ -8,7 +8,7 @@ import (
 
 func TestCNDatabaseTransport(t *testing.T) {
 	cfg, err := platform.LoadConfig("../../../../deploy/cn/gofurry.example.yaml")
-	if err != nil || cfg.Server.Environment != "production" || cfg.Database == nil {
+	if err != nil || cfg.Database == nil {
 		t.Fatal("production configuration failed to load", err)
 	}
 	for _, mode := range []string{"disable", "verify-full"} {

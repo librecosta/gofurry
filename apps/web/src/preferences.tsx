@@ -1,3 +1,4 @@
+import { webConfig } from './web-config.server'
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 import { useNavigate, useRouterState } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
@@ -21,8 +22,7 @@ export const readPreferences = createServerFn({ method: 'GET' }).validator((path
   if (typeof pathname !== 'string' || pathname.length > 2048) throw new Error('Invalid pathname')
   return pathname
 }).handler(({ data: pathname }): Preferences => {
-  const region = process.env.WEB_REGION ?? 'CN'
-  if (region !== 'CN' && region !== 'INTL') throw new Error('WEB_REGION must be CN or INTL')
+  const region = webConfig().region
   if (isCatalogPath(pathname)) {
     return {
       region, locale: localeForPath(pathname, region), theme: 'light', themePreference: 'system',

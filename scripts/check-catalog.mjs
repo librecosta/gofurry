@@ -108,7 +108,6 @@ async function observedAPI(port, fixture) {
 function yaml(region, databasePort, apiPort) {
   return `server:
   address: 127.0.0.1:${apiPort}
-  environment: development
   trusted_proxies: [127.0.0.1]
 deployment:
   region: ${region}
@@ -248,9 +247,11 @@ navigation:
       await waitFor(async () => (await (await fetch(fixture.api + '/api/v1/sites/discovery')).json()).heat?.status === 'ready',
         'automatic navigation heat')
     }
+    const webConfigFile = join(scratch, 'web-' + region + '.yaml')
+    await writeFile(webConfigFile, JSON.stringify({ region, api_origin: await observedAPI(await port(), fixture), public_origin: 'https://' + region.toLowerCase() + '.catalog.example' }))
     launch(process.execPath, ['.output/server/index.mjs'], webDir, {
       ...process.env, NODE_ENV: 'production', HOST: '127.0.0.1', PORT: String(fixture.webPort),
-      WEB_REGION: region, WEB_API_BASE_URL: await observedAPI(await port(), fixture), WEB_PUBLIC_ORIGIN: 'https://' + region.toLowerCase() + '.catalog.example',
+      GOFURRY_WEB_CONFIG_FILE: webConfigFile,
     })
     await waitFor(() => status(fixture.web + '/readyz', 200), region + ' Web')
     await fixtureEdge(fixture.edgePort, fixture)

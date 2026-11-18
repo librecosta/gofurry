@@ -1,4 +1,5 @@
 import { defineConfig } from '@playwright/test'
+import { webFixtureConfig } from './tests/web-fixture-config'
 export default defineConfig({
   testDir: './tests',
   testMatch: ['runtime.spec.ts', 'governance.spec.ts', 'start.spec.ts', 'search-platforms.spec.ts', 'start-search-catalog.spec.ts', 'start-suggestions.spec.ts', 'start-weather.spec.ts', 'start-cities.spec.ts', 'start-weather-ux.spec.ts', 'start-quick-access.spec.ts', 'start-homepage.spec.ts', 'start-widget-rails.spec.ts'],
@@ -6,7 +7,7 @@ export default defineConfig({
   webServer: {
     command: 'node .output/server/index.mjs',
     url: 'http://127.0.0.1:17320/readyz',
-    env: { PORT: '17320', HOST: '127.0.0.1', NODE_ENV: 'production', WEB_REGION: process.env.WEB_REGION ?? 'CN' },
+    env: { PORT: '17320', HOST: '127.0.0.1', NODE_ENV: 'production', GOFURRY_WEB_CONFIG_FILE: webFixtureConfig() },
     reuseExistingServer: false,
   },
 })

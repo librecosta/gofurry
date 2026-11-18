@@ -160,7 +160,6 @@ func checkConsumerLifecycle(t *testing.T, l *lab, cut *networkCut, db platform.D
 	address := localAddress(t)
 	cfg := fmt.Sprintf(`server:
   address: %q
-  environment: development
 deployment:
   region: CN
 logging:

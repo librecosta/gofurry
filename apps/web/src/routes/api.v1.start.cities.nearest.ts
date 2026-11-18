@@ -1,3 +1,4 @@
+import { webConfig } from '../web-config.server'
 import { createFileRoute } from '@tanstack/react-router'
 
 export const Route = createFileRoute('/api/v1/start/cities/nearest')({
@@ -19,10 +20,10 @@ export const Route = createFileRoute('/api/v1/start/cities/nearest')({
       const body = new Uint8Array(length)
       let offset = 0
       for (const chunk of chunks) { body.set(chunk, offset); offset += chunk.length }
-      const url = new URL('/api/v1/start/cities/nearest', process.env.WEB_API_BASE_URL ?? 'http://127.0.0.1:17321')
+      const url = new URL('/api/v1/start/cities/nearest', webConfig().api_origin)
       const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body,
         credentials: 'omit', redirect: 'error', signal: AbortSignal.any([request.signal, AbortSignal.timeout(3000)]) })
-      if (response.headers.get('x-gofurry-region') !== (process.env.WEB_REGION ?? 'CN') || response.headers.get('x-gofurry-content-mode') !== 'SFW') return error(503)
+      if (response.headers.get('x-gofurry-region') !== (webConfig().region) || response.headers.get('x-gofurry-content-mode') !== 'SFW') return error(503)
       const headers = new Headers({ 'Cache-Control': 'private, no-store', 'X-GoFurry-Region': response.headers.get('x-gofurry-region')!, 'X-GoFurry-Content-Mode': 'SFW' })
       if (response.headers.has('retry-after')) headers.set('Retry-After', response.headers.get('retry-after')!)
       return Response.json(await response.json(), { status: response.status, headers })

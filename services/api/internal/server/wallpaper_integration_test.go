@@ -52,7 +52,7 @@ func TestManagementRealDevelopmentHTTP(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	if cfg.Database == nil || cfg.Management == nil || cfg.Storage == nil || cfg.Server.Environment != "development" || !strings.HasPrefix(cfg.Database.Name, "gofurry_c2_") || !strings.HasSuffix(cfg.Database.Name, "_test") || cfg.Storage.Bucket != *devBucket || cfg.Storage.PublicBaseURL != *devPublic || *devBucket == "" {
+	if cfg.Database == nil || cfg.Management == nil || cfg.Storage == nil || !strings.HasPrefix(cfg.Database.Name, "gofurry_c2_") || !strings.HasSuffix(cfg.Database.Name, "_test") || cfg.Storage.Bucket != *devBucket || cfg.Storage.PublicBaseURL != *devPublic || *devBucket == "" {
 		t.Fatal("unconfirmed isolated database/development storage")
 	}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -73,7 +73,7 @@ func TestManagementRealDevelopmentHTTP(t *testing.T) {
 	t.Setenv("TMP", temp)
 	t.Setenv("TMPDIR", temp)
 	var logs lockedLogs
-	s := New(platform.NewLogger(&logs, "production"), cfg)
+	s := New(platform.NewLogger(&logs), cfg)
 	stopped := make(chan error, 1)
 	go func() { stopped <- s.Listen(ctx, cfg.Server.Address) }()
 	t.Cleanup(func() {
@@ -97,7 +97,7 @@ func TestManagementRealDevelopmentHTTP(t *testing.T) {
 		req.Header.Set("X-LC-Actor-Name", "HTTP Acceptance")
 		req.Header.Set("X-LC-Actor-Role", "owner")
 		req.Header.Set("X-LC-Region", cfg.Deployment.Region)
-		req.Header.Set("X-LC-Environment", "development")
+
 		req.Header.Set("X-Request-ID", uuid.NewV7().String())
 	}
 	request := func(method, url string, r io.Reader, change func(*http.Request)) (int, []byte) {
@@ -155,7 +155,7 @@ func TestManagementRealDevelopmentHTTP(t *testing.T) {
 			q.Set("token", cfg.Management.Token)
 			r.URL.RawQuery = q.Encode()
 		}, 401},
-		{"region", func(r *http.Request) { r.Header.Set("X-LC-Region", "OTHER") }, 403}, {"environment", func(r *http.Request) { r.Header.Set("X-LC-Environment", "production") }, 403}, {"actor", func(r *http.Request) { r.Header.Set("X-LC-Actor-ID", "invalid") }, 400}, {"role", func(r *http.Request) { r.Header.Set("X-LC-Actor-Role", "root") }, 400}, {"id", func(r *http.Request) { r.Header.Set("X-Request-ID", "invalid") }, 400},
+		{"region", func(r *http.Request) { r.Header.Set("X-LC-Region", "OTHER") }, 403}, {"actor", func(r *http.Request) { r.Header.Set("X-LC-Actor-ID", "invalid") }, 400}, {"role", func(r *http.Request) { r.Header.Set("X-LC-Actor-Role", "root") }, 400}, {"id", func(r *http.Request) { r.Header.Set("X-Request-ID", "invalid") }, 400},
 	} {
 		status, _ := request("GET", base, nil, tc.modify)
 		if status != tc.status {

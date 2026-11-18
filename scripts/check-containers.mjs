@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process'
 import { resolve } from 'node:path'
 
 const project = `gofurry-smoke-${process.pid}`
-const options = { encoding: 'utf8', env: { ...process.env, WEB_PORT: '0', API_PORT: '0', WEB_REGION: 'CN', API_CONFIG_FILE: resolve('deploy/compose/config.example.yaml') }, timeout: 60_000 }
+const options = { encoding: 'utf8', env: { ...process.env, WEB_PORT: '0', API_PORT: '0', WEB_CONFIG_FILE: resolve('deploy/compose/web.example.yaml'), API_CONFIG_FILE: resolve('deploy/compose/config.example.yaml') }, timeout: 60_000 }
 const backend = `${project}-backend`
 const docker = (...args) => execFileSync('docker', args, options).trim()
 const compose = (...args) => execFileSync('docker', ['compose', '-p', project, '-f', 'deploy/compose/compose.yaml', '-f', '-', ...args], {
@@ -39,7 +39,7 @@ try {
     assert.notEqual(container.Config.User, 'root')
     console.log(`${service}: probes, runtime, non-root user and log rotation OK (${address})`)
   }
-  compose('exec', '-T', 'web', 'node', '-e', "fetch(process.env.WEB_API_BASE_URL + '/api/v1/status').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))")
+  compose('exec', '-T', 'web', 'node', '-e', "fetch('http://gofurry-api:8080/api/v1/status').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))")
   compose('stop', '--timeout', '20')
   for (const service of ['web', 'api']) {
     const id = compose('ps', '-aq', service)

@@ -33,7 +33,7 @@ func TestManagedSiteAsset(t *testing.T) {
 		t.Fatal(err)
 	}
 	db := cfg.Database
-	if db == nil || db.Host != "127.0.0.1" || db.Name != "gofurry_d4_assets_test" || cfg.Server.Environment != "development" || cfg.Deployment.Region != "CN" {
+	if db == nil || db.Host != "127.0.0.1" || db.Name != "gofurry_d4_assets_test" || cfg.Deployment.Region != "CN" {
 		t.Fatal("expected the dedicated loopback D4 asset fixture")
 	}
 	if err = database.Migrate(t.Context(), *db, "../../migrations", "up", io.Discard); err != nil {
@@ -107,14 +107,14 @@ func TestManagedSiteAsset(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	app := New(platform.NewLogger(io.Discard, "development"), cfg, wallpaper.New(pool, store, true), &Operations{Pool: pool, Catalog: sites, Assets: store, Region: "CN"})
+	app := New(platform.NewLogger(io.Discard), cfg, wallpaper.New(pool, store, true), &Operations{Pool: pool, Catalog: sites, Assets: store, Region: "CN"})
 	actor := uuid.NewV7().String()
 	path := "/internal/v1/ops/sites/" + site.PublicID
 	call := func(method, path, mime string, input []byte, expected int) string {
 		t.Helper()
 		rid := uuid.NewV7().String()
 		req := httptest.NewRequest(method, path, bytes.NewReader(input))
-		for k, v := range map[string]string{"Authorization": "Bearer " + testToken, "Content-Type": mime, "X-LC-Actor-ID": actor, "X-LC-Actor-Name": "Fixture Owner", "X-LC-Actor-Role": "owner", "X-Request-ID": rid, "X-LC-Region": "CN", "X-LC-Environment": "development"} {
+		for k, v := range map[string]string{"Authorization": "Bearer " + testToken, "Content-Type": mime, "X-LC-Actor-ID": actor, "X-LC-Actor-Name": "Fixture Owner", "X-LC-Actor-Role": "owner", "X-Request-ID": rid, "X-LC-Region": "CN"} {
 			req.Header.Set(k, v)
 		}
 		res, e := app.Test(req)

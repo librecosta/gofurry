@@ -91,7 +91,7 @@ func TestRedisConfigSingleYAML(t *testing.T) {
 
 func TestCNRedisTransport(t *testing.T) {
 	cfg, err := LoadConfig("../../../../deploy/cn/gofurry.example.yaml")
-	if err != nil || cfg.Server.Environment != "production" || cfg.Redis == nil {
+	if err != nil || cfg.Redis == nil {
 		t.Fatal("production configuration failed to load", err)
 	}
 	plain := NewRedis(cfg.Redis)
@@ -102,14 +102,14 @@ func TestCNRedisTransport(t *testing.T) {
 	}
 	for _, mode := range []string{"redis", "rediss"} {
 		t.Run(mode, func(t *testing.T) {
-			yaml := strings.Replace(validYAML, "environment: development", "environment: production", 1) +
+			yaml := validYAML +
 				"redis:\n  url: " + mode + "://gofurry_cn:synthetic@librecosta-redis:6379/0\n"
 			file := filepath.Join(t.TempDir(), "config.yaml")
 			if err := os.WriteFile(file, []byte(yaml), 0600); err != nil {
 				t.Fatal(err)
 			}
 			cfg, err := LoadConfig(file)
-			if err != nil || cfg.Server.Environment != "production" {
+			if err != nil {
 				t.Fatal("production Redis URL rejected", err)
 			}
 			client := NewRedis(cfg.Redis)
