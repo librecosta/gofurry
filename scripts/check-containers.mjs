@@ -4,8 +4,13 @@ import { resolve } from 'node:path'
 
 const project = `gofurry-smoke-${process.pid}`
 const options = { encoding: 'utf8', env: { ...process.env, WEB_PORT: '0', API_PORT: '0', WEB_REGION: 'CN', API_CONFIG_FILE: resolve('deploy/compose/config.example.yaml') }, timeout: 60_000 }
+const backend = `${project}-backend`
 const docker = (...args) => execFileSync('docker', args, options).trim()
-const compose = (...args) => docker('compose', '-p', project, '-f', 'deploy/compose/compose.yaml', ...args)
+const compose = (...args) => execFileSync('docker', ['compose', '-p', project, '-f', 'deploy/compose/compose.yaml', '-f', '-', ...args], {
+  ...options,
+  input: `networks:\n  backend:\n    name: ${backend}\n`,
+}).trim()
+docker('network', 'create', '--internal', backend)
 try {
   console.log(compose('up', '--no-build', '--wait', '--wait-timeout', '45'))
   for (const [service, port] of [['web', '3000'], ['api', '8080']]) {
@@ -23,6 +28,9 @@ try {
     const id = compose('ps', '-q', service)
     const [container] = JSON.parse(docker('inspect', id))
     assert.equal(container.State.Health.Status, 'healthy')
+    assert.ok(container.NetworkSettings.Networks[`${project}_default`])
+    assert.equal(Object.hasOwn(container.NetworkSettings.Networks, backend), service === 'api')
+    assert.ok(!container.HostConfig.NetworkMode.startsWith('container:'))
     assert.deepEqual(container.HostConfig.LogConfig, { Type: 'local', Config: { compress: 'true', 'max-file': '3', 'max-size': '5m' } })
     if (service === 'api') {
       assert.ok(container.Mounts.some((m) => m.Destination === '/etc/gofurry/config.yaml' && m.RW === false))
@@ -31,6 +39,7 @@ try {
     assert.notEqual(container.Config.User, 'root')
     console.log(`${service}: probes, runtime, non-root user and log rotation OK (${address})`)
   }
+  compose('exec', '-T', 'web', 'node', '-e', "fetch(process.env.WEB_API_BASE_URL + '/api/v1/status').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))")
   compose('stop', '--timeout', '20')
   for (const service of ['web', 'api']) {
     const id = compose('ps', '-aq', service)
@@ -44,5 +53,9 @@ try {
     console.log(`${service}: SIGTERM exited 0, close hook and structured request logs OK`)
   }
 } finally {
-  compose('down', '--remove-orphans')
+  try {
+    compose('down', '--remove-orphans')
+  } finally {
+    docker('network', 'rm', backend)
+  }
 }

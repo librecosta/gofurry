@@ -1,4 +1,4 @@
-name: gofurry-local
+name: gofurry
 
 x-logging: &logging
   driver: local
@@ -9,26 +9,31 @@ x-logging: &logging
 
 services:
   web:
-    image: gofurry-web:local
+    image: ${GOFURRY_WEB_IMAGE:-gofurry-web:local}
     build:
       context: ../..
       dockerfile: apps/web/Dockerfile
     ports:
       - '127.0.0.1:${WEB_PORT:-17320}:3000'
     environment:
-      NODE_ENV: production
       WEB_REGION: ${WEB_REGION:-CN}
-      WEB_API_BASE_URL: http://api:8080
+      WEB_API_BASE_URL: http://gofurry-api:8080
       WEB_PUBLIC_ORIGIN: ${WEB_PUBLIC_ORIGIN:-}
     logging: *logging
     stop_grace_period: 20s
+
   api:
-    image: gofurry-api:local
+    image: ${GOFURRY_API_IMAGE:-gofurry-api:local}
     build:
       context: ../..
       dockerfile: services/api/Dockerfile
     ports:
       - '127.0.0.1:${API_PORT:-17321}:8080'
+    networks:
+      default:
+        aliases: [gofurry-api]
+        gw_priority: 1
+      backend: {}
     volumes:
       - type: bind
         source: ${API_CONFIG_FILE:-./config.yaml}
@@ -38,3 +43,26 @@ services:
           create_host_path: false
     logging: *logging
     stop_grace_period: 20s
+
+  admin:
+    profiles: [ops]
+    image: ${ADMIN_IMAGE:-librecosta-admin:local}
+    ports:
+      - '127.0.0.1:${ADMIN_PORT:-8082}:8082'
+    networks:
+      default: {gw_priority: 1}
+      backend: {}
+    volumes:
+      - type: bind
+        source: ${ADMIN_CONFIG_FILE:-./admin.yaml}
+        target: /run/admin/config.yaml
+        read_only: true
+        bind:
+          create_host_path: false
+    logging: *logging
+    stop_grace_period: 20s
+
+networks:
+  backend:
+    name: librecosta-backend
+    external: true

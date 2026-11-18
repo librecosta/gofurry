@@ -95,8 +95,8 @@ func (c Config) ValidateWallpaperRuntime() error {
 		ip := net.ParseIP(host)
 		n, pe := strconv.Atoi(port)
 		token, te := base64.RawURLEncoding.Strict().DecodeString(m.Token)
-		if e != nil || pe != nil || n < 1 || n > 65535 || ip == nil || (host != "127.0.0.1" && host != "::1") || te != nil || len(token) != 32 || base64.RawURLEncoding.EncodeToString(token) != m.Token || c.Database == nil || m.Address == c.Server.Address {
-			return errors.New("management requires distinct literal loopback address, database and a 32-byte random base64url token")
+		if e != nil || pe != nil || n < 1 || n > 65535 || ip == nil || (host != "127.0.0.1" && host != "::1" && host != "0.0.0.0") || te != nil || len(token) != 32 || base64.RawURLEncoding.EncodeToString(token) != m.Token || c.Database == nil || m.Address == c.Server.Address {
+			return errors.New("management requires a distinct literal loopback or 0.0.0.0 address, database and a 32-byte random base64url token")
 		}
 	}
 	return nil

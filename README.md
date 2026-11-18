@@ -89,7 +89,7 @@ CN alone renders small company/filing text with a centered · separator: slightl
 
 `GET /api/v1/start/backgrounds?page=1&page_size=9&q=` returns a PostgreSQL page (`backgrounds,total,page,page_size`), with at most nine Published records. `/random?exclude=<uuid>` returns one; `/:id` returns Published details only. The 64-page/60-second cache invalidates after management changes and refuses database outages. An unconfigured list returns an empty page; unconfigured detail/random and configured database failures return 503, preserving fixed selections. Settings → Basic → Background opens an independent two-column Featured/Local wallpaper library. Browsing only previews; pinning, source-specific random and off share one regional versioned LocalStorage preference. Local read-only folder handles live in IndexedDB, indexes remain bounded in memory, and only visible thumbnails/selected metadata are decoded. No local images, EXIF or paths are uploaded. Unsupported persistent access uses a clearly labeled session-only directory input. Web metadata uses one `WEB_API_BASE_URL` with Region/SFW checks. CDN image bytes are direct: WebP preview → decoded HD, retaining the previous image during a 480ms transition. Off performs no wallpaper metadata/CDN requests. Theme/locale/resize never rerandomize. Contracts, permissions, limits and focused live verification are in [wallpapers](docs/wallpapers.md); no Admin UI is included in this repository.
 
-Private YAML `storage` contains `endpoint`, `region`, `bucket`, `access_key_id`, `secret_access_key`, `public_base_url`; all six are required when enabled and URLs must be HTTPS. AWS SDK v2 uses only static YAML credentials, without AWS profiles, environment credentials/proxies or .env. Management requires an explicitly migrated GoFurry database, a distinct loopback address and private random 256-bit Bearer token. Catalog and collection management work independently of object storage. See the [D4 acceptance](docs/v0.1-d4-acceptance.md). It is disabled by default and never mounted on Public. Data/upload/publication and C3 service-header contracts: [docs/wallpapers.md](docs/wallpapers.md).
+Private YAML `storage` contains `endpoint`, `region`, `bucket`, `access_key_id`, `secret_access_key`, `public_base_url`; all six are required when enabled and URLs must be HTTPS. AWS SDK v2 uses only static YAML credentials, without AWS profiles, environment credentials/proxies or .env. Management requires an explicitly migrated GoFurry database, a separate listener and a private random 256-bit Bearer token. Use loopback for native development and keep the container Management port private. Catalog and collection management work independently of object storage. See the [D4 acceptance](docs/v0.1-d4-acceptance.md). It is disabled by default and never mounted on Public. Data/upload/publication and C3 service-header contracts: [docs/wallpapers.md](docs/wallpapers.md).
 
 Prepare an independent database and private YAML without overwriting existing configuration, run `task migrate ACTION=up CONFIG=<absolute YAML>`, then start the API with that YAML. `task migrate ACTION=status` is read-only. CN/INTL require separate databases/connections/credentials. Generate service token bytes with Go `crypto/rand`, encode exactly 32 bytes as unpadded base64url, and store only in ignored YAML. Do not put tokens in CLI arguments, query strings or browser storage.
 
@@ -105,9 +105,9 @@ Catalog/preference checks: `pnpm --filter @gofurry/web exec playwright test sear
 
 Live checks, with the configured API running: `pnpm --filter @gofurry/web exec playwright test --config playwright.background.config.ts start-suggestions-live.spec.ts`. Both regions verify real `furry`, `兽人` and `GoFurry` suggestions, Bing default and manually selected Baidu (CN) / Google (INTL) submission; no suggestion data is mocked. Screenshots cover desktop Light/Dark and mobile 375/390px. `start-backgrounds.spec.ts` separately checks the unchanged Go/CDN pipeline. Set `PLAYWRIGHT_CHANNEL=chrome`; INTL requires its own API `--config` YAML plus test-only `START_API_URL` and `WEB_REGION=INTL`. Normal tests need no private credentials. See [B2 evidence](docs/v0.1-b2.md) for the unchanged asset import.
 
-## Local containers and logs
+## Containers and logs
 
-Copy `deploy/compose/config.example.yaml` to `deploy/compose/config.yaml` once. Its schema is identical to local configuration, with internal port 8080 and production logging. Select its region to match `WEB_REGION`.
+Copy `deploy/compose/config.example.yaml` to `deploy/compose/config.yaml` once. Its schema is identical to local configuration, with internal port 8080 and production logging. Select its region to match `WEB_REGION`. Containers use the existing `librecosta-backend` network. Native Go and Vite development uses the commands above.
 
 ```sh
 docker compose -f deploy/compose/compose.yaml config --quiet
@@ -115,7 +115,7 @@ docker compose -f deploy/compose/compose.yaml up --build --wait
 docker compose -f deploy/compose/compose.yaml down
 ```
 
-Only `gofurry-local` is managed. Host ports default to loopback **17320/17321**, overridable with `WEB_PORT` / `API_PORT`; internal ports stay 3000/8080. `API_CONFIG_FILE` optionally chooses the bind-mount source path, not application fields. YAML is mounted read-only at `/etc/gofurry/config.yaml`; there is no API Compose `environment` / `env_file`. Missing files fail instead of creating directories. Web region is a server-only Node setting, not a client-controlled Vite variable.
+The Compose project manages GoFurry API, Web, and the optional Admin service. Host ports default to loopback **17320/17321**, overridable with `WEB_PORT` / `API_PORT`; internal ports stay 3000/8080. `API_CONFIG_FILE` optionally chooses the bind-mount source path, not application fields. YAML is mounted read-only at `/etc/gofurry/config.yaml`; there is no API Compose `environment` / `env_file`. Missing files fail instead of creating directories. Web region is a server-only Node setting, not a client-controlled Vite variable.
 
 Images run non-root, have readiness probes and a 20-second stop window. Logs go to stdout/stderr; Docker `local` rotates at **5m × 3**, compressed. Production suppresses fast successful requests and probes; errors (including failed probes), slow requests and lifecycle events remain. API slow threshold comes from YAML; Web uses one second. Request logs allowlist route templates/status/duration/IDs, excluding credentials and bodies. Framework banner lines may remain plain text.
 
@@ -125,7 +125,7 @@ If Docker Hub is unreachable, the equivalent official image mirror is supported:
 docker compose -f deploy/compose/compose.yaml build --build-arg NODE_IMAGE=public.ecr.aws/docker/library/node:24.22.1-bookworm-slim --build-arg GO_IMAGE=public.ecr.aws/docker/library/golang:1.27.3-bookworm
 ```
 
-`deploy/nginx/gofurry.conf.example` remains the local proxy example. The separate [CN deployment runbook](deploy/cn/README.md) covers private TLS staging, external PostgreSQL, optional Admin and explicit migration.
+The [container notes](deploy/cn/README.md) cover the shared middleware network, optional Admin and explicit database maintenance.
 
 ## Verification
 

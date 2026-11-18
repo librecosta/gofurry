@@ -1,7 +1,8 @@
 server:
   address: 0.0.0.0:8080
   environment: production
-  trusted_proxies: [127.0.0.1]
+  # Add only the exact peer if a trusted host ingress forwards client IPs.
+  trusted_proxies: []
 deployment:
   region: CN
 logging:
@@ -31,7 +32,7 @@ storage: null
 management: null
 # Enable for the ops profile. Use the same random token on both services.
 # management:
-#   address: 127.0.0.1:17324
+#   address: 0.0.0.0:17324
 #   token: "<private 32-byte unpadded base64url>"
 yearbook:
   enabled: false

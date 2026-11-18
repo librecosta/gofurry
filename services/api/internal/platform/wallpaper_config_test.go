@@ -24,7 +24,13 @@ func TestWallpaperRuntimeConfig(t *testing.T) {
 	if e := valid().ValidateWallpaperRuntime(); e != nil {
 		t.Fatal(e)
 	}
-	for _, change := range []func(*Config){func(c *Config) { c.Management.Address = "0.0.0.0:17324" }, func(c *Config) { c.Management.Address = "localhost:17324" }, func(c *Config) { c.Management.Token = "weak" }, func(c *Config) { c.Database = nil }, func(c *Config) { c.Database.MaxConnections = 1000 }, func(c *Config) { c.Database.ConnectTimeout = time.Hour }} {
+	container := valid()
+	container.Server.Address = "0.0.0.0:8080"
+	container.Management.Address = "0.0.0.0:17324"
+	if err := container.ValidateWallpaperRuntime(); err != nil {
+		t.Fatal("private container listener rejected", err)
+	}
+	for _, change := range []func(*Config){func(c *Config) { c.Management.Address = "8.8.8.8:17324" }, func(c *Config) { c.Management.Address = c.Server.Address }, func(c *Config) { c.Management.Address = "localhost:17324" }, func(c *Config) { c.Management.Token = "weak" }, func(c *Config) { c.Database = nil }, func(c *Config) { c.Database.MaxConnections = 1000 }, func(c *Config) { c.Database.ConnectTimeout = time.Hour }} {
 		c := valid()
 		change(&c)
 		if c.ValidateWallpaperRuntime() == nil {

@@ -1,5 +1,5 @@
 server:
-  address: 127.0.0.1:8082
+  address: 0.0.0.0:8082
   environment: production
 deployment:
   region: CN
@@ -21,7 +21,7 @@ logging:
   level: info
   slow_request: 1s
 auth:
-  trusted_origins: ["https://127.0.0.1:18444"]
+  trusted_origins: ["https://127.0.0.1"]
   session_lifetime: 12h
   kdf:
     memory_kib: 65536
@@ -30,6 +30,6 @@ auth:
     concurrency: 2
 gofurry:
   enabled: true
-  base_url: http://127.0.0.1:17324
-  public_origin: https://127.0.0.1:18443
+  base_url: http://gofurry-api:17324
+  public_origin: https://gofurry.example.invalid
   token: "<private 32-byte unpadded base64url>"

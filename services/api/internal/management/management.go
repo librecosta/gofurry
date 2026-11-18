@@ -1,4 +1,4 @@
-// Package management builds only the separate loopback App. Never mount it on Public.
+// Package management builds only the separate private App. Never mount it on Public.
 package management
 
 import (
