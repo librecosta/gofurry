@@ -1,5 +1,9 @@
 import { test, expect } from '@playwright/test'
 
+const labels = process.env.WEB_REGION === 'INTL'
+  ? { trigger: 'Check interaction', disabled: 'Disabled', close: 'Close', status: 'Runtime status', back: 'Back' }
+  : { trigger: '验证交互', disabled: '禁用状态', close: '关闭', status: '运行状态', back: '返回' }
+
 test('SSR sends metadata, content and extracted CSS before hydration', async ({ request, browser }) => {
   const response = await request.get('/')
   expect(response.status()).toBe(200)
@@ -33,27 +37,27 @@ for (const colorScheme of ['light', 'dark'] as const) {
     page.on('pageerror', (e) => errors.push(e.message))
     page.on('console', (e) => { if (e.type() === 'error') errors.push(e.text()) })
     await page.goto('/')
-    const trigger = page.getByRole('button', { name: '验证交互' })
-    await expect(page.getByRole('button', { name: '禁用状态' })).toBeDisabled()
+    const trigger = page.getByRole('button', { name: labels.trigger })
+    await expect(page.getByRole('button', { name: labels.disabled })).toBeDisabled()
     await expect(page.locator('html')).toHaveCSS('background-color', colorScheme === 'dark' ? 'rgb(29, 31, 34)' : 'rgb(242, 227, 208)')
     await trigger.focus()
     await page.keyboard.press('Enter')
     const popup = page.getByRole('dialog')
     await expect(popup).toBeVisible()
-    await expect(page.getByRole('button', { name: '关闭' })).toBeFocused()
+    await expect(page.getByRole('button', { name: labels.close })).toBeFocused()
     await page.keyboard.press('Escape')
     await expect(popup).toBeHidden()
     await expect(trigger).toBeFocused()
     await trigger.click()
     await expect(popup).toBeVisible()
-    await page.getByRole('button', { name: '关闭' }).click()
+    await page.getByRole('button', { name: labels.close }).click()
     await expect(popup).toBeHidden()
     await expect(trigger).toBeFocused()
     await page.evaluate(() => { (window as unknown as { navigationMarker: boolean }).navigationMarker = true })
-    await page.getByRole('link', { name: '运行状态' }).click()
+    await page.getByRole('link', { name: labels.status }).click()
     await expect(page.getByRole('heading', { name: 'Web SSR ready' })).toBeVisible()
     expect(await page.evaluate(() => (window as unknown as { navigationMarker: boolean }).navigationMarker)).toBe(true)
-    await page.getByRole('link', { name: '返回' }).click()
+    await page.getByRole('link', { name: labels.back }).click()
     await expect(trigger).toBeVisible()
     expect(errors).toEqual([])
   })
