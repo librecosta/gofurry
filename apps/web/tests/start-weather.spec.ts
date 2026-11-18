@@ -154,6 +154,10 @@ test('weather: visibility refresh after 20 minutes retains content, bounds stale
   await visible(19); await open(page); await page.keyboard.press('Escape'); expect(calls).toBe(1)
   await visible(2); await expect.poll(() => calls).toBe(2)
   await expect(trigger(page)).toHaveAttribute('data-weather-state', 'ready')
+  // The old result is also "ready" and the route counter precedes JSON parsing.
+  // Wait for the refreshed observation to render before advancing the clock.
+  await open(page); await expect(popup(page).locator('time')).toHaveAttribute('datetime', new Date(now).toISOString())
+  await page.keyboard.press('Escape'); await expect(popup(page)).toHaveCount(0)
   failed = true; await visible(21); await expect(trigger(page)).toHaveAttribute('data-weather-state', 'stale')
   await expect(trigger(page)).toContainText('22.5°C')
   await visible(40); await expect(trigger(page)).toHaveAttribute('data-weather-state', 'unavailable')
