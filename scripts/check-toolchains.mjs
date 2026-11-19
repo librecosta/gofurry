@@ -9,7 +9,8 @@ assert.equal(pkg.engines.node, read('.node-version'))
 const pnpm = pkg.packageManager.split('@')[1]
 assert.equal(pkg.engines.pnpm, pnpm)
 assert.ok(process.env.npm_config_user_agent?.startsWith(`pnpm/${pnpm} `), 'Run via pinned pnpm')
-assert.match(execFileSync('go', ['version'], { encoding: 'utf8' }), new RegExp(`go${read('.go-version').replaceAll('.', '\\.')} `))
+const goVersion = execFileSync('go', ['version'], { encoding: 'utf8', env: { ...process.env, GOTOOLCHAIN: 'local' } }).match(/\bgo(\d+\.\d+\.\d+)\b/)?.[1]
+assert.ok(goVersion && goVersion.localeCompare(read('.go-version'), undefined, { numeric: true }) >= 0, 'Installed Go must satisfy the module minimum; no automatic download')
 assert.ok(execFileSync('task', ['--version'], { encoding: 'utf8' }).includes(read('.task-version')), 'Task version')
 assert.ok(read('services/api/go.mod').includes(`go ${read('.go-version')}`))
 assert.ok(read('Taskfile.yml').includes('GOTOOLCHAIN: local'), 'Use the installed host Go toolchain without automatic downloads')
@@ -29,4 +30,4 @@ const checkGo = (dir) => {
   }
 }
 checkGo('services/api')
-console.log(`Toolchains OK: Node ${process.version}, pnpm ${pnpm}, Go ${read('.go-version')}, Task ${read('.task-version')}`)
+console.log(`Toolchains OK: Node ${process.version}, pnpm ${pnpm}, Go ${goVersion} (minimum ${read('.go-version')}), Task ${read('.task-version')}`)
