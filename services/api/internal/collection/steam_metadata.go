@@ -94,7 +94,7 @@ func normalizedSteamDetails(o observation) (steamDetail, error) {
 		v.Content = nil
 	}
 	// A requested Chinese locale may come back with an English fallback.
-	// Require Chinese-script synopsis text before promoting a zh presentation.
+	// Label Chinese-script synopsis text so a reviewer can distinguish it from fallback.
 	v.Localized = o.Scope.Locale == "zh-cn" && hasChineseSynopsis(v.Description)
 	return v, nil
 }

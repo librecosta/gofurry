@@ -5,7 +5,7 @@ FOR UPDATE OF s;
 
 -- name: CollectionSteamSource :one
 SELECT p.id,p.game_id,p.external_key FROM game_sources p JOIN games g ON g.id=p.game_id
-WHERE g.public_id=$1 AND g.status='published' AND p.active AND p.platform_code='steam' AND p.external_key=$2
+WHERE g.public_id=$1 AND g.status<>'archived' AND p.active AND p.platform_code='steam' AND p.external_key=$2
 FOR UPDATE OF g;
 
 -- name: SaveCollectionSource :one

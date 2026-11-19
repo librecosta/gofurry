@@ -21,7 +21,9 @@ type ManagementResult struct {
 // Manage commits one verified operator receipt with all local catalogue changes.
 func (s *Service) Manage(ctx context.Context, receipt dbgen.RecordManagementOperationParams, change func(context.Context, *Service, *dbgen.Queries) (ManagementResult, error)) (ManagementResult, error) {
 	return write(ctx, s, func(ctx context.Context, q *dbgen.Queries) (ManagementResult, error) {
-		result, err := change(ctx, s.InTransaction(q), q)
+		managed := s.InTransaction(q)
+		managed.management = &receipt
+		result, err := change(ctx, managed, q)
 		if err != nil {
 			return result, err
 		}
@@ -71,17 +73,16 @@ func (s *Service) ManagementSite(ctx context.Context, id string) (out SiteManage
 }
 
 type GameManagement struct {
-	PublicID            string                                `json:"public_id"`
-	Slug                string                                `json:"slug"`
-	Status              string                                `json:"status"`
-	Revision            int64                                 `json:"revision"`
-	PreviouslyPublished bool                                  `json:"previously_published"`
-	PublicationBlocked  bool                                  `json:"publication_blocked"`
-	IntakeManaged       bool                                  `json:"intake_managed"`
-	Localizations       []dbgen.ManagementGameTextRow         `json:"localizations"`
-	Sources             []dbgen.ManagementGameSourcesRow      `json:"sources"`
-	Facts               []dbgen.ManagementGameFactsRow        `json:"facts"`
-	Approved            []dbgen.ManagementApprovedGameTextRow `json:"approved"`
+	PublicID      string                           `json:"public_id"`
+	Slug          string                           `json:"slug"`
+	Status        string                           `json:"status"`
+	Revision      int64                            `json:"revision"`
+	ContentRating string                           `json:"content_rating"`
+	Presentation  []GamePublicationLocale          `json:"presentation"`
+	PreviewToken  string                           `json:"preview_token"`
+	Localizations []dbgen.ManagementGameTextRow    `json:"localizations"`
+	Sources       []dbgen.ManagementGameSourcesRow `json:"sources"`
+	Facts         []dbgen.ManagementGameFactsRow   `json:"facts"`
 }
 
 func (s *Service) ManagementGame(ctx context.Context, id string) (out GameManagement, err error) {
@@ -94,7 +95,7 @@ func (s *Service) ManagementGame(ctx context.Context, id string) (out GameManage
 			return out, err
 		}
 		out = GameManagement{PublicID: row.PublicID, Slug: row.Slug, Revision: row.Revision, Status: row.Status,
-			PreviouslyPublished: row.PublishedAt.Valid, PublicationBlocked: row.PublicationBlocked, IntakeManaged: row.IntakeManaged}
+			ContentRating: row.ContentRating}
 		out.Localizations, err = q.ManagementGameText(ctx, row.ID)
 		if err != nil {
 			return out, err
@@ -107,7 +108,7 @@ func (s *Service) ManagementGame(ctx context.Context, id string) (out GameManage
 		if err != nil {
 			return out, err
 		}
-		out.Approved, err = q.ManagementApprovedGameText(ctx, row.ID)
+		out.Presentation, out.PreviewToken, err = gamePublicationPreview(ctx, q, row.ID, row.Status == Published)
 		return out, err
 	})
 }
@@ -208,22 +209,6 @@ func (s *Service) CorrectGameSources(ctx context.Context, id string, rev int64, 
 		}
 		row, err = s.EditGame(ctx, row.ID, rev, input)
 		return ManagementResult{Target: row.PublicID, Revision: row.Revision}, err
-	})
-}
-
-// PublishManagementGame applies the same publication rules as the CLI while
-// recording the authenticated actor and reason on the domain decision.
-func (s *Service) PublishManagementGame(ctx context.Context, id string, rev int64, d PublicationDecision) (ManagementResult, error) {
-	if !d.Valid() {
-		return ManagementResult{}, ErrInvalid
-	}
-	return write(ctx, s, func(ctx context.Context, q *dbgen.Queries) (ManagementResult, error) {
-		g, err := q.LockGamePublicID(ctx, id)
-		if err != nil {
-			return ManagementResult{}, err
-		}
-		next, err := s.setGameStatus(ctx, g.ID, rev, Published, d)
-		return ManagementResult{Target: next.PublicID, Revision: next.Revision}, err
 	})
 }
 

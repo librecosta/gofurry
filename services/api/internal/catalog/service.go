@@ -16,6 +16,7 @@ type Service struct {
 	publicID    func() string
 	assets      *storage.Store
 	transaction *dbgen.Queries
+	management  *dbgen.RecordManagementOperationParams
 }
 
 func New(pool *pgxpool.Pool) *Service {
@@ -62,7 +63,7 @@ func write[T any](ctx context.Context, s *Service, operation func(context.Contex
 
 func classify(err error) error {
 	switch {
-	case err == nil, errors.Is(err, ErrInvalid), errors.Is(err, ErrConflict), errors.Is(err, ErrNotFound):
+	case err == nil, errors.Is(err, ErrInvalid), errors.Is(err, ErrGamePublicationIdentity), errors.Is(err, ErrGamePublicationText), errors.Is(err, ErrGamePublicationReview), errors.Is(err, ErrGamePublicationPolicy), errors.Is(err, ErrGamePreviewChanged), errors.Is(err, ErrConflict), errors.Is(err, ErrNotFound):
 		return err
 	case errors.Is(err, pgx.ErrNoRows):
 		return ErrNotFound

@@ -26,8 +26,6 @@ type Intake struct {
 	catalog    *catalog.Service
 	collection *Service
 	region     string
-	automation bool
-	ai         *eligibilityAI
 }
 
 func NewIntake(pool *pgxpool.Pool, cfg *platform.HarvestConfig) *Intake {
@@ -35,18 +33,11 @@ func NewIntake(pool *pgxpool.Pool, cfg *platform.HarvestConfig) *Intake {
 	if cfg != nil && cfg.IntakeEgressRegion != "" && cfg.WriterToken != "" && cfg.ReaderToken != "" {
 		s.collection = New(pool, *cfg)
 		s.region = cfg.IntakeEgressRegion
-		if cfg.Discovery != nil && cfg.Discovery.Enabled {
-			s.automation = true
-			s.ai = newEligibilityAI(cfg.Discovery.AI)
-		}
 	}
 	return s
 }
 
 func (s *Intake) Close() {
-	if s.ai != nil {
-		s.ai.http.CloseIdleConnections()
-	}
 	if s.collection != nil {
 		s.collection.Close()
 	}

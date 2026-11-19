@@ -12,42 +12,6 @@ import (
 	"uuid"
 )
 
-const managementApprovedGameText = `-- name: ManagementApprovedGameText :many
-SELECT locale,name,summary,observed_at FROM game_approved_presentations WHERE game_id=$1 ORDER BY locale
-`
-
-type ManagementApprovedGameTextRow struct {
-	Locale     string             `json:"locale"`
-	Name       string             `json:"name"`
-	Summary    string             `json:"summary"`
-	ObservedAt pgtype.Timestamptz `json:"observed_at"`
-}
-
-func (q *Queries) ManagementApprovedGameText(ctx context.Context, gameID uuid.UUID) ([]ManagementApprovedGameTextRow, error) {
-	rows, err := q.db.Query(ctx, managementApprovedGameText, gameID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []ManagementApprovedGameTextRow{}
-	for rows.Next() {
-		var i ManagementApprovedGameTextRow
-		if err := rows.Scan(
-			&i.Locale,
-			&i.Name,
-			&i.Summary,
-			&i.ObservedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const managementCollectionPlans = `-- name: ManagementCollectionPlans :many
 SELECT p.capability,
  CASE WHEN p.post_started AND p.schedule_id IS NULL THEN 'uncertain'
@@ -169,19 +133,17 @@ func (q *Queries) ManagementCollections(ctx context.Context, arg ManagementColle
 }
 
 const managementGame = `-- name: ManagementGame :one
-SELECT id,public_id,slug,revision,status,published_at,publication_blocked,intake_managed
+SELECT id,public_id,slug,revision,status,content_rating
 FROM games WHERE public_id=$1
 `
 
 type ManagementGameRow struct {
-	ID                 uuid.UUID          `json:"id"`
-	PublicID           string             `json:"public_id"`
-	Slug               string             `json:"slug"`
-	Revision           int64              `json:"revision"`
-	Status             string             `json:"status"`
-	PublishedAt        pgtype.Timestamptz `json:"published_at"`
-	PublicationBlocked bool               `json:"publication_blocked"`
-	IntakeManaged      bool               `json:"intake_managed"`
+	ID            uuid.UUID `json:"id"`
+	PublicID      string    `json:"public_id"`
+	Slug          string    `json:"slug"`
+	Revision      int64     `json:"revision"`
+	Status        string    `json:"status"`
+	ContentRating string    `json:"content_rating"`
 }
 
 func (q *Queries) ManagementGame(ctx context.Context, publicID string) (ManagementGameRow, error) {
@@ -193,16 +155,15 @@ func (q *Queries) ManagementGame(ctx context.Context, publicID string) (Manageme
 		&i.Slug,
 		&i.Revision,
 		&i.Status,
-		&i.PublishedAt,
-		&i.PublicationBlocked,
-		&i.IntakeManaged,
+		&i.ContentRating,
 	)
 	return i, err
 }
 
 const managementGameFacts = `-- name: ManagementGameFacts :many
 SELECT s.platform_code,s.external_key,m.locale,m.store_country,m.observed_at,
- coalesce(m.payload->>'name','')::text AS name,coalesce(m.payload->>'description','')::text AS summary
+ coalesce(m.payload->>'name','')::text AS name,coalesce(m.payload->>'description','')::text AS summary,
+ coalesce(m.payload->'content_rating','{}'::jsonb)::jsonb AS storefront_rating
 FROM game_sources s JOIN LATERAL (
  SELECT m.game_source_id, m.locale, m.store_country, m.egress_region, m.section, m.binding_id, m.scope_key, m.epoch, m.position, m.event_at, m.state, m.output_schema, m.ruleset, m.observation_id, m.content_hash, m.observed_at, m.confirmed_at, m.payload FROM game_source_metadata m WHERE m.game_source_id=s.id AND m.section='details' AND m.payload IS NOT NULL
  ORDER BY m.observed_at DESC,m.locale,m.store_country LIMIT 2
@@ -211,13 +172,14 @@ ORDER BY s.active DESC,s.platform_code,s.external_key,m.locale,m.store_country L
 `
 
 type ManagementGameFactsRow struct {
-	PlatformCode string             `json:"platform_code"`
-	ExternalKey  string             `json:"external_key"`
-	Locale       string             `json:"locale"`
-	StoreCountry string             `json:"store_country"`
-	ObservedAt   pgtype.Timestamptz `json:"observed_at"`
-	Name         string             `json:"name"`
-	Summary      string             `json:"summary"`
+	PlatformCode     string             `json:"platform_code"`
+	ExternalKey      string             `json:"external_key"`
+	Locale           string             `json:"locale"`
+	StoreCountry     string             `json:"store_country"`
+	ObservedAt       pgtype.Timestamptz `json:"observed_at"`
+	Name             string             `json:"name"`
+	Summary          string             `json:"summary"`
+	StorefrontRating []byte             `json:"storefront_rating"`
 }
 
 func (q *Queries) ManagementGameFacts(ctx context.Context, gameID uuid.UUID) ([]ManagementGameFactsRow, error) {
@@ -237,6 +199,7 @@ func (q *Queries) ManagementGameFacts(ctx context.Context, gameID uuid.UUID) ([]
 			&i.ObservedAt,
 			&i.Name,
 			&i.Summary,
+			&i.StorefrontRating,
 		); err != nil {
 			return nil, err
 		}
@@ -323,42 +286,39 @@ func (q *Queries) ManagementGameText(ctx context.Context, gameID uuid.UUID) ([]M
 }
 
 const managementGames = `-- name: ManagementGames :many
-SELECT g.public_id,g.slug,g.revision,g.status,g.publication_blocked,
- coalesce((SELECT l.name FROM game_channel_locales l WHERE l.game_id=g.id ORDER BY l.locale DESC LIMIT 1),g.public_id)::text AS name
+SELECT g.public_id,g.slug,g.revision,g.status,g.content_rating,
+ coalesce((SELECT l.name FROM game_draft_text(g.id) l ORDER BY l.locale DESC LIMIT 1),g.public_id)::text AS name
 FROM games g
 WHERE g.public_id>$1::text AND ($2::text='' OR g.status=$2)
- AND (NOT $3::boolean OR g.publication_blocked)
- AND ($4::text='' OR EXISTS (
-  SELECT 1 FROM game_sources s WHERE s.game_id=g.id AND s.active AND s.platform_code=$4))
- AND ($5::text='' OR g.public_id=$5 OR EXISTS (
-  SELECT 1 FROM game_channel_locales l WHERE l.game_id=g.id AND strpos(lower(l.name),lower($5))>0)
-  OR EXISTS (SELECT 1 FROM game_sources s WHERE s.game_id=g.id AND s.active AND s.external_key=$5))
-ORDER BY g.public_id LIMIT $6::integer
+ AND ($3::text='' OR EXISTS (
+  SELECT 1 FROM game_sources s WHERE s.game_id=g.id AND s.active AND s.platform_code=$3))
+ AND ($4::text='' OR g.public_id=$4 OR EXISTS (
+  SELECT 1 FROM game_draft_text(g.id) l WHERE strpos(lower(l.name),lower($4))>0)
+  OR EXISTS (SELECT 1 FROM game_sources s WHERE s.game_id=g.id AND s.active AND s.external_key=$4))
+ORDER BY g.public_id LIMIT $5::integer
 `
 
 type ManagementGamesParams struct {
-	AfterID    string `json:"after_id"`
-	State      string `json:"state"`
-	Restricted bool   `json:"restricted"`
-	Platform   string `json:"platform"`
-	Keyword    string `json:"keyword"`
-	TakeRows   int32  `json:"take_rows"`
+	AfterID  string `json:"after_id"`
+	State    string `json:"state"`
+	Platform string `json:"platform"`
+	Keyword  string `json:"keyword"`
+	TakeRows int32  `json:"take_rows"`
 }
 
 type ManagementGamesRow struct {
-	PublicID           string `json:"public_id"`
-	Slug               string `json:"slug"`
-	Revision           int64  `json:"revision"`
-	Status             string `json:"status"`
-	PublicationBlocked bool   `json:"publication_blocked"`
-	Name               string `json:"name"`
+	PublicID      string `json:"public_id"`
+	Slug          string `json:"slug"`
+	Revision      int64  `json:"revision"`
+	Status        string `json:"status"`
+	ContentRating string `json:"content_rating"`
+	Name          string `json:"name"`
 }
 
 func (q *Queries) ManagementGames(ctx context.Context, arg ManagementGamesParams) ([]ManagementGamesRow, error) {
 	rows, err := q.db.Query(ctx, managementGames,
 		arg.AfterID,
 		arg.State,
-		arg.Restricted,
 		arg.Platform,
 		arg.Keyword,
 		arg.TakeRows,
@@ -375,7 +335,7 @@ func (q *Queries) ManagementGames(ctx context.Context, arg ManagementGamesParams
 			&i.Slug,
 			&i.Revision,
 			&i.Status,
-			&i.PublicationBlocked,
+			&i.ContentRating,
 			&i.Name,
 		); err != nil {
 			return nil, err
@@ -533,7 +493,7 @@ func (q *Queries) ManagementReceipt(ctx context.Context, arg ManagementReceiptPa
 const managementRecentIntake = `-- name: ManagementRecentIntake :many
 SELECT c.external_key,c.state,c.reason,c.updated_at,coalesce(g.public_id,'')::text AS public_id
 FROM game_intake_candidates c LEFT JOIN games g ON g.id=c.game_id
-WHERE c.state='accepted' AND g.intake_managed AND g.published_at IS NOT NULL ORDER BY c.updated_at DESC,c.id LIMIT 8
+WHERE c.state='accepted' ORDER BY c.updated_at DESC,c.id LIMIT 8
 `
 
 type ManagementRecentIntakeRow struct {
@@ -571,7 +531,7 @@ func (q *Queries) ManagementRecentIntake(ctx context.Context) ([]ManagementRecen
 }
 
 const managementSchemaReady = `-- name: ManagementSchemaReady :one
-SELECT (to_regclass('management_operations') IS NOT NULL)::boolean
+SELECT (to_regclass('game_published_localizations') IS NOT NULL AND to_regclass('management_operations') IS NOT NULL)::boolean
 `
 
 func (q *Queries) ManagementSchemaReady(ctx context.Context) (bool, error) {

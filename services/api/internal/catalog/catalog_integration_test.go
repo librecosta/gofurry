@@ -190,7 +190,19 @@ func TestCatalogPostgreSQL(t *testing.T) {
 	c.publicID = func() string { return fixtureGame }
 	game, err := c.CreateGame(ctx, gameInput)
 	ok(t, err)
-	game, err = c.SetGameStatus(ctx, game.ID, game.Revision, Published)
+	preview, err := c.ManagementGame(ctx, game.PublicID)
+	ok(t, err)
+	operation := GamePublicationReview{Revision: game.Revision, ConfirmRelevance: true, ContentRating: "sfw", PreviewToken: preview.PreviewToken}
+	_, err = c.PublishManagementGame(ctx, game.PublicID, operation)
+	want(t, err, ErrGamePublicationIdentity)
+	_, err = c.Manage(ctx, dbgen.RecordManagementOperationParams{
+		RequestID: uuid.NewV7(), ActorID: uuid.NewV7(), ActorName: "Developer fixture", ActorRole: "developer", Action: "game.publish",
+	}, func(ctx context.Context, tx *Service, _ *dbgen.Queries) (ManagementResult, error) {
+		return tx.PublishManagementGame(ctx, game.PublicID, operation)
+	})
+	want(t, err, ErrGamePublicationIdentity)
+
+	game, err = publishCatalogGame(t, ctx, c, game)
 	ok(t, err)
 	gameRead, err := c.PublishedGame(ctx, fixtureGame)
 	ok(t, err)
@@ -199,7 +211,13 @@ func TestCatalogPostgreSQL(t *testing.T) {
 	}
 	manualOnly := gameInput
 	manualOnly.Sources = gameInput.Sources[1:]
+	_, err = c.EditGame(ctx, game.ID, game.Revision, manualOnly)
+	want(t, err, ErrConflict)
+	game, err = changeCatalogGame(t, ctx, c, game, "unpublish", GamePublicationReview{})
+	ok(t, err)
 	game, err = c.EditGame(ctx, game.ID, game.Revision, manualOnly)
+	ok(t, err)
+	game, err = publishCatalogGame(t, ctx, c, game)
 	ok(t, err)
 	gameRead, err = c.PublishedGame(ctx, fixtureGame)
 	ok(t, err)
@@ -212,17 +230,21 @@ func TestCatalogPostgreSQL(t *testing.T) {
 	want(t, err, ErrConflict)
 	noSource, err := c.CreateGame(ctx, GameInput{Editorial: Editorial{Localizations: []Localization{{Locale: "en", Name: "Offline Game"}}}})
 	ok(t, err)
-	_, err = c.SetGameStatus(ctx, noSource.ID, noSource.Revision, Published)
+	_, err = publishCatalogGame(t, ctx, c, noSource)
+	ok(t, err)
+	game, err = changeCatalogGame(t, ctx, c, game, "unpublish", GamePublicationReview{})
 	ok(t, err)
 	game, err = c.EditGame(ctx, game.ID, game.Revision, gameInput)
+	ok(t, err)
+	game, err = publishCatalogGame(t, ctx, c, game)
 	ok(t, err)
 
 	c.publicID = func() string { return archiveGame }
 	archived, err := c.CreateGame(ctx, GameInput{Editorial: gameInput.Editorial})
 	ok(t, err)
-	archived, err = c.SetGameStatus(ctx, archived.ID, archived.Revision, Published)
+	archived, err = publishCatalogGame(t, ctx, c, archived)
 	ok(t, err)
-	archived, err = c.SetGameStatus(ctx, archived.ID, archived.Revision, Archived)
+	archived, err = changeCatalogGame(t, ctx, c, archived, "archive", GamePublicationReview{})
 	ok(t, err)
 	if !archived.PublishedAt.Valid || !archived.ArchivedAt.Valid || archived.PublicID != archiveGame {
 		t.Fatal("archival lost published history or identity")
@@ -241,7 +263,7 @@ func TestCatalogPostgreSQL(t *testing.T) {
 	projected.publicID = func() string { return fixtureGame }
 	intlGame, err := projected.CreateGame(ctx, gameInput)
 	ok(t, err)
-	intlGame, err = projected.SetGameStatus(ctx, intlGame.ID, intlGame.Revision, Published)
+	intlGame, err = publishCatalogGame(t, ctx, projected, intlGame)
 	ok(t, err)
 	if intlSite.ID == site.ID || intlGame.ID == game.ID || intlSite.PublicID != site.PublicID || intlGame.PublicID != game.PublicID {
 		t.Fatal("separate regional keys and shared public identity were not retained")
@@ -308,18 +330,40 @@ func seedIntakeBrowserGame(t *testing.T, ctx context.Context, s *Service, public
 		source, game.ID, key, "https://store.steampowered.com/app/"+key+"/")
 	ok(t, err)
 	_, err = s.pool.Exec(ctx, `INSERT INTO game_intake_candidates (id,platform_code,external_key,discovered_via,state,game_id,game_source_id,
- profile,profile_at,profile_observation_id,decision_version,review,review_until,next_at)
+ profile,profile_at,profile_observation_id,next_at)
  VALUES ($1,'steam',$2,'operator','accepted',$3,$4,jsonb_build_object('locale','en','name',$5::text,'summary','Collected English synopsis.'),
- now(),$6,1,'{"furry_ref":"fixture.synopsis","sfw_ref":"fixture.review","policy":"furry-and-sfw-1"}',now()+interval '1 day',NULL)`,
+ now(),$6,NULL)`,
 		uuid.NewV7(), key, game.ID, source, name, uuid.NewV7())
 	ok(t, err)
-	ok(t, dbgen.New(s.pool).SaveApprovedGamePresentation(ctx, game.ID))
-	game, err = s.SetGameStatus(ctx, game.ID, game.Revision, Published)
-	ok(t, err)
-	if revoked {
-		_, err = s.ChangeGamePublication(ctx, publicID, game.Revision, "block", PublicationDecision{Actor: "fixture", Reason: "Adult content fixture"})
+	if !revoked {
+		_, err = publishCatalogGame(t, ctx, s, game)
 		ok(t, err)
 	}
+}
+
+func publishCatalogGame(t *testing.T, ctx context.Context, s *Service, g dbgen.Game) (dbgen.Game, error) {
+	t.Helper()
+	preview, err := s.ManagementGame(ctx, g.PublicID)
+	if err != nil {
+		return g, err
+	}
+	return changeCatalogGame(t, ctx, s, g, "publish", GamePublicationReview{Revision: g.Revision, ConfirmRelevance: true, ContentRating: "sfw", PreviewToken: preview.PreviewToken})
+}
+
+func changeCatalogGame(t *testing.T, ctx context.Context, s *Service, g dbgen.Game, action string, review GamePublicationReview) (dbgen.Game, error) {
+	t.Helper()
+	_, err := s.Manage(ctx, dbgen.RecordManagementOperationParams{
+		RequestID: uuid.NewV7(), ActorID: uuid.NewV7(), ActorName: "Catalog fixture operator", ActorRole: "operator", Action: "game." + action,
+	}, func(ctx context.Context, tx *Service, _ *dbgen.Queries) (ManagementResult, error) {
+		if action == "publish" {
+			return tx.PublishManagementGame(ctx, g.PublicID, review)
+		}
+		return tx.ChangeManagementGameVisibility(ctx, g.PublicID, g.Revision, action, "Catalog fixture lifecycle")
+	})
+	if err != nil {
+		return g, err
+	}
+	return dbgen.New(s.pool).LockGame(ctx, g.ID)
 }
 
 func openFixture(t *testing.T, ctx context.Context, path, region string) *pgxpool.Pool {

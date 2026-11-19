@@ -50,4 +50,12 @@ SELECT s.id,b.id,uuidv7(),'cn',country,currency,locale,(now() AT TIME ZONE 'UTC'
   ('us','USD','en',3,'priced',1500,1500,0),('us','USD','en',2,'priced',1500,1500,0),('us','USD','en',0,'zero_price',1500,0,100),
   ('hk','HKD','en',0,'priced',8000,8000,0)) fixture(country,currency,locale,n,state,initial,final,discount)
  WHERE s.external_key='3990000000';
+INSERT INTO game_published_localizations (game_id,locale,name,summary,media_source_id,media,media_observed_at,media_store_country,cover_url,revision)
+SELECT g.id,l.locale,l.name,CASE WHEN s.external_key='3990000000' AND l.locale='en' THEN
+ l.summary || E'\nThe foxes chart a forgotten coastline. Their atlas keeps the ports connected.' ELSE l.summary END,
+ s.id,coalesce(m.payload,'{}'),m.observed_at,coalesce(m.store_country,''),coalesce(m.payload->>'header',''),g.revision
+FROM games g JOIN game_localizations l ON l.game_id=g.id
+LEFT JOIN game_sources s ON s.game_id=g.id AND s.active AND s.platform_code='steam'
+LEFT JOIN game_source_metadata m ON m.game_source_id=s.id AND m.section='media'
+WHERE g.status='published' AND g.public_id LIKE '2%';
 `

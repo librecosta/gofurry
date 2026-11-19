@@ -70,7 +70,7 @@ func (d *Discovery) Budgets() map[string]int32 {
 func ManagementBusy(err error) bool { return errors.Is(err, errBusy) }
 
 // ReattachManagementSteam uses the normal post-Intake schedule for an active
-// Steam source that already belongs to the published Game under correction.
+// Steam source that already belongs to the Draft Game under correction.
 func (s *Intake) ReattachManagementSteam(ctx context.Context, q *dbgen.Queries, publicID, appID string) error {
 	if s == nil || s.collection == nil {
 		return ErrIntent
@@ -83,7 +83,7 @@ func (s *Intake) ReattachManagementSteam(ctx context.Context, q *dbgen.Queries, 
 	if err != nil {
 		return err
 	}
-	if game.Status != "published" || game.PublicationBlocked {
+	if game.Status != "draft" {
 		return ErrIntakeState
 	}
 	row, err := q.CollectionSteamSource(ctx, dbgen.CollectionSteamSourceParams{PublicID: publicID, ExternalKey: appID})

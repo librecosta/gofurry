@@ -112,5 +112,9 @@ func ErrorHandler(c fiber.Ctx, err error) error {
 	if errors.As(err, &he) {
 		code = he.Code
 	}
-	return c.Status(code).JSON(fiber.Map{"error": fiber.Map{"code": code, "message": http.StatusText(code)}, "request_id": requestid.FromContext(c)})
+	message := http.StatusText(code)
+	if he != nil && (code == fiber.StatusUnprocessableEntity || code == fiber.StatusConflict) {
+		message = he.Message
+	}
+	return c.Status(code).JSON(fiber.Map{"error": fiber.Map{"code": code, "message": message}, "request_id": requestid.FromContext(c)})
 }

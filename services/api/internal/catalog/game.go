@@ -20,7 +20,7 @@ func (s *Service) CreateGame(ctx context.Context, in GameInput) (dbgen.Game, err
 		return dbgen.Game{}, err
 	}
 	return write(ctx, s, func(ctx context.Context, q *dbgen.Queries) (dbgen.Game, error) {
-		row, err := s.createGame(ctx, q, in.Slug, false)
+		row, err := s.createGame(ctx, q, in.Slug)
 		if err != nil {
 			return row, err
 		}
@@ -28,10 +28,10 @@ func (s *Service) CreateGame(ctx context.Context, in GameInput) (dbgen.Game, err
 	})
 }
 
-func (s *Service) createGame(ctx context.Context, q *dbgen.Queries, slug string, managed bool) (dbgen.Game, error) {
+func (s *Service) createGame(ctx context.Context, q *dbgen.Queries, slug string) (dbgen.Game, error) {
 	id := uuid.NewV7()
 	return create(s, func(publicID string) (dbgen.Game, error) {
-		return q.CreateGame(ctx, dbgen.CreateGameParams{ID: id, PublicID: publicID, Slug: slug, IntakeManaged: managed})
+		return q.CreateGame(ctx, dbgen.CreateGameParams{ID: id, PublicID: publicID, Slug: slug})
 	})
 }
 
@@ -44,7 +44,7 @@ func (s *Service) CreateIntakeGame(ctx context.Context, q *dbgen.Queries, name s
 		// punctuation or no safe ASCII spelling.
 		ed.Slug = "game"
 	}
-	return s.createGame(ctx, q, ed.Slug, true)
+	return s.createGame(ctx, q, ed.Slug)
 }
 
 func NormalizeGameSource(source Source) (Source, error) {
@@ -78,75 +78,17 @@ func (s *Service) editGame(ctx context.Context, id uuid.UUID, revision int64, in
 		if err != nil {
 			return row, err
 		}
-		if err = saveGameContent(ctx, q, id, in, !preserveSources && (hasSources || !row.IntakeManaged)); err != nil {
-			return row, err
+		if row.Status != Draft {
+			return row, ErrConflict
 		}
-		if row.Status == Published {
-			if err = requireGamePresentation(ctx, q, id); err != nil {
-				return row, err
-			}
+		if err = saveGameContent(ctx, q, id, in, !preserveSources && hasSources); err != nil {
+			return row, err
 		}
 		if err = q.CloseRemovedGameBindings(ctx, &id); err != nil {
 			return row, err
 		}
 		return q.UpdateGame(ctx, dbgen.UpdateGameParams{ID: id, Slug: in.Slug})
 	})
-}
-
-func (s *Service) SetGameStatus(ctx context.Context, id uuid.UUID, revision int64, desired string) (dbgen.Game, error) {
-	return s.setGameStatus(ctx, id, revision, desired, PublicationDecision{Actor: "catalog", Reason: "Explicit editorial status change"})
-}
-
-func (s *Service) setGameStatus(ctx context.Context, id uuid.UUID, revision int64, desired string, d PublicationDecision) (dbgen.Game, error) {
-	return write(ctx, s, func(ctx context.Context, q *dbgen.Queries) (dbgen.Game, error) {
-		row, err := q.LockGame(ctx, id)
-		if err != nil {
-			return row, err
-		}
-		if err = editable(revision, row.Revision, row.Status); err != nil {
-			return row, err
-		}
-		if err = canChange(row.Status, desired); err != nil {
-			return row, err
-		}
-
-		if desired == Archived {
-			return changeGameVisibility(ctx, q, row, "archive", d)
-		}
-		if row.PublishedAt.Valid {
-			return changeGameVisibility(ctx, q, row, "restore", d)
-		}
-		if err = q.SaveApprovedGamePresentation(ctx, id); err != nil {
-			return row, err
-		}
-		if err = requireGamePublication(ctx, q, id); err != nil {
-			return row, err
-		}
-		next, err := q.ChangeGameStatus(ctx, dbgen.ChangeGameStatusParams{ID: id, NewStatus: desired})
-		if err == nil {
-			err = d.Save(ctx, q, "game", id, next.Revision, "publish")
-		}
-		return next, err
-	})
-}
-
-func requireGamePresentation(ctx context.Context, q *dbgen.Queries, id uuid.UUID) error {
-	ready, err := q.HasGamePresentation(ctx, id)
-	if err == nil && !ready {
-		return ErrInvalid
-	}
-	return err
-}
-
-func requireGamePublication(ctx context.Context, q *dbgen.Queries, id uuid.UUID) error {
-	ready, err := q.CanPublishGame(ctx, id)
-	if err != nil {
-		return err
-	}
-	if !ready {
-		return ErrInvalid
-	}
-	return nil
 }
 
 func saveGameContent(ctx context.Context, q *dbgen.Queries, id uuid.UUID, in GameInput, editSources bool) error {

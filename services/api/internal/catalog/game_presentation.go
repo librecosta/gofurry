@@ -13,17 +13,17 @@ import (
 type GamePresentation struct {
 	PreferredSource *uuid.UUID
 	Summary
-	Approved []ApprovedGamePresentation
-	Sources  []GameSourceSnapshot
+	Presentation []PublishedGameMedia
+	Sources      []GameSourceSnapshot
 }
 
-type ApprovedGamePresentation struct {
-	Locale        string    `json:"locale"`
-	GameSourceID  uuid.UUID `json:"game_source_id"`
-	ObservationID uuid.UUID `json:"observation_id"`
-	ObservedAt    time.Time `json:"observed_at"`
-	StoreCountry  *string   `json:"store_country"`
-	EgressRegion  *string   `json:"egress_region"`
+type PublishedGameMedia struct {
+	Locale       string     `json:"locale"`
+	SourceID     *uuid.UUID `json:"source_id"`
+	Media        SteamMedia `json:"media"`
+	ObservedAt   *time.Time `json:"observed_at"`
+	StoreCountry string     `json:"store_country"`
+	CoverURL     string     `json:"cover_url"`
 }
 
 // GameSourceSnapshot keeps scoped Steam observations on their source. Other
@@ -123,7 +123,7 @@ func readGamePresentation(ctx context.Context, q *dbgen.Queries, publicID, egres
 	}
 	base, err := summary(row.PublicID, row.Slug, row.Localizations)
 	out := GamePresentation{Summary: base, PreferredSource: row.PreferredSource}
-	if err != nil || json.Unmarshal(row.Approved, &out.Approved) != nil || json.Unmarshal(row.Sources, &out.Sources) != nil {
+	if err != nil || json.Unmarshal(row.Presentation, &out.Presentation) != nil || json.Unmarshal(row.Sources, &out.Sources) != nil {
 		return GamePresentation{}, ErrUnavailable
 	}
 	return out, nil

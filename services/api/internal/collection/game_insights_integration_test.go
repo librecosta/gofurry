@@ -20,7 +20,7 @@ func checkGameProfileFromHarvest(t *testing.T, editor *catalog.Service, id strin
 	market := catalog.ChannelMarket{Region: "CN", Egress: "cn"}
 	p, err := editor.PublicGameProfile(ctx, market, id, "en")
 	must(t, err)
-	if p.Localizations[0].Summary != "Editorial text" || len(p.Sources) != 2 || p.CoverURL == "" || len(p.News.Items) != 1 {
+	if p.Localizations[0].Summary != "Editorial text" || len(p.Sources) != 2 || len(p.News.Items) != 1 {
 		t.Fatalf("wrong profile projection from Harvest: %+v", p)
 	}
 	steam := p.Sources[1]
@@ -97,14 +97,16 @@ func checkGameHistoricEvidence(t *testing.T, pool *pgxpool.Pool, editor *catalog
 		}
 		p, err := editor.PublicGameProfile(ctx, market, id, "en")
 		must(t, err)
-		if p.PublicID != id || p.Localizations[0].Summary != "Editorial text" || p.CoverURL == "" || len(p.Sources[1].Quotes) != 0 ||
+		if p.PublicID != id || p.Localizations[0].Summary != "Editorial text" || p.CoverURL != "" || len(p.Sources[1].Quotes) != 0 ||
 			p.Sources[1].Players != nil || p.Sources[1].Active {
 			t.Fatalf("retention or source closure changed the published work: %+v", p)
 		}
 	}
-	execSQL(t, pool, "UPDATE games SET publication_blocked=true WHERE public_id=$1", id)
+	revision := scalar[int64](t, pool, "SELECT revision FROM games WHERE public_id=$1", id)
+	_, err = changeFixtureGame(t, editor, id, revision, "archive")
+	must(t, err)
 	_, err = editor.PublicGameInsights(ctx, market, id, "42", "us", "en", 365)
 	if !errors.Is(err, catalog.ErrNotFound) {
-		t.Fatalf("blocked work exposed historical facts: %v", err)
+		t.Fatalf("archived work exposed historical facts: %v", err)
 	}
 }

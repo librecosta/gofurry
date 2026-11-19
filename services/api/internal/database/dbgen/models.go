@@ -10,14 +10,16 @@ import (
 )
 
 type CatalogPublicationDecision struct {
-	ID         uuid.UUID          `json:"id"`
-	EntityKind string             `json:"entity_kind"`
-	EntityID   uuid.UUID          `json:"entity_id"`
-	Revision   int64              `json:"revision"`
-	Action     string             `json:"action"`
-	Actor      string             `json:"actor"`
-	Reason     string             `json:"reason"`
-	DecidedAt  pgtype.Timestamptz `json:"decided_at"`
+	ID                  uuid.UUID          `json:"id"`
+	EntityKind          string             `json:"entity_kind"`
+	EntityID            uuid.UUID          `json:"entity_id"`
+	Revision            int64              `json:"revision"`
+	Action              string             `json:"action"`
+	Actor               string             `json:"actor"`
+	Reason              string             `json:"reason"`
+	DecidedAt           pgtype.Timestamptz `json:"decided_at"`
+	ManagementRequestID *uuid.UUID         `json:"management_request_id"`
+	ContentRating       pgtype.Text        `json:"content_rating"`
 }
 
 type CollectionBinding struct {
@@ -118,23 +120,9 @@ type Game struct {
 	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
 	PublishedAt         pgtype.Timestamptz `json:"published_at"`
 	ArchivedAt          pgtype.Timestamptz `json:"archived_at"`
-	IntakeManaged       bool               `json:"intake_managed"`
 	IntakeDisplaySource *uuid.UUID         `json:"intake_display_source"`
-	PublicationBlocked  bool               `json:"publication_blocked"`
 	FirstPublishedAt    pgtype.Timestamptz `json:"first_published_at"`
-}
-
-type GameApprovedPresentation struct {
-	GameID            uuid.UUID          `json:"game_id"`
-	Locale            string             `json:"locale"`
-	Name              string             `json:"name"`
-	Summary           string             `json:"summary"`
-	GameSourceID      uuid.UUID          `json:"game_source_id"`
-	ObservationID     uuid.UUID          `json:"observation_id"`
-	ObservedAt        pgtype.Timestamptz `json:"observed_at"`
-	Approval          []byte             `json:"approval"`
-	SteamStoreCountry pgtype.Text        `json:"steam_store_country"`
-	SteamEgressRegion pgtype.Text        `json:"steam_egress_region"`
+	ContentRating       string             `json:"content_rating"`
 }
 
 type GameChannelFeature struct {
@@ -281,18 +269,11 @@ type GameIntakeCandidate struct {
 	ProfileObservationID *uuid.UUID         `json:"profile_observation_id"`
 	WorkTitle            string             `json:"work_title"`
 	Relation             []byte             `json:"relation"`
-	RelationAttached     bool               `json:"relation_attached"`
-	DecisionVersion      int32              `json:"decision_version"`
-	Review               []byte             `json:"review"`
-	ReviewUntil          pgtype.Timestamptz `json:"review_until"`
-	PublishedAt          pgtype.Timestamptz `json:"published_at"`
 	DecidedAt            pgtype.Timestamptz `json:"decided_at"`
 	CreatedAt            pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
-	ReviewRevoked        bool               `json:"review_revoked"`
 	DiscoveryModified    int64              `json:"discovery_modified"`
 	JobGeneration        int64              `json:"job_generation"`
-	Automation           []byte             `json:"automation"`
 }
 
 type GameLocalization struct {
@@ -325,6 +306,22 @@ type GamePriceObservation struct {
 	Discount      pgtype.Int4        `json:"discount"`
 }
 
+type GamePublishedLocalization struct {
+	GameID            uuid.UUID          `json:"game_id"`
+	Locale            string             `json:"locale"`
+	Name              string             `json:"name"`
+	Summary           string             `json:"summary"`
+	TextSourceID      *uuid.UUID         `json:"text_source_id"`
+	TextObservationID *uuid.UUID         `json:"text_observation_id"`
+	MediaSourceID     *uuid.UUID         `json:"media_source_id"`
+	Media             []byte             `json:"media"`
+	MediaObservedAt   pgtype.Timestamptz `json:"media_observed_at"`
+	MediaStoreCountry string             `json:"media_store_country"`
+	CoverUrl          string             `json:"cover_url"`
+	Revision          int64              `json:"revision"`
+	PublishedAt       pgtype.Timestamptz `json:"published_at"`
+}
+
 type GameSource struct {
 	ID           uuid.UUID `json:"id"`
 	GameID       uuid.UUID `json:"game_id"`
@@ -353,6 +350,18 @@ type GameSourceMetadatum struct {
 	ObservedAt    pgtype.Timestamptz `json:"observed_at"`
 	ConfirmedAt   pgtype.Timestamptz `json:"confirmed_at"`
 	Payload       []byte             `json:"payload"`
+}
+
+type GameSourceTextHistory struct {
+	GameID        uuid.UUID          `json:"game_id"`
+	Locale        string             `json:"locale"`
+	Name          string             `json:"name"`
+	Summary       string             `json:"summary"`
+	GameSourceID  uuid.UUID          `json:"game_source_id"`
+	ObservationID uuid.UUID          `json:"observation_id"`
+	ObservedAt    pgtype.Timestamptz `json:"observed_at"`
+	StoreCountry  pgtype.Text        `json:"store_country"`
+	EgressRegion  pgtype.Text        `json:"egress_region"`
 }
 
 type LegacyEditorialID struct {
@@ -700,11 +709,6 @@ type SteamDiscoveryState struct {
 	Admitted      int64              `json:"admitted"`
 	Pending       []byte             `json:"pending"`
 	LastCode      string             `json:"last_code"`
-}
-
-type SteamEligibilityAiBudget struct {
-	UtcDay pgtype.Date `json:"utc_day"`
-	Calls  int32       `json:"calls"`
 }
 
 type WallpaperAuditLog struct {

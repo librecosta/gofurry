@@ -73,7 +73,6 @@ func TestGameIntakeHarvestD(t *testing.T) {
 	yamlPath := filepath.Join(dir, "api.yaml")
 	writeIntakeYAML(t, yamlPath, addr, redisAddr, goDB, cfg)
 	run(t, dir, nil, bin, "--config", yamlPath, "game-intake", "submit", "StEaM", "000"+first)
-	run(t, dir, nil, bin, "--config", yamlPath, "game-intake", "review", first, "fixture.work-synopsis", "fixture.content-assessment", "--confirm-furry", "--confirm-sfw")
 	var concurrent sync.WaitGroup
 	for i := range 16 {
 		concurrent.Go(func() {
@@ -93,9 +92,6 @@ func TestGameIntakeHarvestD(t *testing.T) {
 		if _, err := s.SubmitSteam(ctx, bad, "operator"); !errors.Is(err, ErrIntakeInput) {
 			t.Fatalf("accepted invalid Steam key %q", bad)
 		}
-	}
-	if err := s.ReviewSteam(ctx, first, "same.ref", "same.ref"); !errors.Is(err, ErrIntakeInput) {
-		t.Fatal("one evidence record counted for two different reviews")
 	}
 	_, err = noHarvest.Tick(ctx)
 	must(t, err)
@@ -150,9 +146,9 @@ func TestGameIntakeHarvestD(t *testing.T) {
 	base := "http://" + addr
 	probe(t, base)
 	var accepted CandidateStatus
-	expectEventually(t, 35*time.Second, "first Intake failed to publish through Fiber lifecycle", func() bool {
+	expectEventually(t, 35*time.Second, "first Intake failed to create a draft through Fiber lifecycle", func() bool {
 		accepted, err = s.Inspect(ctx, "steam", first)
-		return err == nil && accepted.GameState == catalog.Published
+		return err == nil && accepted.GameState == catalog.Draft
 	})
 	if accepted.Target == nil || accepted.Job == nil || accepted.Attempt == nil || accepted.Observation == nil ||
 		accepted.Game == nil || accepted.Source == nil || !catalog.ValidPublicID(accepted.PublicID) ||
@@ -172,7 +168,7 @@ func TestGameIntakeHarvestD(t *testing.T) {
 		return scalar[int64](t, remote, "SELECT count(*) FROM harvest.schedules WHERE target_id=$1 AND enabled", accepted.Target) == 1
 	})
 	count(t, pool, 1, "SELECT count(*) FROM collection_bindings WHERE game_id=$1 AND effective_until IS NULL", accepted.Game)
-	assertIntakeHTTP(t, l.http, base, accepted.PublicID, 200, "Fable of the Foxes")
+	assertIntakeHTTP(t, l.http, base, accepted.PublicID, 404)
 
 	l.intakeVersion.Store(1)
 	execSQL(t, remote, "UPDATE harvest.schedules SET next_due_at=now()-interval '1s' WHERE target_id=$1", accepted.Target)
@@ -180,7 +176,7 @@ func TestGameIntakeHarvestD(t *testing.T) {
 		return scalar[string](t, pool, "SELECT profile->>'name' FROM game_intake_candidates WHERE id=$1", accepted.ID) == "Fable of the Foxes Revised"
 	})
 	count(t, remote, 1, "SELECT count(*) FROM harvest.jobs WHERE target_id=$1 AND schedule_id IS NOT NULL AND state IN ('succeeded','partial')", accepted.Target)
-	assertIntakeHTTP(t, l.http, base, accepted.PublicID, 200, "Fable of the Foxes Revised")
+	assertIntakeHTTP(t, l.http, base, accepted.PublicID, 404)
 	steam := New(pool, cfg)
 	t.Cleanup(steam.Close)
 	var binding dbgen.CollectionBinding
@@ -211,18 +207,20 @@ func TestGameIntakeHarvestD(t *testing.T) {
 		l.job(request{TargetID: *accepted.Target, Capability: intakeCapability, Schema: 1, Params: params,
 			Scope: scope{Locale: plan.Locale, Region: market, EgressRegion: "cn"}})
 		if market == "cn" {
-			expectEventually(t, 20*time.Second, "verified Chinese metadata did not extend the approved source", func() bool {
-				return scalar[int64](t, pool, "SELECT count(*) FROM game_approved_presentations WHERE game_id=$1 AND locale='zh' AND steam_store_country='cn'", accepted.Game) == 1
+			expectEventually(t, 20*time.Second, "verified Chinese metadata did not reach the source", func() bool {
+				return scalar[int64](t, pool, "SELECT count(*) FROM game_source_metadata WHERE game_source_id=$1 AND locale='zh-cn' AND store_country='cn' AND section='details'", accepted.Source) == 1
 			})
 		}
 	}
-	assertIntakeHTTP(t, l.http, base, accepted.PublicID, 200, "Fable of the Foxes Revised", "狐狸寓言")
+	assertIntakeHTTP(t, l.http, base, accepted.PublicID, 404)
 	game, err := dbgen.New(pool).LockGame(ctx, *accepted.Game)
 	must(t, err)
-	_, err = catalogDB.EditGame(ctx, game.ID, game.Revision, catalog.GameInput{Editorial: catalog.Editorial{Localizations: []catalog.Localization{
+	game, err = catalogDB.EditGame(ctx, game.ID, game.Revision, catalog.GameInput{Editorial: catalog.Editorial{Localizations: []catalog.Localization{
 		{Locale: "en", Name: "Editorial English", Summary: "English review"},
 		{Locale: "zh", Name: "编辑译名", Summary: "中文介绍"},
 	}}})
+	must(t, err)
+	_, err = publishFixtureGame(t, catalogDB, game.PublicID, game.Revision)
 	must(t, err)
 	execSQL(t, remote, "UPDATE harvest.consumers SET reset_required=true,reset_reason='fixture' WHERE id=$1", consumer.ID)
 	expectEventually(t, 25*time.Second, "Consumer did not finish real 410 recovery", func() bool {
@@ -236,20 +234,6 @@ func TestGameIntakeHarvestD(t *testing.T) {
 		return scalar[string](t, pool, "SELECT profile->>'name' FROM game_intake_candidates WHERE id=$1", accepted.ID) == "Fable of the Foxes"
 	})
 	assertIntakeHTTP(t, l.http, base, accepted.PublicID, 200, "Editorial English", "编辑译名", "中文介绍")
-	decision := catalog.PublicationDecision{Actor: "fixture", Reason: "Fixture policy decision"}
-	must(t, s.RevokeSteamReview(ctx, first, decision))
-	assertIntakeHTTP(t, l.http, base, accepted.PublicID, 404)
-	assertNotPublic(t, ctx, catalogDB, accepted.PublicID)
-	must(t, s.ReviewSteam(ctx, first, "fixture.work-synopsis", "fixture.content-assessment"))
-	assertIntakeHTTP(t, l.http, base, accepted.PublicID, 404)
-	locked, err := dbgen.New(pool).LockGame(ctx, *accepted.Game)
-	must(t, err)
-	_, err = catalogDB.ChangeGamePublication(ctx, accepted.PublicID, locked.Revision, "clear_block", decision)
-	must(t, err)
-	for _, days := range []int32{31, 181, 365} {
-		execSQL(t, pool, "UPDATE game_intake_candidates SET profile_at=now()-make_interval(days=>$2),review_until=now()-make_interval(days=>$2) WHERE id=$1", accepted.ID, days)
-		assertIntakeHTTP(t, l.http, base, accepted.PublicID, 200, "Editorial English", "编辑译名")
-	}
 
 	run(t, dir, nil, "docker", "pause", redis)
 	t.Cleanup(func() { _ = exec.Command("docker", "unpause", redis).Run() })
@@ -290,7 +274,7 @@ func TestGameIntakeHarvestD(t *testing.T) {
 		must(t, err)
 		row := waitForIntake(t, s, pool, scenario.key, scenario.state, scenario.reason, true)
 		if scenario.key == "3000000002" && (row.GameState != "draft" || row.Observation == nil) {
-			t.Fatal("missing positive evidence should allow only a sourced draft")
+			t.Fatal("Steam intake should produce a sourced draft")
 		}
 		if scenario.key == "3000000002" {
 			assertNotPublic(t, ctx, catalogDB, row.PublicID)
@@ -318,7 +302,7 @@ func TestGameIntakeHarvestD(t *testing.T) {
 	count(t, remote, 1, "SELECT count(*) FROM harvest.observations WHERE id=$1 AND job_id<>$2 AND attempt_id<>$3", *unchanged.Observation, *unchanged.Job, *unchanged.Attempt)
 
 	testIntakeRelations(t, s, pool, catalogDB, accepted)
-	count(t, pool, 3, "SELECT count(*) FROM catalog_publication_decisions WHERE entity_id=$1 AND action IN ('publish','block','clear_block')", *accepted.Game)
+	count(t, pool, 1, "SELECT count(*) FROM catalog_publication_decisions WHERE entity_id=$1 AND action='publish'", *accepted.Game)
 	l.worker.stop()
 	l.plane.stop()
 	readAgedSteamGame(t, pool, catalogDB, accepted.PublicID, func() {
@@ -343,38 +327,24 @@ func TestGameIntakeHarvestD(t *testing.T) {
 func testIntakeRelations(t *testing.T, s *Intake, pool *pgxpool.Pool, editor *catalog.Service, first CandidateStatus) {
 	t.Helper()
 	ctx := t.Context()
-	if err := s.RecordRelation(ctx, "itch", "fox-studio/library", "steam", first.Key, "one.record", "one.record"); !errors.Is(err, ErrIntakeInput) {
-		t.Fatal("single-source relation accepted")
-	}
-	must(t, s.RecordRelation(ctx, "itch", "FOX-STUDIO/Library", "steam", first.Key, "simulated.itch-product", "simulated.steam-product"))
-	attached, err := s.Tick(ctx)
+	candidate := uuid.NewV7()
+	execSQL(t, pool, "INSERT INTO game_intake_candidates(id,platform_code,external_key,discovered_via,relation) VALUES($1,'itch_io','fox-studio/library','reviewed_link',jsonb_build_object('platform','steam','key',$2::text))", candidate, first.Key)
+	parked, err := s.Tick(ctx)
 	must(t, err)
-	if attached.State != "accepted" || attached.Reason != "related_source" || *attached.Game != *first.Game {
-		t.Fatalf("reciprocal product links did not attach to the same work: %+v", attached)
+	if parked.ID != candidate || parked.State != "deferred" || parked.Reason != "related_source_unavailable" || parked.Game != nil {
+		t.Fatalf("unresolved cross-platform identity was attached: %+v", parked)
 	}
-	must(t, s.RevokeRelation(ctx, "itch", "fox-studio/library"))
-	count(t, pool, 1, "SELECT count(*) FROM game_sources WHERE id=$1 AND game_id=$2 AND NOT active", attached.Source, first.Game)
-	count(t, pool, 1, "SELECT count(*) FROM game_intake_candidates WHERE id=$1 AND state='rejected' AND relation_attached AND relation<>'{}'", attached.ID)
-
 	curated := catalog.Editorial{Localizations: []catalog.Localization{{Locale: "en", Name: "Another curated work"}}}
 	g, err := editor.CreateGame(ctx, catalog.GameInput{Editorial: curated, Sources: []catalog.Source{
 		{PlatformCode: "itch_io", ExternalKey: "sample/curated", SourceURL: "https://sample.itch.io/curated"},
 		{PlatformCode: "steam", ExternalKey: "42"},
 	}})
 	must(t, err)
-	g, err = editor.SetGameStatus(ctx, g.ID, g.Revision, catalog.Published)
-	must(t, err)
 	_, err = s.SubmitSteam(ctx, "42", "operator")
 	must(t, err)
 	existing := waitForIntake(t, s, pool, "42", "accepted", "existing_source", true)
 	if *existing.Game != g.ID || existing.PublicID != g.PublicID || existing.Job != nil {
 		t.Fatal("existing source was reprovisioned")
-	}
-	must(t, s.RecordRelation(ctx, "itch", "sample/curated", "steam", first.Key, "simulated.itch-curated", "simulated.steam-curated"))
-	suggestion, err := s.Tick(ctx)
-	must(t, err)
-	if suggestion.Reason != "merge_suggested" || suggestion.PublicID != g.PublicID {
-		t.Fatalf("two published Games did not preserve their identities: %+v", suggestion)
 	}
 	_, err = editor.CreateGame(ctx, catalog.GameInput{Editorial: curated, Sources: []catalog.Source{{PlatformCode: "steam", ExternalKey: first.Key}}})
 	if !errors.Is(err, catalog.ErrConflict) {

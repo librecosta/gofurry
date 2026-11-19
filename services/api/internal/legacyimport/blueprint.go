@@ -335,7 +335,7 @@ func build(ctx context.Context, bundle *legacyseed.Bundle, ds []decision, accept
 					it.LifecycleIssue = "collection_archive_evidence_unresolved"
 				}
 			}
-			if r.publish != nil {
+			if r.publish != nil && table != games {
 				if it.Adult || it.Archive || it.LifecycleIssue != "" || len(it.Editorial.Localizations) == 0 ||
 					table == sites && !slices.ContainsFunc(it.Addresses, func(a catalog.Address) bool { return a.Kind == "primary" }) {
 					return b, errors.New("publication approval contradicts seed or required presentation")

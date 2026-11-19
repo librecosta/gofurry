@@ -7,17 +7,17 @@ export const gamesFixtureSQL = (region) => {
   const title = region === 'CN' ? 'Fox Atlas' : 'Fox Atlas International'
   return `
 WITH rows AS (
- INSERT INTO games (id,public_id,slug,status,published_at,first_published_at,publication_blocked)
+ INSERT INTO games (id,public_id,slug,status,published_at,first_published_at,content_rating)
  SELECT uuidv7(),'2'||lpad(n::text,15,'0'),'game-'||n,
-   CASE WHEN n=30 THEN 'draft' ELSE 'published' END,
+   CASE WHEN n>=29 THEN 'draft' ELSE 'published' END,
    CASE WHEN n<>30 THEN statement_timestamp()-make_interval(hours=>n) END,
-   CASE WHEN n<>30 THEN statement_timestamp()-make_interval(hours=>n) END,n=29
+   CASE WHEN n<>30 THEN statement_timestamp()-make_interval(hours=>n) END,CASE WHEN n>=29 THEN 'unreviewed' ELSE 'sfw' END
  FROM generate_series(0,30) n RETURNING id,public_id
 )
 INSERT INTO game_localizations (game_id,locale,name,summary)
 SELECT id,'en',CASE right(public_id,2)::int
  WHEN 0 THEN '${title}' WHEN 1 THEN 'Fox Signal' WHEN 2 THEN 'Fox Cartographer'
- WHEN 29 THEN 'Blocked Fox' WHEN 30 THEN 'Draft Fox' ELSE 'Fox Record '||right(public_id,2) END,
+ WHEN 29 THEN 'Previously Public Fox' WHEN 30 THEN 'Draft Fox' ELSE 'Fox Record '||right(public_id,2) END,
  'An anthropomorphic field guide.' FROM rows;
 
 INSERT INTO game_localizations SELECT id,'zh','狐狸图册','双语合集的第一款游戏。' FROM games WHERE public_id='${collectionGame}';

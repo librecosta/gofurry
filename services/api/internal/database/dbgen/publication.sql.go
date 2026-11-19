@@ -13,18 +13,20 @@ import (
 )
 
 const addCatalogPublicationDecision = `-- name: AddCatalogPublicationDecision :exec
-INSERT INTO catalog_publication_decisions (id,entity_kind,entity_id,revision,action,actor,reason)
-VALUES ($1,$2,$3,$4,$5,$6,$7)
+INSERT INTO catalog_publication_decisions (id,entity_kind,entity_id,revision,action,actor,reason,management_request_id,content_rating)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
 `
 
 type AddCatalogPublicationDecisionParams struct {
-	ID         uuid.UUID `json:"id"`
-	EntityKind string    `json:"entity_kind"`
-	EntityID   uuid.UUID `json:"entity_id"`
-	Revision   int64     `json:"revision"`
-	Action     string    `json:"action"`
-	Actor      string    `json:"actor"`
-	Reason     string    `json:"reason"`
+	ID                  uuid.UUID   `json:"id"`
+	EntityKind          string      `json:"entity_kind"`
+	EntityID            uuid.UUID   `json:"entity_id"`
+	Revision            int64       `json:"revision"`
+	Action              string      `json:"action"`
+	Actor               string      `json:"actor"`
+	Reason              string      `json:"reason"`
+	ManagementRequestID *uuid.UUID  `json:"management_request_id"`
+	ContentRating       pgtype.Text `json:"content_rating"`
 }
 
 func (q *Queries) AddCatalogPublicationDecision(ctx context.Context, arg AddCatalogPublicationDecisionParams) error {
@@ -36,6 +38,8 @@ func (q *Queries) AddCatalogPublicationDecision(ctx context.Context, arg AddCata
 		arg.Action,
 		arg.Actor,
 		arg.Reason,
+		arg.ManagementRequestID,
+		arg.ContentRating,
 	)
 	return err
 }
@@ -83,7 +87,7 @@ func (q *Queries) LegacySitePolicyPending(ctx context.Context) (int64, error) {
 }
 
 const lockGamePublicID = `-- name: LockGamePublicID :one
-SELECT id, public_id, slug, status, revision, created_at, updated_at, published_at, archived_at, intake_managed, intake_display_source, publication_blocked, first_published_at FROM games WHERE public_id=$1 FOR UPDATE
+SELECT id, public_id, slug, status, revision, created_at, updated_at, published_at, archived_at, intake_display_source, first_published_at, content_rating FROM games WHERE public_id=$1 FOR UPDATE
 `
 
 func (q *Queries) LockGamePublicID(ctx context.Context, publicID string) (Game, error) {
@@ -99,10 +103,9 @@ func (q *Queries) LockGamePublicID(ctx context.Context, publicID string) (Game, 
 		&i.UpdatedAt,
 		&i.PublishedAt,
 		&i.ArchivedAt,
-		&i.IntakeManaged,
 		&i.IntakeDisplaySource,
-		&i.PublicationBlocked,
 		&i.FirstPublishedAt,
+		&i.ContentRating,
 	)
 	return i, err
 }
@@ -147,47 +150,6 @@ func (q *Queries) PromoteLegacySitePolicy(ctx context.Context, batchSize int32) 
 	return items, nil
 }
 
-const publishedGamesMissingPresentation = `-- name: PublishedGamesMissingPresentation :one
-SELECT count(*) FROM games g WHERE g.status='published'
- AND NOT EXISTS (SELECT 1 FROM game_localizations l WHERE l.game_id=g.id)
- AND NOT EXISTS (SELECT 1 FROM game_approved_presentations p WHERE p.game_id=g.id)
-`
-
-func (q *Queries) PublishedGamesMissingPresentation(ctx context.Context) (int64, error) {
-	row := q.db.QueryRow(ctx, publishedGamesMissingPresentation)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
-const restoreGamePublication = `-- name: RestoreGamePublication :one
-UPDATE games SET status='published',archived_at=NULL,published_at=coalesce(published_at,transaction_timestamp()),
- first_published_at=coalesce(first_published_at,published_at,transaction_timestamp()),
- revision=revision+1,updated_at=transaction_timestamp()
-WHERE id=$1 RETURNING id, public_id, slug, status, revision, created_at, updated_at, published_at, archived_at, intake_managed, intake_display_source, publication_blocked, first_published_at
-`
-
-func (q *Queries) RestoreGamePublication(ctx context.Context, id uuid.UUID) (Game, error) {
-	row := q.db.QueryRow(ctx, restoreGamePublication, id)
-	var i Game
-	err := row.Scan(
-		&i.ID,
-		&i.PublicID,
-		&i.Slug,
-		&i.Status,
-		&i.Revision,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.PublishedAt,
-		&i.ArchivedAt,
-		&i.IntakeManaged,
-		&i.IntakeDisplaySource,
-		&i.PublicationBlocked,
-		&i.FirstPublishedAt,
-	)
-	return i, err
-}
-
 const restoreSitePublication = `-- name: RestoreSitePublication :one
 UPDATE sites SET status='published',archived_at=NULL,published_at=coalesce(published_at,transaction_timestamp()),
  revision=revision+1,updated_at=transaction_timestamp()
@@ -220,28 +182,6 @@ func (q *Queries) RestoreSitePublication(ctx context.Context, id uuid.UUID) (Sit
 	return i, err
 }
 
-const saveApprovedGamePresentation = `-- name: SaveApprovedGamePresentation :exec
-INSERT INTO game_approved_presentations (game_id,locale,name,summary,game_source_id,observation_id,observed_at,approval,steam_store_country,steam_egress_region)
-SELECT p.game_id,p.locale,p.name,p.summary,p.game_source_id,p.observation_id,p.observed_at,p.approval,
- CASE WHEN i.egress_region~'^[a-z0-9][a-z0-9_-]{0,34}$' THEN 'us' END,
- CASE WHEN i.egress_region~'^[a-z0-9][a-z0-9_-]{0,34}$' THEN i.egress_region END
-FROM game_intake_presentation($1::uuid,false) AS p(game_id,locale,name,summary,game_source_id,observation_id,observed_at,approval)
-LEFT JOIN game_sources s ON s.id=p.game_source_id AND s.game_id=p.game_id AND s.platform_code='steam'
-LEFT JOIN game_intake_candidates i ON i.platform_code='steam' AND i.external_key=s.external_key AND i.game_source_id=p.game_source_id AND p.locale='en'
-ON CONFLICT (game_id,locale) DO UPDATE SET
- name=excluded.name,summary=excluded.summary,observation_id=excluded.observation_id,observed_at=excluded.observed_at,
- approval=excluded.approval
-WHERE game_approved_presentations.game_source_id=excluded.game_source_id
- AND game_approved_presentations.observed_at<excluded.observed_at
- AND (game_approved_presentations.name,game_approved_presentations.summary)
-     IS DISTINCT FROM (excluded.name,excluded.summary)
-`
-
-func (q *Queries) SaveApprovedGamePresentation(ctx context.Context, gameID uuid.UUID) error {
-	_, err := q.db.Exec(ctx, saveApprovedGamePresentation, gameID)
-	return err
-}
-
 const saveSiteTechnology = `-- name: SaveSiteTechnology :exec
 SELECT save_site_technology($1::uuid,$2::uuid,$3::text)
 `
@@ -255,35 +195,4 @@ type SaveSiteTechnologyParams struct {
 func (q *Queries) SaveSiteTechnology(ctx context.Context, arg SaveSiteTechnologyParams) error {
 	_, err := q.db.Exec(ctx, saveSiteTechnology, arg.Generation, arg.SourceID, arg.ScopeKey)
 	return err
-}
-
-const setGamePublicationBlock = `-- name: SetGamePublicationBlock :one
-UPDATE games SET publication_blocked=$2,revision=revision+1,updated_at=transaction_timestamp()
-WHERE id=$1 RETURNING id, public_id, slug, status, revision, created_at, updated_at, published_at, archived_at, intake_managed, intake_display_source, publication_blocked, first_published_at
-`
-
-type SetGamePublicationBlockParams struct {
-	ID                 uuid.UUID `json:"id"`
-	PublicationBlocked bool      `json:"publication_blocked"`
-}
-
-func (q *Queries) SetGamePublicationBlock(ctx context.Context, arg SetGamePublicationBlockParams) (Game, error) {
-	row := q.db.QueryRow(ctx, setGamePublicationBlock, arg.ID, arg.PublicationBlocked)
-	var i Game
-	err := row.Scan(
-		&i.ID,
-		&i.PublicID,
-		&i.Slug,
-		&i.Status,
-		&i.Revision,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.PublishedAt,
-		&i.ArchivedAt,
-		&i.IntakeManaged,
-		&i.IntakeDisplaySource,
-		&i.PublicationBlocked,
-		&i.FirstPublishedAt,
-	)
-	return i, err
 }

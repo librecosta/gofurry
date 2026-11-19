@@ -53,8 +53,8 @@ func (q *Queries) GameInsightCoverage(ctx context.Context, arg GameInsightCovera
 }
 
 const gameInsightSources = `-- name: GameInsightSources :many
-SELECT s.id,s.external_key FROM games g JOIN game_sources s ON s.game_id=g.id AND s.platform_code='steam'
-WHERE g.public_id=$1 AND g.status='published' AND NOT g.publication_blocked
+SELECT s.id,s.external_key FROM game_channel_public g JOIN game_sources s ON s.game_id=g.id AND s.platform_code='steam'
+WHERE g.public_id=$1
 ORDER BY (s.id=g.intake_display_source) DESC NULLS LAST,s.active DESC,s.external_key LIMIT 16
 `
 
@@ -230,7 +230,7 @@ func (q *Queries) GamePriceSeries(ctx context.Context, arg GamePriceSeriesParams
 
 const gameProfileNews = `-- name: GameProfileNews :many
 WITH work AS MATERIALIZED (
- SELECT id FROM games WHERE public_id=$5::text AND status='published' AND NOT publication_blocked
+ SELECT id FROM game_channel_public WHERE public_id=$5::text
 ), sources AS MATERIALIZED (
  SELECT s.id,s.external_key FROM game_sources s JOIN work w ON w.id=s.game_id
  WHERE s.platform_code='steam' AND ($6::text='' OR s.external_key=$6::text)
@@ -314,7 +314,7 @@ func (q *Queries) GameProfileNews(ctx context.Context, arg GameProfileNewsParams
 
 const publicGameIdentity = `-- name: PublicGameIdentity :one
 SELECT ((transaction_timestamp() AT TIME ZONE 'UTC')::date)::text AS today
-FROM games WHERE public_id=$1 AND status='published' AND NOT publication_blocked
+FROM game_channel_public WHERE public_id=$1
 `
 
 func (q *Queries) PublicGameIdentity(ctx context.Context, publicID string) (string, error) {
@@ -326,7 +326,7 @@ func (q *Queries) PublicGameIdentity(ctx context.Context, publicID string) (stri
 
 const relatedGameProfiles = `-- name: RelatedGameProfiles :many
 WITH current_game AS MATERIALIZED (
- SELECT id FROM games WHERE public_id=$4::text AND status='published' AND NOT publication_blocked
+ SELECT id FROM game_channel_public WHERE public_id=$2::text
 ), genre_keys AS (
  SELECT coalesce(array_agg(DISTINCT genre),ARRAY[]::text[]) AS genres FROM current_game g
  JOIN game_channel_steam s ON s.game_id=g.id AND s.section='details'
@@ -348,15 +348,13 @@ WITH current_game AS MATERIALIZED (
  FROM matches m JOIN game_channel_public g ON g.id=m.game_id GROUP BY g.id,g.public_id,g.slug,g.intake_display_source
  ORDER BY score DESC,g.public_id LIMIT 6
 )
-SELECT g.public_id,g.slug,(game_presentation(g.id,g.intake_display_source)->'localizations')::jsonb AS localizations,
- coalesce(game_channel_cover(g.id,g.intake_display_source,$1::text,$2::text,$3::text),'')::text AS cover
+SELECT g.public_id,g.slug,game_published_text(g.id)::jsonb AS localizations,
+ coalesce(game_published_cover(g.id,$1::text),'')::text AS cover
 FROM picked g ORDER BY g.score DESC,g.public_id
 `
 
 type RelatedGameProfilesParams struct {
 	Locale   string `json:"locale"`
-	Country  string `json:"country"`
-	Egress   string `json:"egress"`
 	PublicID string `json:"public_id"`
 }
 
@@ -368,12 +366,7 @@ type RelatedGameProfilesRow struct {
 }
 
 func (q *Queries) RelatedGameProfiles(ctx context.Context, arg RelatedGameProfilesParams) ([]RelatedGameProfilesRow, error) {
-	rows, err := q.db.Query(ctx, relatedGameProfiles,
-		arg.Locale,
-		arg.Country,
-		arg.Egress,
-		arg.PublicID,
-	)
+	rows, err := q.db.Query(ctx, relatedGameProfiles, arg.Locale, arg.PublicID)
 	if err != nil {
 		return nil, err
 	}

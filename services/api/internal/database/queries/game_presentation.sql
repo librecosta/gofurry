@@ -1,14 +1,14 @@
 -- name: ReadGamePresentation :one
 WITH work AS MATERIALIZED (
- SELECT * FROM games WHERE public_id=sqlc.arg(public_id) AND status='published' AND NOT publication_blocked
+ SELECT * FROM game_channel_public WHERE public_id=sqlc.arg(public_id)
 ), sources AS MATERIALIZED (
  SELECT s.* FROM game_sources s JOIN work g ON s.game_id=g.id
  ORDER BY s.active DESC,s.platform_code,s.external_key LIMIT 16
 )
-SELECT g.public_id,g.slug,g.intake_display_source AS preferred_source,(game_presentation(g.id,g.intake_display_source)->'localizations')::jsonb AS localizations,
- coalesce((SELECT jsonb_agg(jsonb_build_object('locale',a.locale,'game_source_id',a.game_source_id,'observation_id',a.observation_id,
-  'observed_at',a.observed_at,'store_country',a.steam_store_country,'egress_region',a.steam_egress_region)
-  ORDER BY a.locale) FROM game_approved_presentations a WHERE a.game_id=g.id),'[]')::jsonb AS approved,
+SELECT g.public_id,g.slug,g.intake_display_source AS preferred_source,game_published_text(g.id)::jsonb AS localizations,
+ coalesce((SELECT jsonb_agg(jsonb_build_object('locale',p.locale,'source_id',p.media_source_id,'media',p.media,
+  'observed_at',p.media_observed_at,'store_country',p.media_store_country,'cover_url',p.cover_url) ORDER BY p.locale)
+  FROM game_published_localizations p WHERE p.game_id=g.id),'[]')::jsonb AS presentation,
  coalesce((SELECT jsonb_agg(jsonb_build_object(
   'id',s.id,'platform_code',s.platform_code,'external_key',s.external_key,'source_url',nullif(s.source_url,''),'active',s.active,
   'metadata',(SELECT coalesce(jsonb_agg(jsonb_build_object('locale',m.locale,'store_country',m.store_country,'egress_region',m.egress_region,

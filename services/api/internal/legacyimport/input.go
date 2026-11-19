@@ -25,7 +25,7 @@ import (
 )
 
 const deployment = "gofurry_nav_site_cn"
-const schemaVersion = 202611150003
+const schemaVersion = 202611200001
 
 const BootstrapDeployment = deployment
 const BootstrapGooseVersion = schemaVersion
@@ -192,7 +192,7 @@ func (c Config) guard(ctx context.Context, conn rowQuerier) error {
 		AND (SELECT is_applied FROM public.goose_db_version ORDER BY id DESC LIMIT 1),false)`,
 		c.Database.Name, "gofurry-d5-b1:"+c.Isolation, int64(schemaVersion)).Scan(&allowed)
 	if err != nil || !allowed {
-		return errors.New("target must be the marked PostgreSQL 18 database at the D5-B1 Goose version")
+		return errors.New("target must be the marked PostgreSQL 18 database at the supported GoFurry Goose version")
 	}
 	return nil
 }

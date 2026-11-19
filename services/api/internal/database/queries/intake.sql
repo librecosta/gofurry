@@ -59,16 +59,16 @@ WHERE id=$1 AND lease_id=$2 AND job_id=$3 AND lease_until>statement_timestamp() 
 UPDATE game_intake_candidates SET state=sqlc.arg(state),reason=sqlc.arg(reason),
  lease_id=NULL,lease_until=NULL,
  next_at=CASE WHEN sqlc.arg(delay_seconds)::integer>0 THEN statement_timestamp()+make_interval(secs=>sqlc.arg(delay_seconds)::integer) END,
- failures=sqlc.arg(failures),updated_at=statement_timestamp(),decided_at=statement_timestamp(),decision_version=1
+ failures=sqlc.arg(failures),updated_at=statement_timestamp(),decided_at=statement_timestamp()
 WHERE id=sqlc.arg(id) AND lease_id=sqlc.arg(lease_id) AND lease_until>statement_timestamp();
 
 -- name: SaveIntakeDecision :exec
 UPDATE game_intake_candidates SET state='accepted',reason=sqlc.arg(reason),
- game_id=sqlc.arg(game_id),game_source_id=sqlc.arg(game_source_id),relation_attached=sqlc.arg(relation_attached),
+ game_id=sqlc.arg(game_id),game_source_id=sqlc.arg(game_source_id),
  attempt_id=sqlc.arg(attempt_id),observation_id=sqlc.arg(observation_id),observation_hash=sqlc.arg(observation_hash),
  profile_scope_key=sqlc.arg(profile_scope_key),profile=sqlc.arg(profile),
  profile_at=sqlc.arg(profile_at),profile_observation_id=sqlc.arg(observation_id),work_title=sqlc.arg(work_title),
- lease_id=NULL,lease_until=NULL,next_at=NULL,failures=0,decision_version=1,decided_at=statement_timestamp(),updated_at=statement_timestamp()
+ lease_id=NULL,lease_until=NULL,next_at=NULL,failures=0,decided_at=statement_timestamp(),updated_at=statement_timestamp()
 WHERE id=sqlc.arg(id);
 
 -- name: NoteIntakeObservation :exec
@@ -86,49 +86,20 @@ SELECT s.* FROM game_sources s WHERE s.platform_code='itch_io' AND lower(btrim(s
 INSERT INTO game_sources (id,game_id,platform_code,external_key,source_url) VALUES ($1,$2,$3,$4,$5)
 ON CONFLICT (platform_code,external_key) DO NOTHING RETURNING *;
 
--- name: IntakeSourceCapacity :one
-SELECT count(*)<16 FROM game_sources WHERE game_id=$1 AND active;
-
--- name: PickIntakeSource :exec
-UPDATE games SET intake_display_source=coalesce(intake_display_source,$2) WHERE id=$1;
-
 -- name: IntakeTitleConflict :one
 SELECT (
  EXISTS (SELECT 1 FROM game_intake_candidates WHERE state='accepted' AND work_title<>'' AND work_title=sqlc.arg(title))
  OR EXISTS (SELECT 1 FROM game_localizations WHERE lower(btrim(name))=sqlc.arg(title))
 )::boolean;
 
--- name: PutIntakeReview :exec
-UPDATE game_intake_candidates SET review=$2,review_revoked=false,updated_at=statement_timestamp()
-WHERE id=$1;
-
--- name: RevokeIntakeReview :exec
-UPDATE game_intake_candidates SET review_revoked=true,updated_at=statement_timestamp() WHERE id=$1;
-
 -- name: WakeIntake :exec
 UPDATE game_intake_candidates SET state='discovered',reason='',next_at=statement_timestamp(),failures=0,updated_at=statement_timestamp()
 WHERE id=$1 AND state='deferred' AND next_at IS NULL;
 
 -- name: DismissIntake :execrows
-UPDATE game_intake_candidates SET state='rejected',reason='operator_dismissed',decision_version=1,
+UPDATE game_intake_candidates SET state='rejected',reason='operator_dismissed',
  next_at=NULL,decided_at=statement_timestamp(),updated_at=statement_timestamp()
 WHERE id=$1 AND state IN ('discovered','deferred');
-
--- name: SaveIntakeRelation :exec
-UPDATE game_intake_candidates SET relation=$2,updated_at=statement_timestamp() WHERE id=$1;
-
--- name: NoteIntakeConflict :exec
-UPDATE game_intake_candidates SET reason='merge_suggested',decided_at=statement_timestamp(),updated_at=statement_timestamp() WHERE id=$1;
-
--- name: RevokeIntakeRelation :exec
-UPDATE game_intake_candidates SET state='rejected',reason='relation_revoked',next_at=NULL,decided_at=statement_timestamp(),updated_at=statement_timestamp()
-WHERE id=$1;
-
--- name: DeactivateIntakeSource :exec
-UPDATE game_sources SET active=false WHERE id=$1 AND game_id=$2;
-
--- name: MarkIntakePublished :exec
-UPDATE game_intake_candidates SET published_at=statement_timestamp(),updated_at=statement_timestamp() WHERE id=$1;
 
 -- name: FindIntakePlan :one
 SELECT p.id FROM collection_plans p
@@ -142,24 +113,18 @@ GROUP BY i.state,i.reason,g.status ORDER BY i.state,i.reason,g.status;
 
 -- name: IntakeGameStatus :one
 SELECT g.public_id,g.revision,
- (CASE WHEN g.status='published' AND g.publication_blocked
-   THEN 'hidden' ELSE g.status END)::text AS game_status
+ g.status::text AS game_status
 FROM games g WHERE g.id=$1;
-
--- name: WakeRelatedIntake :exec
-UPDATE game_intake_candidates SET next_at=statement_timestamp(),updated_at=statement_timestamp()
-WHERE state='deferred' AND reason='related_source_unavailable' AND next_at IS NULL
- AND relation->>'platform'=sqlc.arg(platform)::text AND relation->>'key'=sqlc.arg(source_key)::text;
 
 -- name: PruneIntakeAbandoned :execrows
 DELETE FROM game_intake_candidates WHERE id IN (
  SELECT id FROM game_intake_candidates
  WHERE state='deferred' AND next_at IS NULL AND job_started_at IS NULL AND target_id IS NULL
-   AND review='{}' AND relation='{}' AND updated_at<statement_timestamp()-interval '30 days'
+   AND relation='{}' AND updated_at<statement_timestamp()-interval '30 days'
  ORDER BY updated_at LIMIT 128 FOR UPDATE SKIP LOCKED
 );
 
--- name: RefreshIntakeProfiles :many
+-- name: RefreshIntakeProfiles :exec
 WITH newer AS (
  SELECT i.id,c.observation_id,c.state,c.data,c.observed_at
  FROM collection_current c JOIN collection_sources s ON s.id=c.source_id
@@ -172,7 +137,7 @@ WITH newer AS (
     AND (sqlc.narg(scope_key)::text IS NULL OR c.scope_key=sqlc.narg(scope_key))
     AND c.observed_at>coalesce(i.profile_at,'-infinity')
     AND (c.state='withdrawn' OR c.data->>'type' IS DISTINCT FROM 'game'
-      OR (c.data->>'name'<>'' AND c.data->>'description'<>''))
+      OR (c.data->>'name'<>''))
     AND EXISTS (
       SELECT 1 FROM collection_bindings b JOIN collection_plan_bindings m ON m.binding_id=b.id AND m.source_id=b.source_id
       JOIN collection_plans p ON p.id=m.plan_id AND p.source_id=b.source_id
@@ -187,5 +152,7 @@ UPDATE game_intake_candidates i SET
  profile_at=n.observed_at,
  profile_observation_id=CASE WHEN n.state='present' AND n.data->>'type'='game' THEN n.observation_id END,
  updated_at=statement_timestamp()
-FROM newer n WHERE i.id=n.id AND n.observed_at>coalesce(i.profile_at,'-infinity')
-RETURNING i.id,i.game_id,i.reason;
+FROM newer n WHERE i.id=n.id AND n.observed_at>coalesce(i.profile_at,'-infinity');
+
+-- name: PickIntakeSource :exec
+UPDATE games SET intake_display_source=coalesce(intake_display_source,$2) WHERE id=$1;

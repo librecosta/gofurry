@@ -131,9 +131,6 @@ func (e *engine) create(q *dbgen.Queries, it intent) (uuid.UUID, error) {
 		if err != nil {
 			return uuid.UUID{}, err
 		}
-		if it.Adult {
-			_, err = catalog.SetGameBlock(e.ctx, q, row, true, catalog.PublicationDecision{Actor: "legacy_import", Reason: "D5-B1 legacy adult evidence " + e.planSHA})
-		}
 		return row.ID, err
 	case collections:
 		record, err := bound.CreateGameCollection(e.ctx, it.Editorial)
@@ -273,9 +270,6 @@ func (e *engine) lifecycle(bound *catalog.Service, it intent, state targetState)
 			action = "publish"
 		}
 		_, err := bound.ChangeSitePublication(e.ctx, state.PublicID, state.Revision, action, it.Publish, d)
-		return err
-	case games:
-		_, err := bound.PublishManagementGame(e.ctx, state.PublicID, state.Revision, d)
 		return err
 	case collections:
 		status := catalog.Archived

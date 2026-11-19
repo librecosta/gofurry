@@ -26,11 +26,11 @@ func TestGameChannelScale(t *testing.T) {
 	prior := 0
 	for _, size := range []int{100, 1000, 10000} {
 		execSQL(t, pool, `WITH rows AS (
-   INSERT INTO games(id,public_id,slug,status,first_published_at,published_at)
-   SELECT uuidv7(),'3'||lpad(n::text,15,'0'),'scale-'||n,'published',
+   INSERT INTO games(id,public_id,slug,status,content_rating,first_published_at,published_at)
+   SELECT uuidv7(),'3'||lpad(n::text,15,'0'),'scale-'||n,'published','sfw',
     now()-make_interval(secs=>n),now()-make_interval(secs=>n)
    FROM generate_series($1::int,$2::int) n RETURNING id,public_id)
-   INSERT INTO game_localizations SELECT id,'en','Scale Game '||public_id,'Discovered catalog fixture' FROM rows`, prior+1, size)
+   INSERT INTO game_published_localizations(game_id,locale,name,summary,revision) SELECT id,'en','Scale Game '||public_id,'Discovered catalog fixture',1 FROM rows`, prior+1, size)
 		execSQL(t, pool, `INSERT INTO game_sources(id,game_id,platform_code,external_key,source_url)
    SELECT uuidv7(),g.id,'steam',(3200000000+right(g.public_id,6)::bigint)::text,
      'https://store.steampowered.com/app/'||(3200000000+right(g.public_id,6)::bigint)||'/'
@@ -42,7 +42,7 @@ func TestGameChannelScale(t *testing.T) {
     uuidv7(),repeat('b',64),now(),now(),'{"name":"Scale fixture","developers":["Burrow Studio"],"genres":[{"id":"25"}],
      "platforms":{"windows":true},"release":{"coming_soon":true,"date_text":"Q3 2027"}}'
    FROM game_sources WHERE external_key::bigint BETWEEN 3200000000+$1::int AND 3200000000+$2::int`, prior+1, size)
-		execSQL(t, pool, "ANALYZE games; ANALYZE game_sources; ANALYZE game_localizations; ANALYZE game_channel_steam")
+		execSQL(t, pool, "ANALYZE games; ANALYZE game_sources; ANALYZE game_published_localizations; ANALYZE game_channel_steam")
 		heading := catalog.Editorial{Slug: "scale", Localizations: []catalog.Localization{{Locale: "en", Name: "Scale Collection"}}}
 		collection, err := editor.CreateGameCollection(ctx, heading)
 		must(t, err)
@@ -160,7 +160,7 @@ func TestGameCollectionLifecycle(t *testing.T) {
 	createGame := func(name string) string {
 		row, err := s.CreateGame(ctx, catalog.GameInput{Editorial: catalog.Editorial{Localizations: []catalog.Localization{{Locale: "en", Name: name}}}})
 		must(t, err)
-		row, err = s.SetGameStatus(ctx, row.ID, row.Revision, catalog.Published)
+		_, err = publishFixtureGame(t, s, row.PublicID, row.Revision)
 		must(t, err)
 		return row.PublicID
 	}

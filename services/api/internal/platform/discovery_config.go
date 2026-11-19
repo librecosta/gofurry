@@ -6,25 +6,17 @@ import (
 )
 
 type DiscoveryConfig struct {
-	Enabled          bool               `mapstructure:"enabled"`
-	Namespace        string             `mapstructure:"namespace"`
-	ReaderToken      string             `mapstructure:"reader_token" json:"-"`
-	WriterToken      string             `mapstructure:"writer_token" json:"-"`
-	PollInterval     time.Duration      `mapstructure:"poll_interval"`
-	ScanInterval     time.Duration      `mapstructure:"scan_interval"`
-	PageSize         int32              `mapstructure:"page_size"`
-	JobsPerDay       int32              `mapstructure:"jobs_per_day"`
-	CandidatesPerDay int32              `mapstructure:"candidates_per_day"`
-	ExplorePerDay    int32              `mapstructure:"explore_per_day"`
-	Seeds            []uint32           `mapstructure:"seeds"`
-	AI               *DiscoveryAIConfig `mapstructure:"ai" json:"-"`
-}
-
-type DiscoveryAIConfig struct {
-	URL         string `mapstructure:"url"`
-	Token       string `mapstructure:"token" json:"-"`
-	Model       string `mapstructure:"model"`
-	CallsPerDay int32  `mapstructure:"calls_per_day"`
+	Enabled          bool          `mapstructure:"enabled"`
+	Namespace        string        `mapstructure:"namespace"`
+	ReaderToken      string        `mapstructure:"reader_token" json:"-"`
+	WriterToken      string        `mapstructure:"writer_token" json:"-"`
+	PollInterval     time.Duration `mapstructure:"poll_interval"`
+	ScanInterval     time.Duration `mapstructure:"scan_interval"`
+	PageSize         int32         `mapstructure:"page_size"`
+	JobsPerDay       int32         `mapstructure:"jobs_per_day"`
+	CandidatesPerDay int32         `mapstructure:"candidates_per_day"`
+	ExplorePerDay    int32         `mapstructure:"explore_per_day"`
+	Seeds            []uint32      `mapstructure:"seeds"`
 }
 
 func (c *Config) validateDiscovery(h *HarvestConfig) error {
@@ -61,14 +53,6 @@ func (c *Config) validateDiscovery(h *HarvestConfig) error {
 	for _, key := range d.Seeds {
 		if key == 0 {
 			return errors.New("invalid harvest discovery seed")
-		}
-	}
-	if a := d.AI; a != nil {
-		if !validServiceOrigin(a.URL) {
-			return errors.New("discovery.ai.url requires an HTTPS or private HTTP origin")
-		}
-		if !harvestToken.MatchString(a.Token) || !harvestNamespace.MatchString(a.Model) || a.CallsPerDay < 1 || a.CallsPerDay > 64 {
-			return errors.New("discovery.ai requires an explicit Gateway token, logical model and daily budget")
 		}
 	}
 	return nil

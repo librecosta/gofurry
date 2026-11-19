@@ -56,6 +56,12 @@ func failure(err error) error {
 	switch {
 	case err == nil:
 		return nil
+	case errors.Is(err, catalog.ErrGamePublicationIdentity):
+		return fiber.ErrForbidden
+	case errors.Is(err, catalog.ErrGamePublicationText), errors.Is(err, catalog.ErrGamePublicationReview), errors.Is(err, catalog.ErrGamePublicationPolicy):
+		return fiber.NewError(fiber.StatusUnprocessableEntity, err.Error())
+	case errors.Is(err, catalog.ErrGamePreviewChanged):
+		return fiber.NewError(fiber.StatusConflict, err.Error())
 	case errors.Is(err, catalog.ErrInvalid), errors.Is(err, collection.ErrIntakeInput):
 		return fiber.ErrBadRequest
 	case catalog.ManagementMissing(err):

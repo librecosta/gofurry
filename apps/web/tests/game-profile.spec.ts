@@ -16,9 +16,11 @@ test('scoped profile, official news keyset and authenticated observation semanti
   const profile = await response.json()
   expect(profile.sources).toHaveLength(3)
   expect(profile.sources.find((source: { external_key: string }) => source.external_key === app)).toMatchObject({
-    details: { description: expect.stringContaining('forgotten coastline'), publishers: ['Pine Press'] },
+    details: { publishers: ['Pine Press'] },
     media: { screenshots: expect.arrayContaining([expect.stringContaining('harbor.jpg')]), movies: [expect.stringContaining('trailer.mp4')] },
   })
+  expect(profile.localizations).toContainEqual(expect.objectContaining({ locale: 'en', summary: expect.stringContaining('forgotten coastline') }))
+  expect(profile.sources.find((source: { external_key: string }) => source.external_key === app).details.description).toBeUndefined()
   expect(JSON.stringify(profile)).not.toMatch(/untrusted\.example|script\.html|content_hash|binding_id|target_id/)
   expect(profile.related.map((row: { public_id: string }) => row.public_id)).toEqual(['2000000000000001','2000000000000002'])
   expect(profile.news.items).toHaveLength(6)
@@ -89,7 +91,7 @@ test('keyboard media, CDN failure, lazy insights and gap-aware chart', async ({ 
   })
   await page.goto(cn + '/en' + path)
   await expect(page.getByRole('heading', { name: 'Fox Atlas', level: 1 })).toBeVisible()
-  await expect(page.getByText('The foxes chart a forgotten coastline.', { exact: false })).toBeVisible()
+  await expect(page.locator('#overview').getByText('The foxes chart a forgotten coastline.', { exact: false })).toBeVisible()
   await expect(page.locator('video')).toHaveCount(0)
   expect(requests.some(url => url.includes('fixture/harbor.jpg') || url.includes('trailer.mp4'))).toBe(false)
 

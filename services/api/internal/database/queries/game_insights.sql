@@ -2,8 +2,8 @@
 SELECT save_game_price_observations(sqlc.arg(generation)::uuid,sqlc.narg(source_id)::uuid,sqlc.arg(scope_key)::text);
 
 -- name: GameInsightSources :many
-SELECT s.id,s.external_key FROM games g JOIN game_sources s ON s.game_id=g.id AND s.platform_code='steam'
-WHERE g.public_id=$1 AND g.status='published' AND NOT g.publication_blocked
+SELECT s.id,s.external_key FROM game_channel_public g JOIN game_sources s ON s.game_id=g.id AND s.platform_code='steam'
+WHERE g.public_id=$1
 ORDER BY (s.id=g.intake_display_source) DESC NULLS LAST,s.active DESC,s.external_key LIMIT 16;
 
 -- name: GamePlayerDays :many
@@ -66,7 +66,7 @@ FROM days;
 
 -- name: GameProfileNews :many
 WITH work AS MATERIALIZED (
- SELECT id FROM games WHERE public_id=sqlc.arg(public_id)::text AND status='published' AND NOT publication_blocked
+ SELECT id FROM game_channel_public WHERE public_id=sqlc.arg(public_id)::text
 ), sources AS MATERIALIZED (
  SELECT s.id,s.external_key FROM game_sources s JOIN work w ON w.id=s.game_id
  WHERE s.platform_code='steam' AND (sqlc.arg(app_id)::text='' OR s.external_key=sqlc.arg(app_id)::text)
@@ -93,7 +93,7 @@ ORDER BY published_at DESC,gid DESC,app_id DESC LIMIT sqlc.arg(take_rows)::integ
 
 -- name: RelatedGameProfiles :many
 WITH current_game AS MATERIALIZED (
- SELECT id FROM games WHERE public_id=sqlc.arg(public_id)::text AND status='published' AND NOT publication_blocked
+ SELECT id FROM game_channel_public WHERE public_id=sqlc.arg(public_id)::text
 ), genre_keys AS (
  SELECT coalesce(array_agg(DISTINCT genre),ARRAY[]::text[]) AS genres FROM current_game g
  JOIN game_channel_steam s ON s.game_id=g.id AND s.section='details'
@@ -115,10 +115,10 @@ WITH current_game AS MATERIALIZED (
  FROM matches m JOIN game_channel_public g ON g.id=m.game_id GROUP BY g.id,g.public_id,g.slug,g.intake_display_source
  ORDER BY score DESC,g.public_id LIMIT 6
 )
-SELECT g.public_id,g.slug,(game_presentation(g.id,g.intake_display_source)->'localizations')::jsonb AS localizations,
- coalesce(game_channel_cover(g.id,g.intake_display_source,sqlc.arg(locale)::text,sqlc.arg(country)::text,sqlc.arg(egress)::text),'')::text AS cover
+SELECT g.public_id,g.slug,game_published_text(g.id)::jsonb AS localizations,
+ coalesce(game_published_cover(g.id,sqlc.arg(locale)::text),'')::text AS cover
 FROM picked g ORDER BY g.score DESC,g.public_id;
 
 -- name: PublicGameIdentity :one
 SELECT ((transaction_timestamp() AT TIME ZONE 'UTC')::date)::text AS today
-FROM games WHERE public_id=$1 AND status='published' AND NOT publication_blocked;
+FROM game_channel_public WHERE public_id=$1;

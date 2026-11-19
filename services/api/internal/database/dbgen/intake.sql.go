@@ -25,7 +25,7 @@ UPDATE game_intake_candidates i SET state='resolving',lease_id=$1,
  namespace=CASE WHEN i.namespace='' AND i.platform_code='steam' THEN $2 ELSE i.namespace END,
  egress_region=CASE WHEN i.egress_region='' AND i.platform_code='steam' THEN $3 ELSE i.egress_region END,
  updated_at=statement_timestamp()
-FROM due WHERE i.id=due.id RETURNING i.id, i.platform_code, i.external_key, i.discovered_via, i.state, i.reason, i.next_at, i.lease_id, i.lease_until, i.failures, i.namespace, i.egress_region, i.target_id, i.job_started_at, i.job_writer_binding, i.job_round, i.job_id, i.attempt_id, i.observation_id, i.observation_hash, i.game_id, i.game_source_id, i.profile_scope_key, i.profile, i.profile_at, i.profile_observation_id, i.work_title, i.relation, i.relation_attached, i.decision_version, i.review, i.review_until, i.published_at, i.decided_at, i.created_at, i.updated_at, i.review_revoked, i.discovery_modified, i.job_generation, i.automation
+FROM due WHERE i.id=due.id RETURNING i.id, i.platform_code, i.external_key, i.discovered_via, i.state, i.reason, i.next_at, i.lease_id, i.lease_until, i.failures, i.namespace, i.egress_region, i.target_id, i.job_started_at, i.job_writer_binding, i.job_round, i.job_id, i.attempt_id, i.observation_id, i.observation_hash, i.game_id, i.game_source_id, i.profile_scope_key, i.profile, i.profile_at, i.profile_observation_id, i.work_title, i.relation, i.decided_at, i.created_at, i.updated_at, i.discovery_modified, i.job_generation
 `
 
 type ClaimIntakeParams struct {
@@ -66,38 +66,17 @@ func (q *Queries) ClaimIntake(ctx context.Context, arg ClaimIntakeParams) (GameI
 		&i.ProfileObservationID,
 		&i.WorkTitle,
 		&i.Relation,
-		&i.RelationAttached,
-		&i.DecisionVersion,
-		&i.Review,
-		&i.ReviewUntil,
-		&i.PublishedAt,
 		&i.DecidedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
-		&i.ReviewRevoked,
 		&i.DiscoveryModified,
 		&i.JobGeneration,
-		&i.Automation,
 	)
 	return i, err
 }
 
-const deactivateIntakeSource = `-- name: DeactivateIntakeSource :exec
-UPDATE game_sources SET active=false WHERE id=$1 AND game_id=$2
-`
-
-type DeactivateIntakeSourceParams struct {
-	ID     uuid.UUID `json:"id"`
-	GameID uuid.UUID `json:"game_id"`
-}
-
-func (q *Queries) DeactivateIntakeSource(ctx context.Context, arg DeactivateIntakeSourceParams) error {
-	_, err := q.db.Exec(ctx, deactivateIntakeSource, arg.ID, arg.GameID)
-	return err
-}
-
 const dismissIntake = `-- name: DismissIntake :execrows
-UPDATE game_intake_candidates SET state='rejected',reason='operator_dismissed',decision_version=1,
+UPDATE game_intake_candidates SET state='rejected',reason='operator_dismissed',
  next_at=NULL,decided_at=statement_timestamp(),updated_at=statement_timestamp()
 WHERE id=$1 AND state IN ('discovered','deferred')
 `
@@ -188,7 +167,7 @@ INSERT INTO game_intake_candidates (id,platform_code,external_key,discovered_via
 SELECT $1,$2,$3,$4 WHERE (
  SELECT count(*) FROM game_intake_candidates WHERE state IN ('discovered','resolving','deferred')
 )<10000
-RETURNING id, platform_code, external_key, discovered_via, state, reason, next_at, lease_id, lease_until, failures, namespace, egress_region, target_id, job_started_at, job_writer_binding, job_round, job_id, attempt_id, observation_id, observation_hash, game_id, game_source_id, profile_scope_key, profile, profile_at, profile_observation_id, work_title, relation, relation_attached, decision_version, review, review_until, published_at, decided_at, created_at, updated_at, review_revoked, discovery_modified, job_generation, automation
+RETURNING id, platform_code, external_key, discovered_via, state, reason, next_at, lease_id, lease_until, failures, namespace, egress_region, target_id, job_started_at, job_writer_binding, job_round, job_id, attempt_id, observation_id, observation_hash, game_id, game_source_id, profile_scope_key, profile, profile_at, profile_observation_id, work_title, relation, decided_at, created_at, updated_at, discovery_modified, job_generation
 `
 
 type InsertIntakeCandidateParams struct {
@@ -235,18 +214,11 @@ func (q *Queries) InsertIntakeCandidate(ctx context.Context, arg InsertIntakeCan
 		&i.ProfileObservationID,
 		&i.WorkTitle,
 		&i.Relation,
-		&i.RelationAttached,
-		&i.DecisionVersion,
-		&i.Review,
-		&i.ReviewUntil,
-		&i.PublishedAt,
 		&i.DecidedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
-		&i.ReviewRevoked,
 		&i.DiscoveryModified,
 		&i.JobGeneration,
-		&i.Automation,
 	)
 	return i, err
 }
@@ -285,7 +257,7 @@ func (q *Queries) InsertIntakeSource(ctx context.Context, arg InsertIntakeSource
 }
 
 const intakeCandidate = `-- name: IntakeCandidate :one
-SELECT id, platform_code, external_key, discovered_via, state, reason, next_at, lease_id, lease_until, failures, namespace, egress_region, target_id, job_started_at, job_writer_binding, job_round, job_id, attempt_id, observation_id, observation_hash, game_id, game_source_id, profile_scope_key, profile, profile_at, profile_observation_id, work_title, relation, relation_attached, decision_version, review, review_until, published_at, decided_at, created_at, updated_at, review_revoked, discovery_modified, job_generation, automation FROM game_intake_candidates WHERE platform_code=$1 AND external_key=$2
+SELECT id, platform_code, external_key, discovered_via, state, reason, next_at, lease_id, lease_until, failures, namespace, egress_region, target_id, job_started_at, job_writer_binding, job_round, job_id, attempt_id, observation_id, observation_hash, game_id, game_source_id, profile_scope_key, profile, profile_at, profile_observation_id, work_title, relation, decided_at, created_at, updated_at, discovery_modified, job_generation FROM game_intake_candidates WHERE platform_code=$1 AND external_key=$2
 `
 
 type IntakeCandidateParams struct {
@@ -325,26 +297,18 @@ func (q *Queries) IntakeCandidate(ctx context.Context, arg IntakeCandidateParams
 		&i.ProfileObservationID,
 		&i.WorkTitle,
 		&i.Relation,
-		&i.RelationAttached,
-		&i.DecisionVersion,
-		&i.Review,
-		&i.ReviewUntil,
-		&i.PublishedAt,
 		&i.DecidedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
-		&i.ReviewRevoked,
 		&i.DiscoveryModified,
 		&i.JobGeneration,
-		&i.Automation,
 	)
 	return i, err
 }
 
 const intakeGameStatus = `-- name: IntakeGameStatus :one
 SELECT g.public_id,g.revision,
- (CASE WHEN g.status='published' AND g.publication_blocked
-   THEN 'hidden' ELSE g.status END)::text AS game_status
+ g.status::text AS game_status
 FROM games g WHERE g.id=$1
 `
 
@@ -359,17 +323,6 @@ func (q *Queries) IntakeGameStatus(ctx context.Context, id uuid.UUID) (IntakeGam
 	var i IntakeGameStatusRow
 	err := row.Scan(&i.PublicID, &i.Revision, &i.GameStatus)
 	return i, err
-}
-
-const intakeSourceCapacity = `-- name: IntakeSourceCapacity :one
-SELECT count(*)<16 FROM game_sources WHERE game_id=$1 AND active
-`
-
-func (q *Queries) IntakeSourceCapacity(ctx context.Context, gameID uuid.UUID) (bool, error) {
-	row := q.db.QueryRow(ctx, intakeSourceCapacity, gameID)
-	var column_1 bool
-	err := row.Scan(&column_1)
-	return column_1, err
 }
 
 const intakeStatus = `-- name: IntakeStatus :many
@@ -434,7 +387,7 @@ func (q *Queries) LockIntakeAdmission(ctx context.Context) error {
 }
 
 const lockIntakeCandidate = `-- name: LockIntakeCandidate :one
-SELECT id, platform_code, external_key, discovered_via, state, reason, next_at, lease_id, lease_until, failures, namespace, egress_region, target_id, job_started_at, job_writer_binding, job_round, job_id, attempt_id, observation_id, observation_hash, game_id, game_source_id, profile_scope_key, profile, profile_at, profile_observation_id, work_title, relation, relation_attached, decision_version, review, review_until, published_at, decided_at, created_at, updated_at, review_revoked, discovery_modified, job_generation, automation FROM game_intake_candidates WHERE platform_code=$1 AND external_key=$2 FOR UPDATE
+SELECT id, platform_code, external_key, discovered_via, state, reason, next_at, lease_id, lease_until, failures, namespace, egress_region, target_id, job_started_at, job_writer_binding, job_round, job_id, attempt_id, observation_id, observation_hash, game_id, game_source_id, profile_scope_key, profile, profile_at, profile_observation_id, work_title, relation, decided_at, created_at, updated_at, discovery_modified, job_generation FROM game_intake_candidates WHERE platform_code=$1 AND external_key=$2 FOR UPDATE
 `
 
 type LockIntakeCandidateParams struct {
@@ -474,24 +427,17 @@ func (q *Queries) LockIntakeCandidate(ctx context.Context, arg LockIntakeCandida
 		&i.ProfileObservationID,
 		&i.WorkTitle,
 		&i.Relation,
-		&i.RelationAttached,
-		&i.DecisionVersion,
-		&i.Review,
-		&i.ReviewUntil,
-		&i.PublishedAt,
 		&i.DecidedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
-		&i.ReviewRevoked,
 		&i.DiscoveryModified,
 		&i.JobGeneration,
-		&i.Automation,
 	)
 	return i, err
 }
 
 const lockIntakeLease = `-- name: LockIntakeLease :one
-SELECT id, platform_code, external_key, discovered_via, state, reason, next_at, lease_id, lease_until, failures, namespace, egress_region, target_id, job_started_at, job_writer_binding, job_round, job_id, attempt_id, observation_id, observation_hash, game_id, game_source_id, profile_scope_key, profile, profile_at, profile_observation_id, work_title, relation, relation_attached, decision_version, review, review_until, published_at, decided_at, created_at, updated_at, review_revoked, discovery_modified, job_generation, automation FROM game_intake_candidates WHERE id=$1 AND lease_id=$2 AND lease_until>statement_timestamp() FOR UPDATE
+SELECT id, platform_code, external_key, discovered_via, state, reason, next_at, lease_id, lease_until, failures, namespace, egress_region, target_id, job_started_at, job_writer_binding, job_round, job_id, attempt_id, observation_id, observation_hash, game_id, game_source_id, profile_scope_key, profile, profile_at, profile_observation_id, work_title, relation, decided_at, created_at, updated_at, discovery_modified, job_generation FROM game_intake_candidates WHERE id=$1 AND lease_id=$2 AND lease_until>statement_timestamp() FOR UPDATE
 `
 
 type LockIntakeLeaseParams struct {
@@ -531,38 +477,13 @@ func (q *Queries) LockIntakeLease(ctx context.Context, arg LockIntakeLeaseParams
 		&i.ProfileObservationID,
 		&i.WorkTitle,
 		&i.Relation,
-		&i.RelationAttached,
-		&i.DecisionVersion,
-		&i.Review,
-		&i.ReviewUntil,
-		&i.PublishedAt,
 		&i.DecidedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
-		&i.ReviewRevoked,
 		&i.DiscoveryModified,
 		&i.JobGeneration,
-		&i.Automation,
 	)
 	return i, err
-}
-
-const markIntakePublished = `-- name: MarkIntakePublished :exec
-UPDATE game_intake_candidates SET published_at=statement_timestamp(),updated_at=statement_timestamp() WHERE id=$1
-`
-
-func (q *Queries) MarkIntakePublished(ctx context.Context, id uuid.UUID) error {
-	_, err := q.db.Exec(ctx, markIntakePublished, id)
-	return err
-}
-
-const noteIntakeConflict = `-- name: NoteIntakeConflict :exec
-UPDATE game_intake_candidates SET reason='merge_suggested',decided_at=statement_timestamp(),updated_at=statement_timestamp() WHERE id=$1
-`
-
-func (q *Queries) NoteIntakeConflict(ctx context.Context, id uuid.UUID) error {
-	_, err := q.db.Exec(ctx, noteIntakeConflict, id)
-	return err
 }
 
 const noteIntakeObservation = `-- name: NoteIntakeObservation :exec
@@ -614,7 +535,7 @@ const pruneIntakeAbandoned = `-- name: PruneIntakeAbandoned :execrows
 DELETE FROM game_intake_candidates WHERE id IN (
  SELECT id FROM game_intake_candidates
  WHERE state='deferred' AND next_at IS NULL AND job_started_at IS NULL AND target_id IS NULL
-   AND review='{}' AND relation='{}' AND updated_at<statement_timestamp()-interval '30 days'
+   AND relation='{}' AND updated_at<statement_timestamp()-interval '30 days'
  ORDER BY updated_at LIMIT 128 FOR UPDATE SKIP LOCKED
 )
 `
@@ -627,22 +548,7 @@ func (q *Queries) PruneIntakeAbandoned(ctx context.Context) (int64, error) {
 	return result.RowsAffected(), nil
 }
 
-const putIntakeReview = `-- name: PutIntakeReview :exec
-UPDATE game_intake_candidates SET review=$2,review_revoked=false,updated_at=statement_timestamp()
-WHERE id=$1
-`
-
-type PutIntakeReviewParams struct {
-	ID     uuid.UUID `json:"id"`
-	Review []byte    `json:"review"`
-}
-
-func (q *Queries) PutIntakeReview(ctx context.Context, arg PutIntakeReviewParams) error {
-	_, err := q.db.Exec(ctx, putIntakeReview, arg.ID, arg.Review)
-	return err
-}
-
-const refreshIntakeProfiles = `-- name: RefreshIntakeProfiles :many
+const refreshIntakeProfiles = `-- name: RefreshIntakeProfiles :exec
 WITH newer AS (
  SELECT i.id,c.observation_id,c.state,c.data,c.observed_at
  FROM collection_current c JOIN collection_sources s ON s.id=c.source_id
@@ -655,7 +561,7 @@ WITH newer AS (
     AND ($3::text IS NULL OR c.scope_key=$3)
     AND c.observed_at>coalesce(i.profile_at,'-infinity')
     AND (c.state='withdrawn' OR c.data->>'type' IS DISTINCT FROM 'game'
-      OR (c.data->>'name'<>'' AND c.data->>'description'<>''))
+      OR (c.data->>'name'<>''))
     AND EXISTS (
       SELECT 1 FROM collection_bindings b JOIN collection_plan_bindings m ON m.binding_id=b.id AND m.source_id=b.source_id
       JOIN collection_plans p ON p.id=m.plan_id AND p.source_id=b.source_id
@@ -671,7 +577,6 @@ UPDATE game_intake_candidates i SET
  profile_observation_id=CASE WHEN n.state='present' AND n.data->>'type'='game' THEN n.observation_id END,
  updated_at=statement_timestamp()
 FROM newer n WHERE i.id=n.id AND n.observed_at>coalesce(i.profile_at,'-infinity')
-RETURNING i.id,i.game_id,i.reason
 `
 
 type RefreshIntakeProfilesParams struct {
@@ -680,37 +585,16 @@ type RefreshIntakeProfilesParams struct {
 	ScopeKey   pgtype.Text `json:"scope_key"`
 }
 
-type RefreshIntakeProfilesRow struct {
-	ID     uuid.UUID  `json:"id"`
-	GameID *uuid.UUID `json:"game_id"`
-	Reason string     `json:"reason"`
-}
-
-func (q *Queries) RefreshIntakeProfiles(ctx context.Context, arg RefreshIntakeProfilesParams) ([]RefreshIntakeProfilesRow, error) {
-	rows, err := q.db.Query(ctx, refreshIntakeProfiles, arg.Generation, arg.SourceID, arg.ScopeKey)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []RefreshIntakeProfilesRow{}
-	for rows.Next() {
-		var i RefreshIntakeProfilesRow
-		if err := rows.Scan(&i.ID, &i.GameID, &i.Reason); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
+func (q *Queries) RefreshIntakeProfiles(ctx context.Context, arg RefreshIntakeProfilesParams) error {
+	_, err := q.db.Exec(ctx, refreshIntakeProfiles, arg.Generation, arg.SourceID, arg.ScopeKey)
+	return err
 }
 
 const releaseIntake = `-- name: ReleaseIntake :execrows
 UPDATE game_intake_candidates SET state=$1,reason=$2,
  lease_id=NULL,lease_until=NULL,
  next_at=CASE WHEN $3::integer>0 THEN statement_timestamp()+make_interval(secs=>$3::integer) END,
- failures=$4,updated_at=statement_timestamp(),decided_at=statement_timestamp(),decision_version=1
+ failures=$4,updated_at=statement_timestamp(),decided_at=statement_timestamp()
 WHERE id=$5 AND lease_id=$6 AND lease_until>statement_timestamp()
 `
 
@@ -759,48 +643,28 @@ func (q *Queries) RestartIntakeJob(ctx context.Context, arg RestartIntakeJobPara
 	return result.RowsAffected(), nil
 }
 
-const revokeIntakeRelation = `-- name: RevokeIntakeRelation :exec
-UPDATE game_intake_candidates SET state='rejected',reason='relation_revoked',next_at=NULL,decided_at=statement_timestamp(),updated_at=statement_timestamp()
-WHERE id=$1
-`
-
-func (q *Queries) RevokeIntakeRelation(ctx context.Context, id uuid.UUID) error {
-	_, err := q.db.Exec(ctx, revokeIntakeRelation, id)
-	return err
-}
-
-const revokeIntakeReview = `-- name: RevokeIntakeReview :exec
-UPDATE game_intake_candidates SET review_revoked=true,updated_at=statement_timestamp() WHERE id=$1
-`
-
-func (q *Queries) RevokeIntakeReview(ctx context.Context, id uuid.UUID) error {
-	_, err := q.db.Exec(ctx, revokeIntakeReview, id)
-	return err
-}
-
 const saveIntakeDecision = `-- name: SaveIntakeDecision :exec
 UPDATE game_intake_candidates SET state='accepted',reason=$1,
- game_id=$2,game_source_id=$3,relation_attached=$4,
- attempt_id=$5,observation_id=$6,observation_hash=$7,
- profile_scope_key=$8,profile=$9,
- profile_at=$10,profile_observation_id=$6,work_title=$11,
- lease_id=NULL,lease_until=NULL,next_at=NULL,failures=0,decision_version=1,decided_at=statement_timestamp(),updated_at=statement_timestamp()
-WHERE id=$12
+ game_id=$2,game_source_id=$3,
+ attempt_id=$4,observation_id=$5,observation_hash=$6,
+ profile_scope_key=$7,profile=$8,
+ profile_at=$9,profile_observation_id=$5,work_title=$10,
+ lease_id=NULL,lease_until=NULL,next_at=NULL,failures=0,decided_at=statement_timestamp(),updated_at=statement_timestamp()
+WHERE id=$11
 `
 
 type SaveIntakeDecisionParams struct {
-	Reason           string             `json:"reason"`
-	GameID           *uuid.UUID         `json:"game_id"`
-	GameSourceID     *uuid.UUID         `json:"game_source_id"`
-	RelationAttached bool               `json:"relation_attached"`
-	AttemptID        *uuid.UUID         `json:"attempt_id"`
-	ObservationID    *uuid.UUID         `json:"observation_id"`
-	ObservationHash  string             `json:"observation_hash"`
-	ProfileScopeKey  string             `json:"profile_scope_key"`
-	Profile          []byte             `json:"profile"`
-	ProfileAt        pgtype.Timestamptz `json:"profile_at"`
-	WorkTitle        string             `json:"work_title"`
-	ID               uuid.UUID          `json:"id"`
+	Reason          string             `json:"reason"`
+	GameID          *uuid.UUID         `json:"game_id"`
+	GameSourceID    *uuid.UUID         `json:"game_source_id"`
+	AttemptID       *uuid.UUID         `json:"attempt_id"`
+	ObservationID   *uuid.UUID         `json:"observation_id"`
+	ObservationHash string             `json:"observation_hash"`
+	ProfileScopeKey string             `json:"profile_scope_key"`
+	Profile         []byte             `json:"profile"`
+	ProfileAt       pgtype.Timestamptz `json:"profile_at"`
+	WorkTitle       string             `json:"work_title"`
+	ID              uuid.UUID          `json:"id"`
 }
 
 func (q *Queries) SaveIntakeDecision(ctx context.Context, arg SaveIntakeDecisionParams) error {
@@ -808,7 +672,6 @@ func (q *Queries) SaveIntakeDecision(ctx context.Context, arg SaveIntakeDecision
 		arg.Reason,
 		arg.GameID,
 		arg.GameSourceID,
-		arg.RelationAttached,
 		arg.AttemptID,
 		arg.ObservationID,
 		arg.ObservationHash,
@@ -838,20 +701,6 @@ func (q *Queries) SaveIntakeJob(ctx context.Context, arg SaveIntakeJobParams) (i
 		return 0, err
 	}
 	return result.RowsAffected(), nil
-}
-
-const saveIntakeRelation = `-- name: SaveIntakeRelation :exec
-UPDATE game_intake_candidates SET relation=$2,updated_at=statement_timestamp() WHERE id=$1
-`
-
-type SaveIntakeRelationParams struct {
-	ID       uuid.UUID `json:"id"`
-	Relation []byte    `json:"relation"`
-}
-
-func (q *Queries) SaveIntakeRelation(ctx context.Context, arg SaveIntakeRelationParams) error {
-	_, err := q.db.Exec(ctx, saveIntakeRelation, arg.ID, arg.Relation)
-	return err
 }
 
 const saveIntakeTarget = `-- name: SaveIntakeTarget :execrows
@@ -911,21 +760,5 @@ WHERE id=$1 AND state='deferred' AND next_at IS NULL
 
 func (q *Queries) WakeIntake(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.Exec(ctx, wakeIntake, id)
-	return err
-}
-
-const wakeRelatedIntake = `-- name: WakeRelatedIntake :exec
-UPDATE game_intake_candidates SET next_at=statement_timestamp(),updated_at=statement_timestamp()
-WHERE state='deferred' AND reason='related_source_unavailable' AND next_at IS NULL
- AND relation->>'platform'=$1::text AND relation->>'key'=$2::text
-`
-
-type WakeRelatedIntakeParams struct {
-	Platform  string `json:"platform"`
-	SourceKey string `json:"source_key"`
-}
-
-func (q *Queries) WakeRelatedIntake(ctx context.Context, arg WakeRelatedIntakeParams) error {
-	_, err := q.db.Exec(ctx, wakeRelatedIntake, arg.Platform, arg.SourceKey)
 	return err
 }

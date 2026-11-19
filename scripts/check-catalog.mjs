@@ -385,7 +385,7 @@ navigation:
       fixtureSQL(region, "UPDATE sites SET published_at=" + age + ", first_published_at=" + age +
         " WHERE public_id IN ('000000000000000a','000000000000000j'); UPDATE games SET published_at=" + age +
         " WHERE public_id='000000000000000g'; UPDATE game_intake_candidates SET profile_at=" + age +
-        ",review_until=" + age + " WHERE external_key='40001'; UPDATE site_navigation_heat_state SET computed_at=" + age)
+        " WHERE external_key='40001'; UPDATE site_navigation_heat_state SET computed_at=" + age)
       const result = await catalogProjection(region, fixture)
       if (JSON.stringify(result.stable) !== JSON.stringify(baseline.stable) || result.directory.effective_sort === 'heat_7d') {
         throw new Error(region + ' published content or Heat fallback changed at day ' + days)

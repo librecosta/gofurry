@@ -140,21 +140,21 @@ func profileMediaList(items []string, video bool, limit int) []string {
 	return out
 }
 
-func preferredMetadata(rows []SteamMetadata, section, locale, country string) *SteamMetadata {
+func preferredSteamDetails(rows []SteamMetadata, locale, country string) *SteamMetadata {
 	var chosen *SteamMetadata
 	score := 0
 	for i := range rows {
 		item := &rows[i]
-		if item.Section != section || section == "media" && item.Media == nil || section == "details" && item.Details == nil {
+		if item.Section != "details" || item.Details == nil {
 			continue
 		}
 		rank := 1
 		if item.StoreCountry == country {
 			rank += 2
 		}
-		if item.Locale == locale && (section != "details" || locale != "zh-cn" || item.VerifiedChinese) {
+		if item.Locale == locale && (locale != "zh-cn" || item.VerifiedChinese) {
 			rank += 4
-		} else if section == "details" && item.Locale == "en" {
+		} else if item.Locale == "en" {
 			rank++
 		}
 		if chosen == nil || rank > score || rank == score && item.ObservedAt.After(chosen.ObservedAt) {
@@ -178,23 +178,16 @@ func projectGameSource(item GameSourceSnapshot, preferred bool, locale, country 
 	if item.PlatformCode != "steam" || !validAppID(item.ExternalKey) {
 		return out
 	}
-	if selected := preferredMetadata(item.Metadata, "details", locale, country); selected != nil {
+	if selected := preferredSteamDetails(item.Metadata, locale, country); selected != nil {
 		details := *selected.Details
 		details.Content = nil
+		details.Name, details.Description = "", ""
 		out.Details = &StoreDetails{StoreEvidence: readStoreEvidence(selected), SteamDetails: details, GenreCodes: selected.GenreCodes, ReleasePrecision: "unknown"}
 		if selected.ReleasePrecision != nil {
 			out.Details.ReleasePrecision = *selected.ReleasePrecision
 		}
 		if selected.ReleaseDay != nil {
 			out.Details.ReleaseDay = *selected.ReleaseDay
-		}
-	}
-	if selected := preferredMetadata(item.Metadata, "media", locale, country); selected != nil {
-		raw := selected.Media
-		media := SteamMedia{Header: profileMedia(raw.Header, false), Capsule: profileMedia(raw.Capsule, false),
-			Screenshots: profileMediaList(raw.Screenshots, false, 8), Movies: profileMediaList(raw.Movies, true, 4)}
-		if media.Header != "" || media.Capsule != "" || len(media.Screenshots)+len(media.Movies) != 0 {
-			out.Media = &StoreMedia{StoreEvidence: readStoreEvidence(selected), SteamMedia: media}
 		}
 	}
 	for _, market := range []string{country, "cn", "us", "hk"} {
@@ -276,17 +269,33 @@ func (s *Service) PublicGameProfile(ctx context.Context, market ChannelMarket, i
 			}
 		})
 	}
+	var chosen *PublishedGameMedia
+	for i := range p.Presentation {
+		media := &p.Presentation[i]
+		if media.SourceID != nil && (chosen == nil || media.Locale == locale) {
+			chosen = media
+		}
+		if media.Locale == locale && media.CoverURL != "" {
+			out.CoverURL = profileMedia(media.CoverURL, false)
+		}
+	}
+	if out.CoverURL == "" {
+		for _, media := range p.Presentation {
+			if media.CoverURL != "" {
+				out.CoverURL = media.CoverURL
+				break
+			}
+		}
+	}
 	for _, source := range p.Sources {
 		item := projectGameSource(source, p.PreferredSource != nil && source.ID == *p.PreferredSource, steamLocale(locale), country)
-		if out.CoverURL == "" && item.Media != nil {
-			out.CoverURL = item.Media.Header
-			if out.CoverURL == "" {
-				out.CoverURL = item.Media.Capsule
-			}
+		if chosen != nil && chosen.SourceID != nil && *chosen.SourceID == source.ID && chosen.ObservedAt != nil &&
+			(chosen.CoverURL != "" || len(chosen.Media.Screenshots)+len(chosen.Media.Movies) > 0) {
+			item.Media = &StoreMedia{StoreEvidence: StoreEvidence{Locale: steamLocale(chosen.Locale), StoreCountry: chosen.StoreCountry, ObservedAt: *chosen.ObservedAt, Status: "observed"}, SteamMedia: reviewedSteamMedia(chosen.Media)}
 		}
 		out.Sources = append(out.Sources, item)
 	}
-	rows, err := q.RelatedGameProfiles(ctx, dbgen.RelatedGameProfilesParams{PublicID: id, Locale: steamLocale(locale), Country: country, Egress: egress})
+	rows, err := q.RelatedGameProfiles(ctx, dbgen.RelatedGameProfilesParams{PublicID: id, Locale: steamLocale(locale)})
 	if err != nil {
 		return GameProfile{}, classify(err)
 	}

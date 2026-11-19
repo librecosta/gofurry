@@ -11,20 +11,6 @@ import (
 	"uuid"
 )
 
-const claimSteamAIBudget = `-- name: ClaimSteamAIBudget :execrows
-INSERT INTO steam_eligibility_ai_budget(utc_day,calls) VALUES ((statement_timestamp() AT TIME ZONE 'UTC')::date,1)
-ON CONFLICT (utc_day) DO UPDATE SET calls=steam_eligibility_ai_budget.calls+1
-WHERE steam_eligibility_ai_budget.calls<$1::integer
-`
-
-func (q *Queries) ClaimSteamAIBudget(ctx context.Context, dailyLimit int32) (int64, error) {
-	result, err := q.db.Exec(ctx, claimSteamAIBudget, dailyLimit)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
 const commitSteamDiscoveryPage = `-- name: CommitSteamDiscoveryPage :exec
 UPDATE steam_discovery_state SET
  pending=$2,last_appid=$3,
@@ -182,35 +168,12 @@ func (q *Queries) OpenSteamDiscoveryWindow(ctx context.Context, arg OpenSteamDis
 	return err
 }
 
-const pruneSteamAIBudget = `-- name: PruneSteamAIBudget :exec
-DELETE FROM steam_eligibility_ai_budget WHERE utc_day<(statement_timestamp() AT TIME ZONE 'UTC')::date-7
-`
-
-func (q *Queries) PruneSteamAIBudget(ctx context.Context) error {
-	_, err := q.db.Exec(ctx, pruneSteamAIBudget)
-	return err
-}
-
-const putSteamEligibility = `-- name: PutSteamEligibility :exec
-UPDATE game_intake_candidates SET automation=$2 WHERE id=$1
-`
-
-type PutSteamEligibilityParams struct {
-	ID         uuid.UUID `json:"id"`
-	Automation []byte    `json:"automation"`
-}
-
-func (q *Queries) PutSteamEligibility(ctx context.Context, arg PutSteamEligibilityParams) error {
-	_, err := q.db.Exec(ctx, putSteamEligibility, arg.ID, arg.Automation)
-	return err
-}
-
 const reopenSteamDiscoveryCandidate = `-- name: ReopenSteamDiscoveryCandidate :execrows
 UPDATE game_intake_candidates SET discovery_modified=$2,state='discovered',reason='',next_at=now(),
  job_id=NULL,job_started_at=NULL,job_writer_binding='',job_round=1,job_generation=job_generation+1,
  attempt_id=NULL,observation_id=NULL,observation_hash='',failures=0,updated_at=now()
 WHERE id=$1 AND discovery_modified>0 AND discovery_modified<$2 AND game_id IS NULL
- AND state IN ('deferred','rejected') AND reason IN ('eligibility_uncertain','irrelevant_game','adult_game','job_failed','observation_unattributed')
+ AND state IN ('deferred','rejected') AND reason IN ('job_failed','observation_unattributed')
 `
 
 type ReopenSteamDiscoveryCandidateParams struct {
@@ -338,7 +301,7 @@ func (q *Queries) SteamDiscoveryAdmissions(ctx context.Context, arg SteamDiscove
 }
 
 const steamDiscoveryKnown = `-- name: SteamDiscoveryKnown :many
-SELECT keys.external_key::text AS external_key,(s.id IS NOT NULL OR coalesce(c.review<>'{}' OR c.discovery_modified>0,false))::boolean AS known,
+SELECT keys.external_key::text AS external_key,(s.id IS NOT NULL OR coalesce(c.discovery_modified>0,false))::boolean AS known,
  coalesce(c.discovery_modified,0)::bigint AS modified,coalesce(c.state,'')::text AS state,
  coalesce(c.reason,'')::text AS reason,(c.game_id IS NOT NULL)::boolean AS bound
 FROM unnest($1::text[]) keys(external_key)
@@ -388,16 +351,5 @@ SELECT pg_advisory_unlock(7748032881221203::bigint)
 
 func (q *Queries) UnlockSteamDiscovery(ctx context.Context) error {
 	_, err := q.db.Exec(ctx, unlockSteamDiscovery)
-	return err
-}
-
-const wakeReviewedEligibility = `-- name: WakeReviewedEligibility :exec
-UPDATE game_intake_candidates SET state='discovered',next_at=now(),failures=0,updated_at=now()
-WHERE id=$1 AND game_id IS NULL AND reason IN ('eligibility_uncertain','adult_game','irrelevant_game')
- AND state IN ('deferred','rejected')
-`
-
-func (q *Queries) WakeReviewedEligibility(ctx context.Context, id uuid.UUID) error {
-	_, err := q.db.Exec(ctx, wakeReviewedEligibility, id)
 	return err
 }

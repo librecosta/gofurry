@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"github.com/librecosta/gofurry/services/api/internal/yearbook"
 	"io"
 	"strconv"
 
@@ -13,6 +12,7 @@ import (
 	"github.com/librecosta/gofurry/services/api/internal/collection"
 	"github.com/librecosta/gofurry/services/api/internal/database/dbgen"
 	"github.com/librecosta/gofurry/services/api/internal/storage"
+	"github.com/librecosta/gofurry/services/api/internal/yearbook"
 )
 
 type publication struct {
@@ -21,6 +21,11 @@ type publication struct {
 	Revision   int64  `json:"revision"`
 	ConfirmSFW bool   `json:"confirm_sfw"`
 }
+type gameVisibility struct {
+	Revision int64  `json:"revision"`
+	Reason   string `json:"reason"`
+}
+
 type revisionOnly struct {
 	Revision int64 `json:"revision"`
 }
@@ -231,15 +236,11 @@ func (o *Operations) game(ctx context.Context, id string) (gameDetail, error) {
 
 func (o *Operations) games(g fiber.Router) {
 	g.Get("/games", func(c fiber.Ctx) error {
-		v, err := search(c, "q", "status", "after", "platform", "restricted")
+		v, err := search(c, "q", "status", "after", "platform")
 		if err != nil {
 			return err
 		}
-		restricted := v.Get("restricted")
-		if restricted != "" && restricted != "true" {
-			return fiber.ErrBadRequest
-		}
-		rows, err := dbgen.New(o.Pool).ManagementGames(c.Context(), dbgen.ManagementGamesParams{AfterID: v.Get("after"), Keyword: v.Get("q"), State: v.Get("status"), Platform: v.Get("platform"), Restricted: restricted == "true", TakeRows: pageSize + 1})
+		rows, err := dbgen.New(o.Pool).ManagementGames(c.Context(), dbgen.ManagementGamesParams{AfterID: v.Get("after"), Keyword: v.Get("q"), State: v.Get("status"), Platform: v.Get("platform"), TakeRows: pageSize + 1})
 		return page(c, rows, err, func(row dbgen.ManagementGamesRow) string { return row.PublicID })
 	})
 	o.collections(g)
@@ -292,20 +293,17 @@ func (o *Operations) games(g fiber.Router) {
 	}
 	g.Post("/games", editOnly, writeOperation(o, "game.create", save))
 	g.Patch("/games/:id", editOnly, writeOperation(o, "game.edit", save))
-	for _, action := range []string{"publish", "archive", "restore", "unpublish", "block", "clear_block"} {
-		auth := editOnly
-		if action == "block" || action == "clear_block" {
-			auth = ownerOnly
-		}
-		g.Post("/games/:id/"+action, auth, writeOperation(o, "game."+action, func(ctx context.Context, s *catalog.Service, _ *dbgen.Queries, id string, in publication, d catalog.PublicationDecision) (catalog.ManagementResult, error) {
-			d.Reason = in.Reason
-			if action == "publish" {
-				return s.PublishManagementGame(ctx, id, in.Revision, d)
-			}
-			row, err := s.ChangeGamePublication(ctx, id, in.Revision, action, d)
-			return catalog.ManagementResult{Target: row.PublicID, Revision: row.Revision}, err
+	g.Post("/games/:id/publish", editOnly, writeOperation(o, "game.publish", func(ctx context.Context, s *catalog.Service, _ *dbgen.Queries, id string, in catalog.GamePublicationReview, _ catalog.PublicationDecision) (catalog.ManagementResult, error) {
+		return s.PublishManagementGame(ctx, id, in)
+	}))
+	for _, action := range []string{"archive", "restore", "unpublish"} {
+		g.Post("/games/:id/"+action, editOnly, writeOperation(o, "game."+action, func(ctx context.Context, s *catalog.Service, _ *dbgen.Queries, id string, in gameVisibility, _ catalog.PublicationDecision) (catalog.ManagementResult, error) {
+			return s.ChangeManagementGameVisibility(ctx, id, in.Revision, action, in.Reason)
 		}))
 	}
+	g.Post("/games/:id/rating", editOnly, writeOperation(o, "game.rating", func(ctx context.Context, s *catalog.Service, _ *dbgen.Queries, id string, in policy, _ catalog.PublicationDecision) (catalog.ManagementResult, error) {
+		return s.RateManagementGame(ctx, id, in.Revision, in.Rating, in.Reason)
+	}))
 	g.Post("/games/:id/sources", ownerOnly, writeOperation(o, "game.sources", func(ctx context.Context, s *catalog.Service, q *dbgen.Queries, id string, in sources, d catalog.PublicationDecision) (catalog.ManagementResult, error) {
 		d.Reason = in.Reason
 		result, err := s.CorrectGameSources(ctx, id, in.Revision, in.Sources, d)

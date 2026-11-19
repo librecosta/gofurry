@@ -1,5 +1,5 @@
 -- name: ManagementSchemaReady :one
-SELECT (to_regclass('management_operations') IS NOT NULL)::boolean;
+SELECT (to_regclass('game_published_localizations') IS NOT NULL AND to_regclass('management_operations') IS NOT NULL)::boolean;
 
 -- name: RecordManagementOperation :exec
 INSERT INTO management_operations (request_id,actor_id,actor_name,actor_role,action,target,revision)
@@ -28,20 +28,19 @@ SELECT locale,name,summary,body FROM site_localizations WHERE site_id=$1 ORDER B
 SELECT kind,url FROM site_addresses WHERE site_id=$1 AND active ORDER BY kind DESC,url;
 
 -- name: ManagementGames :many
-SELECT g.public_id,g.slug,g.revision,g.status,g.publication_blocked,
- coalesce((SELECT l.name FROM game_channel_locales l WHERE l.game_id=g.id ORDER BY l.locale DESC LIMIT 1),g.public_id)::text AS name
+SELECT g.public_id,g.slug,g.revision,g.status,g.content_rating,
+ coalesce((SELECT l.name FROM game_draft_text(g.id) l ORDER BY l.locale DESC LIMIT 1),g.public_id)::text AS name
 FROM games g
 WHERE g.public_id>sqlc.arg(after_id)::text AND (sqlc.arg(state)::text='' OR g.status=sqlc.arg(state))
- AND (NOT sqlc.arg(restricted)::boolean OR g.publication_blocked)
  AND (sqlc.arg(platform)::text='' OR EXISTS (
   SELECT 1 FROM game_sources s WHERE s.game_id=g.id AND s.active AND s.platform_code=sqlc.arg(platform)))
  AND (sqlc.arg(keyword)::text='' OR g.public_id=sqlc.arg(keyword) OR EXISTS (
-  SELECT 1 FROM game_channel_locales l WHERE l.game_id=g.id AND strpos(lower(l.name),lower(sqlc.arg(keyword)))>0)
+  SELECT 1 FROM game_draft_text(g.id) l WHERE strpos(lower(l.name),lower(sqlc.arg(keyword)))>0)
   OR EXISTS (SELECT 1 FROM game_sources s WHERE s.game_id=g.id AND s.active AND s.external_key=sqlc.arg(keyword)))
 ORDER BY g.public_id LIMIT sqlc.arg(take_rows)::integer;
 
 -- name: ManagementGame :one
-SELECT id,public_id,slug,revision,status,published_at,publication_blocked,intake_managed
+SELECT id,public_id,slug,revision,status,content_rating
 FROM games WHERE public_id=$1;
 
 -- name: ManagementGameText :many
@@ -56,15 +55,13 @@ FROM game_sources s WHERE s.game_id=$1 ORDER BY s.active DESC,s.platform_code,s.
 
 -- name: ManagementGameFacts :many
 SELECT s.platform_code,s.external_key,m.locale,m.store_country,m.observed_at,
- coalesce(m.payload->>'name','')::text AS name,coalesce(m.payload->>'description','')::text AS summary
+ coalesce(m.payload->>'name','')::text AS name,coalesce(m.payload->>'description','')::text AS summary,
+ coalesce(m.payload->'content_rating','{}'::jsonb)::jsonb AS storefront_rating
 FROM game_sources s JOIN LATERAL (
  SELECT m.* FROM game_source_metadata m WHERE m.game_source_id=s.id AND m.section='details' AND m.payload IS NOT NULL
  ORDER BY m.observed_at DESC,m.locale,m.store_country LIMIT 2
 ) m ON true WHERE s.game_id=$1
 ORDER BY s.active DESC,s.platform_code,s.external_key,m.locale,m.store_country LIMIT 32;
-
--- name: ManagementApprovedGameText :many
-SELECT locale,name,summary,observed_at FROM game_approved_presentations WHERE game_id=$1 ORDER BY locale;
 
 -- name: ManagementCollections :many
 SELECT c.public_id,c.slug,c.revision,c.status,
@@ -83,7 +80,7 @@ UNION ALL SELECT 'collection',status,count(*) FROM game_collections GROUP BY sta
 -- name: ManagementRecentIntake :many
 SELECT c.external_key,c.state,c.reason,c.updated_at,coalesce(g.public_id,'')::text AS public_id
 FROM game_intake_candidates c LEFT JOIN games g ON g.id=c.game_id
-WHERE c.state='accepted' AND g.intake_managed AND g.published_at IS NOT NULL ORDER BY c.updated_at DESC,c.id LIMIT 8;
+WHERE c.state='accepted' ORDER BY c.updated_at DESC,c.id LIMIT 8;
 
 -- name: ManagementIntakeRows :many
 SELECT c.external_key,c.state,c.reason,c.discovered_via,c.next_at,c.updated_at,coalesce(g.public_id,'')::text AS public_id

@@ -63,7 +63,7 @@ SELECT (CASE WHEN admission_day=sqlc.arg(day)::bigint THEN admitted_today ELSE 0
 FROM steam_discovery_state WHERE namespace=$1;
 
 -- name: SteamDiscoveryKnown :many
-SELECT keys.external_key::text AS external_key,(s.id IS NOT NULL OR coalesce(c.review<>'{}' OR c.discovery_modified>0,false))::boolean AS known,
+SELECT keys.external_key::text AS external_key,(s.id IS NOT NULL OR coalesce(c.discovery_modified>0,false))::boolean AS known,
  coalesce(c.discovery_modified,0)::bigint AS modified,coalesce(c.state,'')::text AS state,
  coalesce(c.reason,'')::text AS reason,(c.game_id IS NOT NULL)::boolean AS bound
 FROM unnest(sqlc.arg(keys)::text[]) keys(external_key)
@@ -78,20 +78,4 @@ UPDATE game_intake_candidates SET discovery_modified=$2,state='discovered',reaso
  job_id=NULL,job_started_at=NULL,job_writer_binding='',job_round=1,job_generation=job_generation+1,
  attempt_id=NULL,observation_id=NULL,observation_hash='',failures=0,updated_at=now()
 WHERE id=$1 AND discovery_modified>0 AND discovery_modified<$2 AND game_id IS NULL
- AND state IN ('deferred','rejected') AND reason IN ('eligibility_uncertain','irrelevant_game','adult_game','job_failed','observation_unattributed');
-
--- name: PutSteamEligibility :exec
-UPDATE game_intake_candidates SET automation=$2 WHERE id=$1;
-
--- name: WakeReviewedEligibility :exec
-UPDATE game_intake_candidates SET state='discovered',next_at=now(),failures=0,updated_at=now()
-WHERE id=$1 AND game_id IS NULL AND reason IN ('eligibility_uncertain','adult_game','irrelevant_game')
- AND state IN ('deferred','rejected');
-
--- name: ClaimSteamAIBudget :execrows
-INSERT INTO steam_eligibility_ai_budget(utc_day,calls) VALUES ((statement_timestamp() AT TIME ZONE 'UTC')::date,1)
-ON CONFLICT (utc_day) DO UPDATE SET calls=steam_eligibility_ai_budget.calls+1
-WHERE steam_eligibility_ai_budget.calls<sqlc.arg(daily_limit)::integer;
-
--- name: PruneSteamAIBudget :exec
-DELETE FROM steam_eligibility_ai_budget WHERE utc_day<(statement_timestamp() AT TIME ZONE 'UTC')::date-7;
+ AND state IN ('deferred','rejected') AND reason IN ('job_failed','observation_unattributed');

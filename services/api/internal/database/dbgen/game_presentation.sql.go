@@ -13,15 +13,15 @@ import (
 
 const readGamePresentation = `-- name: ReadGamePresentation :one
 WITH work AS MATERIALIZED (
- SELECT id, public_id, slug, status, revision, created_at, updated_at, published_at, archived_at, intake_managed, intake_display_source, publication_blocked, first_published_at FROM games WHERE public_id=$3 AND status='published' AND NOT publication_blocked
+ SELECT id, public_id, slug, first_published_at, intake_display_source FROM game_channel_public WHERE public_id=$3
 ), sources AS MATERIALIZED (
  SELECT s.id, s.game_id, s.platform_code, s.external_key, s.source_url, s.active FROM game_sources s JOIN work g ON s.game_id=g.id
  ORDER BY s.active DESC,s.platform_code,s.external_key LIMIT 16
 )
-SELECT g.public_id,g.slug,g.intake_display_source AS preferred_source,(game_presentation(g.id,g.intake_display_source)->'localizations')::jsonb AS localizations,
- coalesce((SELECT jsonb_agg(jsonb_build_object('locale',a.locale,'game_source_id',a.game_source_id,'observation_id',a.observation_id,
-  'observed_at',a.observed_at,'store_country',a.steam_store_country,'egress_region',a.steam_egress_region)
-  ORDER BY a.locale) FROM game_approved_presentations a WHERE a.game_id=g.id),'[]')::jsonb AS approved,
+SELECT g.public_id,g.slug,g.intake_display_source AS preferred_source,game_published_text(g.id)::jsonb AS localizations,
+ coalesce((SELECT jsonb_agg(jsonb_build_object('locale',p.locale,'source_id',p.media_source_id,'media',p.media,
+  'observed_at',p.media_observed_at,'store_country',p.media_store_country,'cover_url',p.cover_url) ORDER BY p.locale)
+  FROM game_published_localizations p WHERE p.game_id=g.id),'[]')::jsonb AS presentation,
  coalesce((SELECT jsonb_agg(jsonb_build_object(
   'id',s.id,'platform_code',s.platform_code,'external_key',s.external_key,'source_url',nullif(s.source_url,''),'active',s.active,
   'metadata',(SELECT coalesce(jsonb_agg(jsonb_build_object('locale',m.locale,'store_country',m.store_country,'egress_region',m.egress_region,
@@ -116,7 +116,7 @@ type ReadGamePresentationRow struct {
 	Slug            string     `json:"slug"`
 	PreferredSource *uuid.UUID `json:"preferred_source"`
 	Localizations   []byte     `json:"localizations"`
-	Approved        []byte     `json:"approved"`
+	Presentation    []byte     `json:"presentation"`
 	Sources         []byte     `json:"sources"`
 }
 
@@ -128,7 +128,7 @@ func (q *Queries) ReadGamePresentation(ctx context.Context, arg ReadGamePresenta
 		&i.Slug,
 		&i.PreferredSource,
 		&i.Localizations,
-		&i.Approved,
+		&i.Presentation,
 		&i.Sources,
 	)
 	return i, err

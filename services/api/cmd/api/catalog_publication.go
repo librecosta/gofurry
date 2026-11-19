@@ -40,7 +40,7 @@ func catalogPublicationCommand(cfg *platform.Config) *cobra.Command {
 	}
 	var decision catalog.PublicationDecision
 	var sfw bool
-	change := add("set KIND PUBLIC_ID REVISION ACTION", "Publish a Site or apply an explicit visibility decision", 4,
+	change := add("set site PUBLIC_ID REVISION ACTION", "Apply a Site publication decision", 4,
 		func(cmd *cobra.Command, a []string, s *catalog.Service) (any, error) {
 			revision, err := strconv.ParseInt(a[2], 10, 64)
 			if err != nil || revision < 1 {
@@ -49,10 +49,6 @@ func catalogPublicationCommand(cfg *platform.Config) *cobra.Command {
 			switch a[0] {
 			case "site":
 				return s.ChangeSitePublication(cmd.Context(), a[1], revision, a[3], sfw, decision)
-			case "game":
-				if !sfw {
-					return s.ChangeGamePublication(cmd.Context(), a[1], revision, a[3], decision)
-				}
 			}
 			return nil, catalog.ErrInvalid
 		})
@@ -60,7 +56,7 @@ func catalogPublicationCommand(cfg *platform.Config) *cobra.Command {
 	change.Flags().StringVar(&decision.Reason, "reason", "", "Decision reason and evidence reference")
 	change.Flags().BoolVar(&sfw, "confirm-sfw", false, "Record known SFW evidence as part of the initial Site publication")
 	var inherit bool
-	diagnose := add("diagnose", "Report legacy Site policy and published Game presentation gaps", 0,
+	diagnose := add("diagnose", "Report legacy Site policy", 0,
 		func(cmd *cobra.Command, _ []string, s *catalog.Service) (any, error) {
 			return s.DiagnosePublication(cmd.Context(), inherit)
 		})

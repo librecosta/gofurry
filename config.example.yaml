@@ -88,3 +88,24 @@ management: null
 # management:
 #   address: 127.0.0.1:17324
 #   token: <private-random-32-byte-base64url>
+
+# Optional CN Harvest integration. Steam Intake creates Draft games.
+# To admit from the Steam catalog, use separate scoped Discovery credentials.
+harvest: null
+# harvest:
+#   url: http://127.0.0.1:18080
+#   namespace: gofurry_cn
+#   reader_token: <private-namespace-reader>
+#   writer_token: <private-namespace-writer>
+#   consumer_id: <registered-consumer-uuid>
+#   consume: true
+#   intake_enabled: true
+#   intake_egress_region: cn
+#   discovery:
+#     enabled: true
+#     namespace: gofurry_cn_steam_catalog
+#     reader_token: <private-catalog-reader>
+#     writer_token: <private-catalog-writer>
+#     page_size: 64
+#     jobs_per_day: 256
+#     candidates_per_day: 24

@@ -21,7 +21,7 @@ func checkSteamReadModel(t *testing.T, editor *catalog.Service, id, unrelated st
 	t.Helper()
 	p, err := editor.ReadGamePresentation(t.Context(), id, "cn")
 	must(t, err)
-	if len(p.Localizations) != 1 || p.Localizations[0].Name != "Curated name" || len(p.Approved) != 0 || len(p.Sources) != 2 {
+	if len(p.Localizations) != 2 || p.Localizations[0].Name != "Curated name" || len(p.Presentation) != 2 || len(p.Sources) != 2 {
 		t.Fatalf("manual work presentation changed: %+v", p)
 	}
 	steam := p.Sources[1]
@@ -145,7 +145,6 @@ func readAgedSteamGame(t *testing.T, pool *pgxpool.Pool, editor *catalog.Service
 	execSQL(t, pool, "DELETE FROM collection_current WHERE capability='steam.details' AND scope#>>'{dimensions,section}' IN ('details','media')")
 	for _, days := range []int32{31, 181, 365} {
 		execSQL(t, pool, "UPDATE game_source_metadata SET observed_at=now()-make_interval(days=>$1),confirmed_at=now()-make_interval(days=>$1) WHERE payload IS NOT NULL", days)
-		execSQL(t, pool, "UPDATE game_approved_presentations SET observed_at=now()-make_interval(days=>$1)", days)
 		execSQL(t, pool, "UPDATE collection_current SET observed_at=now()-make_interval(days=>$1),confirmed_at=now()-make_interval(days=>$1) WHERE capability IN ('steam.players','steam.details')", days)
 		after, err := editor.PublishedGame(ctx, gameID)
 		must(t, err)

@@ -12,8 +12,8 @@ WITH picked AS MATERIALIZED (
  ORDER BY g.first_published_at DESC NULLS LAST,g.public_id LIMIT sqlc.arg(take_rows)::integer
 )
 SELECT game_channel_card(g.id,g.public_id,g.slug,g.first_published_at,
- game_presentation(g.id,g.intake_display_source)->'localizations',f.genres,f.systems,f.release_state,f.release,
- game_channel_cover(g.id,g.intake_display_source,sqlc.arg(language)::text,sqlc.arg(country)::text,sqlc.arg(egress)::text),
+ game_published_text(g.id),f.genres,f.systems,f.release_state,f.release,
+ game_published_cover(g.id,sqlc.arg(language)::text),
  (SELECT q.price FROM game_channel_quotes(sqlc.arg(country),sqlc.arg(currency)::text,sqlc.arg(egress)) q(game_id,game_source_id,locale,confirmed_at,price)
   WHERE q.game_id=g.id ORDER BY (q.game_source_id=g.intake_display_source) DESC NULLS LAST,
    (q.locale=sqlc.arg(language)) DESC,q.confirmed_at DESC,q.game_source_id LIMIT 1))::jsonb AS card,
@@ -88,8 +88,8 @@ WITH settings AS NOT MATERIALIZED (
   (sqlc.arg(after_bucket)::integer,sqlc.arg(after_ordering)::bigint,sqlc.arg(after_name)::text COLLATE "C",sqlc.arg(after_id)::text)
  ORDER BY r.bucket,r.ordering,r.name_key,r.public_id LIMIT sqlc.arg(take_rows)::integer
 )
-SELECT game_channel_card(e.id,e.public_id,e.slug,e.first_published_at,game_presentation(e.id,e.intake_display_source)->'localizations',e.found_genres,e.systems,e.release_state,e.release,
- game_channel_cover(e.id,e.intake_display_source,CASE e.locale WHEN 'zh' THEN 'zh-cn' ELSE 'en' END,e.country,e.egress),
+SELECT game_channel_card(e.id,e.public_id,e.slug,e.first_published_at,game_published_text(e.id),e.found_genres,e.systems,e.release_state,e.release,
+ game_published_cover(e.id,e.locale),
  coalesce(e.quote,(SELECT q.price FROM prices q WHERE q.game_id=e.id
   ORDER BY (q.game_source_id=e.intake_display_source) DESC NULLS LAST,
    (q.locale=CASE e.locale WHEN 'zh' THEN 'zh-cn' ELSE 'en' END) DESC,q.confirmed_at DESC,q.game_source_id LIMIT 1)))::jsonb AS card,
@@ -137,8 +137,8 @@ WITH settings AS (
  SELECT genre,count(*) AS total FROM facts CROSS JOIN LATERAL unnest(genres) genre GROUP BY genre
 )
 SELECT l.kind,l.slot,l.ranking,game_channel_card(g.id,g.public_id,g.slug,g.first_published_at,
- game_presentation(g.id,g.intake_display_source)->'localizations',f.genres,f.systems,f.release_state,f.release,
- game_channel_cover(g.id,g.intake_display_source,CASE p.locale WHEN 'zh' THEN 'zh-cn' ELSE 'en' END,p.country,p.egress),q.price)::jsonb AS payload
+ game_published_text(g.id),f.genres,f.systems,f.release_state,f.release,
+ game_published_cover(g.id,p.locale),q.price)::jsonb AS payload
 FROM lanes l JOIN game_channel_public g ON g.id=l.id CROSS JOIN settings p
 CROSS JOIN LATERAL game_channel_facts(g.id,g.intake_display_source,CASE p.locale WHEN 'zh' THEN 'zh-cn' ELSE 'en' END,p.country,p.egress)
  f(genres,systems,developers,release_state,release_day,release) LEFT JOIN quotes q ON q.game_id=g.id

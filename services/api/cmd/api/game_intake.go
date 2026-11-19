@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/librecosta/gofurry/services/api/internal/catalog"
 	"github.com/librecosta/gofurry/services/api/internal/collection"
 	"github.com/librecosta/gofurry/services/api/internal/database"
 	"github.com/librecosta/gofurry/services/api/internal/platform"
@@ -14,7 +13,10 @@ import (
 )
 
 func gameIntakeCommand(cfg *platform.Config) *cobra.Command {
-	root := &cobra.Command{Use: "game-intake", Short: "Submit and resolve regional game candidates privately"}
+	root := &cobra.Command{
+		Use: "game-intake", Short: "Submit and resolve regional game candidates privately",
+		Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error { return cmd.Help() },
+	}
 	type operation func(*cobra.Command, []string, *collection.Intake) (any, error)
 	add := func(use, short string, n int, op operation) *cobra.Command {
 		cmd := &cobra.Command{Use: use, Short: short, Args: cobra.ExactArgs(n), RunE: func(cmd *cobra.Command, args []string) error {
@@ -72,36 +74,6 @@ func gameIntakeCommand(cfg *platform.Config) *cobra.Command {
 	add("dismiss PLATFORM KEY", "Stop processing a candidate and retain its deduplication key", 2,
 		func(cmd *cobra.Command, a []string, s *collection.Intake) (any, error) {
 			return nil, s.Dismiss(cmd.Context(), a[0], a[1])
-		})
-	var furry, sfw bool
-	review := add("review APP_ID FURRY_REF SFW_REF", "Record two positive reviews for the Steam work", 3,
-		func(cmd *cobra.Command, a []string, s *collection.Intake) (any, error) {
-			if !furry || !sfw {
-				return nil, collection.ErrIntakeInput
-			}
-			return nil, s.ReviewSteam(cmd.Context(), a[0], a[1], a[2])
-		})
-	review.Flags().BoolVar(&furry, "confirm-furry", false, "The cited work synopsis positively establishes anthropomorphic subject matter")
-	review.Flags().BoolVar(&sfw, "confirm-sfw", false, "The cited separate assessment positively establishes SFW content")
-	var withdrawal catalog.PublicationDecision
-	revoke := add("revoke-review APP_ID", "Record a persistent content-policy block", 1,
-		func(cmd *cobra.Command, a []string, s *collection.Intake) (any, error) {
-			return nil, s.RevokeSteamReview(cmd.Context(), a[0], withdrawal)
-		})
-	revoke.Flags().StringVar(&withdrawal.Actor, "actor", "", "Operator assertion")
-	revoke.Flags().StringVar(&withdrawal.Reason, "reason", "", "Content policy finding and evidence reference")
-	var reciprocal bool
-	relate := add("relate PLATFORM KEY OTHER_PLATFORM OTHER_KEY FORWARD_REF REVERSE_REF", "Record reviewed reciprocal official links between two full-game products", 6,
-		func(cmd *cobra.Command, a []string, s *collection.Intake) (any, error) {
-			if !reciprocal {
-				return nil, collection.ErrIntakeInput
-			}
-			return nil, s.RecordRelation(cmd.Context(), a[0], a[1], a[2], a[3], a[4], a[5])
-		})
-	relate.Flags().BoolVar(&reciprocal, "confirm-reciprocal-work-links", false, "Both official product records reciprocate and describe the same full work")
-	add("revoke-relation PLATFORM KEY", "Deactivate an automatically attached source and preserve its history", 2,
-		func(cmd *cobra.Command, a []string, s *collection.Intake) (any, error) {
-			return nil, s.RevokeRelation(cmd.Context(), a[0], a[1])
 		})
 	return root
 }

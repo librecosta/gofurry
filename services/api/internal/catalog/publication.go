@@ -25,73 +25,6 @@ func (d PublicationDecision) Save(ctx context.Context, q *dbgen.Queries, kind st
 	})
 }
 
-// SetGameBlock applies a policy intervention under the caller's Game lock.
-func SetGameBlock(ctx context.Context, q *dbgen.Queries, game dbgen.Game, blocked bool, d PublicationDecision) (dbgen.Game, error) {
-	if !d.Valid() || game.PublicationBlocked == blocked {
-		return game, ErrInvalid
-	}
-	next, err := q.SetGamePublicationBlock(ctx, dbgen.SetGamePublicationBlockParams{ID: game.ID, PublicationBlocked: blocked})
-	if err != nil {
-		return game, err
-	}
-	action := "clear_block"
-	if blocked {
-		action = "block"
-	}
-	return next, d.Save(ctx, q, "game", game.ID, next.Revision, action)
-}
-
-func (s *Service) ChangeGamePublication(ctx context.Context, publicID string, revision int64, action string, d PublicationDecision) (dbgen.Game, error) {
-	if !ValidPublicID(publicID) || !d.Valid() {
-		return dbgen.Game{}, ErrInvalid
-	}
-	return write(ctx, s, func(ctx context.Context, q *dbgen.Queries) (dbgen.Game, error) {
-		game, err := q.LockGamePublicID(ctx, publicID)
-		if err != nil {
-			return game, err
-		}
-		if revision != game.Revision {
-			return game, ErrConflict
-		}
-		switch action {
-		case "block", "clear_block":
-			return SetGameBlock(ctx, q, game, action == "block", d)
-		case "archive", "unpublish", "restore":
-			return changeGameVisibility(ctx, q, game, action, d)
-		default:
-			return game, ErrInvalid
-		}
-	})
-}
-
-func changeGameVisibility(ctx context.Context, q *dbgen.Queries, game dbgen.Game, action string, d PublicationDecision) (dbgen.Game, error) {
-	var next dbgen.Game
-	var err error
-	switch action {
-	case "archive":
-		if game.Status == Archived {
-			return game, ErrConflict
-		}
-		next, err = q.ChangeGameStatus(ctx, dbgen.ChangeGameStatusParams{ID: game.ID, NewStatus: Archived})
-	case "unpublish":
-		if game.Status != Published {
-			return game, ErrConflict
-		}
-		next, err = q.ChangeGameStatus(ctx, dbgen.ChangeGameStatusParams{ID: game.ID, NewStatus: Draft})
-	case "restore":
-		if game.Status == Published || !game.PublishedAt.Valid || game.PublicationBlocked {
-			return game, ErrConflict
-		}
-		next, err = q.RestoreGamePublication(ctx, game.ID)
-	default:
-		return game, ErrInvalid
-	}
-	if err != nil {
-		return game, err
-	}
-	return next, d.Save(ctx, q, "game", game.ID, next.Revision, action)
-}
-
 func (s *Service) ChangeSitePublication(ctx context.Context, publicID string, revision int64, action string, sfw bool, d PublicationDecision) (dbgen.Site, error) {
 	if !ValidPublicID(publicID) || !d.Valid() || sfw && action != "publish" {
 		return dbgen.Site{}, ErrInvalid
@@ -161,7 +94,6 @@ func changeSiteVisibility(ctx context.Context, q *dbgen.Queries, site dbgen.Site
 type PublicationDiagnostics struct {
 	LegacyPromoted int   `json:"legacy_promoted"`
 	LegacyUnknown  int64 `json:"legacy_unknown_detail_only"`
-	GamesMissing   int64 `json:"published_games_missing_presentation"`
 }
 
 func (s *Service) DiagnosePublication(ctx context.Context, upgrade bool) (PublicationDiagnostics, error) {
@@ -176,9 +108,6 @@ func (s *Service) DiagnosePublication(ctx context.Context, upgrade bool) (Public
 		}
 		var err error
 		out.LegacyUnknown, err = q.LegacySitePolicyPending(ctx)
-		if err == nil {
-			out.GamesMissing, err = q.PublishedGamesMissingPresentation(ctx)
-		}
 		return out, err
 	})
 }

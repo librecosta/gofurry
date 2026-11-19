@@ -1,4 +1,4 @@
--- name: SaveSteamMetadata :many
+-- name: SaveSteamMetadata :exec
 WITH eligible AS MATERIALIZED (
  SELECT DISTINCT ON (b.game_source_id,locale,store_country,egress_region,section) b.game_source_id,b.id AS binding_id,
   c.scope->>'locale' AS locale,c.scope->>'region' AS store_country,c.scope->>'egress_region' AS egress_region,
@@ -27,7 +27,8 @@ WITH eligible AS MATERIALIZED (
    AND c.data->>'app_id'=gs.external_key AND c.data->>'tier'='observed_storefront'
    AND c.data->>'source_url'='https://store.steampowered.com/api/appdetails'))
  ORDER BY b.game_source_id,locale,store_country,egress_region,section,b.effective_from DESC,c.position DESC,b.id DESC
-), saved AS (
+)
+
  INSERT INTO game_source_metadata AS old (game_source_id,locale,store_country,egress_region,section,binding_id,scope_key,
   epoch,position,event_at,state,output_schema,ruleset,observation_id,content_hash,observed_at,confirmed_at,payload)
  SELECT e.game_source_id,e.locale,e.store_country,e.egress_region,e.section,e.binding_id,e.scope_key,
@@ -53,50 +54,4 @@ WITH eligible AS MATERIALIZED (
    AND excluded.confirmed_at>old.confirmed_at))
   -- A sparse partial description cannot erase a usable last success.
  AND NOT (excluded.state='present' AND old.section='details'
-  AND coalesce(old.payload->>'description','')<>'' AND coalesce(excluded.payload->>'description','')='')
- RETURNING game_source_id,section,state
-)
-SELECT DISTINCT gs.game_id::uuid FROM saved s JOIN game_sources gs ON gs.id=s.game_source_id
-WHERE s.section='details' AND s.state='present' ORDER BY 1;
-
--- name: LockSteamPresentationGames :exec
-SELECT g.id FROM games g WHERE g.id=ANY(sqlc.arg(game_ids)::uuid[]) AND g.intake_managed ORDER BY g.id FOR UPDATE;
-
--- name: RefreshApprovedSteamPresentation :exec
-WITH approved AS (
- SELECT a.game_id,a.locale,a.game_source_id,a.approval,a.steam_store_country,a.steam_egress_region
- FROM game_approved_presentations a WHERE a.game_id=ANY(sqlc.arg(game_ids)::uuid[])
-), choices AS (
- SELECT a.game_id,a.approval,m.locale,m.game_source_id,m.payload,m.observation_id,m.observed_at,m.store_country,m.egress_region,
-  row_number() OVER (PARTITION BY a.game_id,m.locale ORDER BY
-   CASE m.store_country WHEN 'cn' THEN 0 WHEN 'hk' THEN 1 ELSE 2 END,
-   (m.egress_region IS DISTINCT FROM a.steam_egress_region),m.egress_region) AS preference
- FROM approved a
- JOIN games g ON g.id=a.game_id AND g.intake_managed AND g.status='published' AND NOT g.publication_blocked
- JOIN game_source_metadata m ON m.game_source_id=a.game_source_id AND m.section='details' AND m.state='present'
- JOIN collection_bindings b ON b.id=m.binding_id AND b.game_id=a.game_id AND b.game_source_id=a.game_source_id AND b.effective_until IS NULL
- JOIN collection_current c ON c.generation=sqlc.arg(generation)::uuid AND c.source_id=b.source_id AND c.capability='steam.details'
-  AND c.output_schema=m.output_schema AND c.scope_key=m.scope_key AND c.position=m.position AND c.state='present'
- JOIN game_sources s ON s.id=m.game_source_id AND s.game_id=g.id AND s.active AND s.platform_code='steam'
- WHERE m.ruleset='gofurry-steam-1' AND m.payload->>'type'='game' AND m.payload->>'description'<>''
-  AND ((m.locale='en' AND a.locale='en' AND m.store_country=coalesce(a.steam_store_country,'us')
-       AND (a.steam_egress_region IS NULL OR a.steam_egress_region=m.egress_region))
-    OR (m.locale='zh-cn' AND m.payload->>'localized'='true' AND NOT EXISTS (
-       SELECT 1 FROM game_localizations l WHERE l.game_id=a.game_id AND l.locale='zh'
-        AND NOT EXISTS (SELECT 1 FROM approved z WHERE z.game_id=a.game_id AND z.locale='zh')
-      ) AND (
-       (a.locale='zh' AND a.steam_store_country=m.store_country AND a.steam_egress_region=m.egress_region)
-       OR (a.locale='en' AND a.game_source_id=g.intake_display_source
-        AND NOT EXISTS (SELECT 1 FROM approved z WHERE z.game_id=a.game_id AND z.locale='zh')))))
-)
-INSERT INTO game_approved_presentations AS old (game_id,locale,name,summary,game_source_id,observation_id,observed_at,approval,steam_store_country,steam_egress_region)
-SELECT c.game_id,CASE c.locale WHEN 'en' THEN 'en' ELSE 'zh' END,left(c.payload->>'name',160),c.payload->>'description',
- c.game_source_id,c.observation_id,c.observed_at,c.approval,c.store_country,c.egress_region
-FROM choices c WHERE c.preference=1
-ON CONFLICT (game_id,locale) DO UPDATE SET name=excluded.name,summary=excluded.summary,
- observation_id=excluded.observation_id,observed_at=excluded.observed_at,
- steam_store_country=excluded.steam_store_country,steam_egress_region=excluded.steam_egress_region
-WHERE old.game_source_id=excluded.game_source_id
- AND (old.steam_store_country IS NULL OR (old.steam_store_country,old.steam_egress_region)=(excluded.steam_store_country,excluded.steam_egress_region))
- AND old.observed_at<excluded.observed_at
- AND (old.name,old.summary) IS DISTINCT FROM (excluded.name,excluded.summary);
+  AND coalesce(old.payload->>'description','')<>'' AND coalesce(excluded.payload->>'description','')='');

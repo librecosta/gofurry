@@ -8,15 +8,11 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
-	"slices"
 	"strconv"
-	"strings"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -74,7 +70,7 @@ func (l *lab) catalogFeed(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(raw)
 }
 
-func (l *lab) eligibilityFixture(app, name, kind, description, extra string) (string, string, string, string) {
+func (l *lab) discoveryStoreFixture(app, name, kind, description, extra string) (string, string, string, string) {
 	name = "Fixture " + app
 	descs := `,"required_age":"0","ratings":{"esrb":{"rating":"E10+"}},"content_descriptors":{"ids":[]}`
 	description = "Play as anthropomorphic foxes restoring a library."
@@ -120,25 +116,11 @@ func TestSteamDiscoveryHarvest(t *testing.T) {
 	h := newClient(platform.HarvestConfig{URL: cut.server.URL, WriterToken: l.writer, ReaderToken: l.reader})
 	var enrolled ackView
 	must(t, h.call(ctx, l.operator, "POST", "consumers", nil, map[string]string{"name": "discovery_intake", "stream": fixtureStream, "principal": "b1_reader"}, &enrolled, 200))
-	var aiCalls atomic.Int32
-	ai := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		aiCalls.Add(1)
-		if r.URL.Path != "/v1/chat/completions" || r.Method != "POST" || r.Header.Get("Authorization") == "" {
-			t.Error("bad AI Gateway request")
-		}
-		body, _ := io.ReadAll(io.LimitReader(r.Body, 8192))
-		if strings.Contains(string(body), "talking otters") {
-			_, _ = io.WriteString(w, `{"choices":[{"finish_reason":"stop","message":{"role":"assistant","content":"{\"relevant\":true,\"excerpt\":\"talking otters\"}"}}]}`)
-		} else {
-			_, _ = io.WriteString(w, `{"choices":[{"finish_reason":"stop","message":{"role":"assistant","content":"{\"relevant\":true,\"excerpt\":\"manufactured animal protagonist\"}"}}]}`)
-		}
-	}))
-	defer ai.Close()
 	cfg := platform.HarvestConfig{URL: cut.server.URL, Namespace: fixtureStream, WriterToken: l.writer, ReaderToken: l.reader, ConsumerID: enrolled.ID.String(),
 		Consume: true, PollInterval: time.Second, PageSize: 4, IntakeEnabled: true, IntakeEgressRegion: "cn",
 		Discovery: &platform.DiscoveryConfig{Enabled: true, Namespace: discoveryStream, WriterToken: l.discoveryWriter, ReaderToken: l.discoveryReader,
 			PollInterval: time.Second, ScanInterval: time.Minute, PageSize: 2, JobsPerDay: 32, CandidatesPerDay: 16,
-			Seeds: []uint32{3100000009}, AI: &platform.DiscoveryAIConfig{URL: ai.URL, Token: "synthetic-fixture-authorization-token", Model: "fixture", CallsPerDay: 2}}}
+			Seeds: []uint32{3100000009}}}
 	intake := NewIntake(pool, &cfg)
 	defer intake.Close()
 	d := NewDiscovery(pool, &cfg, intake)
@@ -206,12 +188,7 @@ func TestSteamDiscoveryHarvest(t *testing.T) {
     jobs_per_day: 32
     candidates_per_day: 16
     seeds: [3100000009]
-    ai:
-      url: %q
-      token: %q
-      model: fixture
-      calls_per_day: 2
-`, discoveryStream, l.discoveryWriter, l.discoveryReader, ai.URL, cfg.Discovery.AI.Token)
+`, discoveryStream, l.discoveryWriter, l.discoveryReader)
 	must(t, os.WriteFile(yaml, buf, 0600))
 	api := launch(t, filepath.Dir(yaml), nil, bin, "--config", yaml)
 	defer api.stop()
@@ -225,13 +202,13 @@ func TestSteamDiscoveryHarvest(t *testing.T) {
 		return resp.StatusCode == 200
 	})
 	complete := func() bool {
-		return scalar[int64](t, pool, "SELECT count(*) FROM game_intake_candidates WHERE state='accepted' OR reason IN ('eligibility_uncertain','adult_game','irrelevant_game','not_full_game','weak_identity_match')") == 8
+		return scalar[int64](t, pool, "SELECT count(*) FROM game_intake_candidates WHERE state='accepted' OR reason IN ('not_full_game','weak_identity_match')") == 8
 	}
 	for deadline := time.Now().Add(140 * time.Second); !complete(); {
 		if time.Now().After(deadline) {
 			states, e := intake.Status(ctx)
 			must(t, e)
-			t.Fatalf("automatic eligibility did not converge, candidates: %+v, AI calls: %d", states, aiCalls.Load())
+			t.Fatalf("discovery Intake did not converge, candidates: %+v", states)
 		}
 		// Advance only the disposable queue's planned poll times. The Go
 		// services still claim their own leases and verify real Job results.
@@ -241,14 +218,14 @@ func TestSteamDiscoveryHarvest(t *testing.T) {
 		time.Sleep(200 * time.Millisecond)
 	}
 	for _, want := range []struct{ key, state, reason string }{
-		{"3100000001", "accepted", "created_game"}, {"3100000002", "rejected", "irrelevant_game"}, {"3100000003", "rejected", "adult_game"},
-		{"3100000004", "deferred", "eligibility_uncertain"}, {"3100000005", "rejected", "not_full_game"}, {"3100000006", "deferred", "weak_identity_match"},
+		{"3100000001", "accepted", "created_game"}, {"3100000002", "accepted", "created_game"}, {"3100000003", "accepted", "created_game"},
+		{"3100000004", "accepted", "created_game"}, {"3100000005", "rejected", "not_full_game"}, {"3100000006", "deferred", "weak_identity_match"},
 	} {
 		assertIntakeReason(t, intake, want.key, want.state, want.reason)
 	}
 	first, err := intake.Inspect(ctx, "steam", "3100000001")
 	must(t, err)
-	assertIntakeHTTP(t, l.http, base, first.PublicID, 200, "anthropomorphic foxes")
+	assertIntakeHTTP(t, l.http, base, first.PublicID, 404)
 	readChannel := func(path string, out any) {
 		t.Helper()
 		resp, err := l.http.Get(base + "/api/v1/games/" + path)
@@ -267,23 +244,22 @@ func TestSteamDiscoveryHarvest(t *testing.T) {
 		readChannel("directory?"+query, &page)
 		return page.Items
 	}
-	initial := readDirectory("q=anthropomorphic+foxes")
-	if len(initial) != 1 || initial[0].PublicID != first.PublicID || initial[0].FirstPublishedAt == nil {
-		t.Fatalf("automatically accepted game not in directory: %+v", initial)
+	if len(readDirectory("q=anthropomorphic+foxes")) != 0 {
+		t.Fatal("Discovery exposed unreviewed work")
 	}
-	var home catalog.GameChannel
-	readChannel("discovery", &home)
-	if !slices.ContainsFunc(home.Recent, func(game catalog.GameCard) bool { return game.PublicID == first.PublicID }) || len(home.Featured) != 0 {
-		t.Fatal("automatic publication did not reach the uncurated discovery page")
-	}
-	count(t, pool, 2, "SELECT count(*) FROM games WHERE status='published'")
-	count(t, pool, 2, "SELECT count(*) FROM game_approved_presentations WHERE approval->>'policy'='steam-eligibility-1'")
-	if aiCalls.Load() != 2 {
-		t.Fatalf("AI daily budget: %d", aiCalls.Load())
-	}
-	t.Logf("catalog 8 rows => 2 automatically published, 1 irrelevant, 1 adult, 2 uncertain, 1 Demo and 1 weak identity; first public ID %s", first.PublicID)
-
+	count(t, pool, 0, "SELECT count(*) FROM games WHERE status='published'")
+	count(t, pool, 0, "SELECT count(*) FROM catalog_publication_decisions WHERE entity_kind='game'")
 	editor := catalog.New(pool)
+	game, e := dbgen.New(pool).LockGame(ctx, *first.Game)
+	must(t, e)
+	game, e = editor.EditGame(ctx, game.ID, game.Revision, catalog.GameInput{Editorial: catalog.Editorial{Localizations: []catalog.Localization{{Locale: "en", Name: "Edited Fox Library", Summary: "Editorial wins."}}}})
+	must(t, e)
+	_, e = publishFixtureGame(t, editor, first.PublicID, game.Revision)
+	must(t, e)
+	initial := readDirectory("q=Edited+Fox+Library")
+	if len(initial) != 1 || initial[0].PublicID != first.PublicID || initial[0].FirstPublishedAt == nil {
+		t.Fatalf("reviewed work did not enter directory: %+v", initial)
+	}
 	collection, err := editor.CreateGameCollection(ctx, catalog.Editorial{Slug: "field-guide", Localizations: []catalog.Localization{{Locale: "en", Name: "Field Guide"}}})
 	must(t, err)
 	collection, err = editor.SetGameCollectionMembers(ctx, collection.PublicID, collection.Revision, []string{first.PublicID})
@@ -300,10 +276,6 @@ func TestSteamDiscoveryHarvest(t *testing.T) {
 		}
 	}
 	readMembers(1)
-	game, e := dbgen.New(pool).LockGame(ctx, *first.Game)
-	must(t, e)
-	_, e = editor.EditGame(ctx, game.ID, game.Revision, catalog.GameInput{Editorial: catalog.Editorial{Localizations: []catalog.Localization{{Locale: "en", Name: "Edited Fox Library", Summary: "Editorial wins."}}}})
-	must(t, e)
 	execSQL(t, remote, "UPDATE harvest.consumers SET reset_required=true,reset_reason='fixture' WHERE id=$1", enrolled.ID)
 	expectEventually(t, 20*time.Second, "business consumer did not recover", func() bool {
 		return scalar[int64](t, pool, "SELECT count(*) FROM collection_gaps WHERE namespace=$1", fixtureStream) > 0
@@ -318,12 +290,12 @@ func TestSteamDiscoveryHarvest(t *testing.T) {
 		must(t, e)
 		changed, e := intake.Inspect(ctx, "steam", "3100000004")
 		must(t, e)
-		seeded := scalar[bool](t, pool, "SELECT EXISTS (SELECT 1 FROM game_intake_candidates c JOIN games g ON g.id=c.game_id WHERE c.external_key='3100000009' AND g.status='published')")
-		if status.Windows >= 2 && changed.GameState == "published" && seeded {
-			if changed.Job == nil || oldCandidate.Job == nil || *changed.Job == *oldCandidate.Job {
-				t.Fatal("incremental change reused an old Job")
+		seeded := scalar[bool](t, pool, "SELECT EXISTS (SELECT 1 FROM game_intake_candidates c JOIN games g ON g.id=c.game_id WHERE c.external_key='3100000009' AND g.status='draft')")
+		if status.Windows >= 2 && changed.GameState == "draft" && seeded {
+			if changed.Job == nil || oldCandidate.Job == nil || *changed.Job != *oldCandidate.Job {
+				t.Fatal("incremental discovery reprovisioned a bound source")
 			}
-			t.Logf("incremental publication %s from new Job %s; trusted seed with a neutral title also published", changed.PublicID, *changed.Job)
+			t.Logf("incremental scan kept draft %s and Job %s; a seed entered Draft", changed.PublicID, *changed.Job)
 			break
 		}
 		if time.Now().After(deadline) {
@@ -341,7 +313,6 @@ func TestSteamDiscoveryHarvest(t *testing.T) {
 	if current.Job == nil || first.Job == nil || *current.Job != *first.Job || current.PublicID != first.PublicID {
 		t.Fatal("a price-only change restarted Intake for an already bound game")
 	}
-	ai.Close()
 	run(t, "", nil, "docker", "stop", redisID)
 	assertIntakeHTTP(t, l.http, base, first.PublicID, 200, "Edited Fox Library", "Editorial wins")
 	l.discoveryMode.Store(4)
@@ -365,31 +336,17 @@ func TestSteamDiscoveryHarvest(t *testing.T) {
 	l.job(req)
 	execSQL(t, remote, "UPDATE harvest.consumers SET reset_required=true,reset_reason='fixture' WHERE id=$1", enrolled.ID)
 	cut.offline.Store(false)
-	expectEventually(t, 25*time.Second, "confirmed adult content did not block publication", func() bool {
-		return scalar[bool](t, pool, "SELECT publication_blocked FROM games WHERE id=$1", *first.Game)
+	expectEventually(t, 25*time.Second, "adult Steam observation did not reach Consumer", func() bool {
+		return scalar[int64](t, pool, "SELECT count(*) FROM game_source_metadata WHERE game_source_id=$1 AND payload#>'{content_rating,descriptors}'='[3]'::jsonb", first.Source) > 0
 	})
-	assertIntakeHTTP(t, l.http, base, first.PublicID, 404)
-	readMembers(0)
-	if len(readDirectory("q=Edited+Fox+Library")) != 0 {
-		t.Fatal("blocked game leaked into search")
-	}
-	count(t, pool, 1, "SELECT count(*) FROM catalog_publication_decisions WHERE entity_id=$1 AND action='block' AND actor='steam-eligibility-1'", *first.Game)
-	// Replay cannot clear a block or undo an explicit disposition.
+	count(t, pool, 1, "SELECT count(*) FROM games WHERE id=$1 AND status='published' AND content_rating='sfw'", first.Game)
+	count(t, pool, 1, "SELECT count(*) FROM catalog_publication_decisions WHERE entity_id=$1", first.Game)
 	count(t, pool, 2, "SELECT count(*) FROM collection_gaps WHERE namespace=$1", fixtureStream)
-	assertIntakeHTTP(t, l.http, base, first.PublicID, 404)
-	game, e = dbgen.New(pool).LockGame(ctx, *first.Game)
-	must(t, e)
-	_, e = editor.ChangeGamePublication(ctx, first.PublicID, game.Revision, "clear_block", catalog.PublicationDecision{Actor: "fixture", Reason: "Verified editorial correction"})
-	must(t, e)
 	assertIntakeHTTP(t, l.http, base, first.PublicID, 200, "Edited Fox Library", "Editorial wins")
-	execSQL(t, remote, "UPDATE harvest.consumers SET reset_required=true,reset_reason='fixture' WHERE id=$1", enrolled.ID)
-	expectEventually(t, 20*time.Second, "clear disposition replay did not settle", func() bool {
-		return scalar[int64](t, pool, "SELECT count(*) FROM collection_gaps WHERE namespace=$1", fixtureStream) == 3
-	})
 	l.worker.stop()
 	l.plane.stop()
 	for _, days := range []int32{31, 181, 365} {
-		execSQL(t, pool, "UPDATE game_approved_presentations SET observed_at=now()-make_interval(days=>$1)", days)
+		execSQL(t, pool, "UPDATE game_source_metadata SET observed_at=now()-make_interval(days=>$1)", days)
 		assertIntakeHTTP(t, l.http, base, first.PublicID, 200, "Edited Fox Library", "Editorial wins")
 		items := readDirectory("q=Edited+Fox+Library")
 		if len(items) != 1 || items[0].PublicID != first.PublicID || items[0].Slug != initial[0].Slug ||

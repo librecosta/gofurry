@@ -292,7 +292,7 @@ func TestLegacyImportPostgreSQL18(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	game, err = s.SetGameStatus(ctx, game.ID, game.Revision, catalog.Published)
+	err = publishExistingGameFixture(ctx, s, &game)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -447,8 +447,8 @@ CREATE TRIGGER fixture_logo_failure BEFORE UPDATE ON sites FOR EACH ROW
 	}
 	expectInt(t, pool, ctx, 3, "SELECT count(*) FROM sites WHERE logo_asset_key=$1", logoKey(logoHash))
 	expectInt(t, pool, ctx, 1, "SELECT count(*) FROM sites WHERE slug='archived-site' AND status='archived' AND content_rating='adult' AND first_published_at IS NULL")
-	expectInt(t, pool, ctx, 1, "SELECT count(*) FROM games WHERE slug='adult-fixture' AND publication_blocked AND status='draft'")
-	expectInt(t, pool, ctx, 1, "SELECT count(*) FROM games WHERE slug='indie' AND NOT publication_blocked AND status='draft'")
+	expectInt(t, pool, ctx, 1, "SELECT count(*) FROM games WHERE slug='adult-fixture' AND content_rating='unreviewed' AND status='draft'")
+	expectInt(t, pool, ctx, 1, "SELECT count(*) FROM games WHERE slug='indie' AND content_rating='unreviewed' AND status='draft'")
 	expectInt(t, pool, ctx, 1, "SELECT count(*) FROM sites WHERE slug='example' AND primary_category='community' AND navigation_tags=ARRAY['forum'] AND status='published'")
 	expectInt(t, pool, ctx, 1, "SELECT count(*) FROM site_addresses WHERE site_id=$1 AND url='https://www.example.com' AND active", beforeSite.ID)
 	expectInt(t, pool, ctx, 0, "SELECT count(*) FROM site_addresses WHERE url LIKE '%old.example.com%'")
@@ -466,17 +466,8 @@ CREATE TRIGGER fixture_logo_failure BEFORE UPDATE ON sites FOR EACH ROW
 	}
 	counts, err := q.LegacyCollectionCounts(ctx, coll.TargetID)
 	if err != nil || counts.ManualCount != 2 || counts.RuleCount != 3 || counts.ExclusionCount != 2 ||
-		counts.ManualExcludedCount != 1 || counts.EffectiveCount != 3 || counts.PublicCount != 2 {
+		counts.ManualExcludedCount != 1 || counts.EffectiveCount != 3 || counts.PublicCount != 0 {
 		t.Fatalf("collection reconciliation %+v %v", counts, err)
-	}
-	page, err := s.PublicGameCollection(ctx, catalog.ChannelMarket{Region: "CN"}, coll.PublicIDAtLink, catalog.ChannelCriteria{Locale: "en", Limit: 1})
-	if err != nil || len(page.Members.Items) != 1 || page.Members.After == "" {
-		t.Fatalf("public hybrid collection: %+v %v", page, err)
-	}
-	next, err := s.PublicGameCollection(ctx, catalog.ChannelMarket{Region: "CN"}, coll.PublicIDAtLink,
-		catalog.ChannelCriteria{Locale: "en", Limit: 1, After: page.Members.After})
-	if err != nil || len(next.Members.Items) != 1 || next.Members.Items[0].PublicID == page.Members.Items[0].PublicID {
-		t.Fatal("editorial cursor lost or repeated an automatic member")
 	}
 
 	beforeReplay, err := readTarget(ctx, q, makeKey(sites, 1), beforeSite.ID)
@@ -559,6 +550,30 @@ CREATE TRIGGER fixture_logo_failure BEFORE UPDATE ON sites FOR EACH ROW
 		t.Fatalf("CLI did not report a redacted failure: %q", out)
 	}
 
+	// Review the mapped candidates through the post-import publication boundary.
+	for _, id := range []int64{1, 5, 6} {
+		item, err := mapping(ctx, q, makeKey(games, id))
+		if err != nil {
+			t.Fatal(err)
+		}
+		row, err := q.LockGame(ctx, item.TargetID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err = publishExistingGameFixture(ctx, s, &row); err != nil {
+			t.Fatal(err)
+		}
+	}
+	page, err := s.PublicGameCollection(ctx, catalog.ChannelMarket{Region: "CN"}, coll.PublicIDAtLink, catalog.ChannelCriteria{Locale: "en", Limit: 1})
+	if err != nil || len(page.Members.Items) != 1 || page.Members.After == "" {
+		t.Fatalf("public hybrid collection: %+v %v", page, err)
+	}
+	next, err := s.PublicGameCollection(ctx, catalog.ChannelMarket{Region: "CN"}, coll.PublicIDAtLink,
+		catalog.ChannelCriteria{Locale: "en", Limit: 1, After: page.Members.After})
+	if err != nil || len(next.Members.Items) != 1 || next.Members.Items[0].PublicID == page.Members.Items[0].PublicID {
+		t.Fatal("editorial cursor lost or repeated an automatic member")
+	}
+
 	// Rule-result changes invalidate an existing public cursor. Restoring
 	// the category resumes dynamic matching without rewriting manual rows.
 	execSQL(t, pool, ctx, "UPDATE game_editorial_tag_categories SET archived_at=clock_timestamp() WHERE code='genre'")
@@ -575,4 +590,20 @@ CREATE TRIGGER fixture_logo_failure BEFORE UPDATE ON sites FOR EACH ROW
 	testCollectionCapacity(t, ctx, c, seed, psql, pool, base, ds)
 	t.Logf("isolated PG 18: %d source rows, first apply retry=%d, replay reused=%d, unique immutable PUTs=%d",
 		success.SourceRows, failed.Counts["retry_pending"], replay.Counts["verified_existing"], objects.puts)
+}
+
+func publishExistingGameFixture(ctx context.Context, s *catalog.Service, g *dbgen.Game) error {
+	preview, err := s.ManagementGame(ctx, g.PublicID)
+	if err != nil {
+		return err
+	}
+	result, err := s.Manage(ctx, dbgen.RecordManagementOperationParams{
+		RequestID: uuid.NewV7(), ActorID: uuid.NewV7(), ActorName: "Import fixture operator", ActorRole: "operator", Action: "game.publish",
+	}, func(ctx context.Context, tx *catalog.Service, _ *dbgen.Queries) (catalog.ManagementResult, error) {
+		return tx.PublishManagementGame(ctx, g.PublicID, catalog.GamePublicationReview{Revision: g.Revision, ConfirmRelevance: true, ContentRating: "sfw", PreviewToken: preview.PreviewToken})
+	})
+	if err == nil {
+		g.Revision = result.Revision
+	}
+	return err
 }

@@ -7,13 +7,11 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"reflect"
 	"testing"
 	"uuid"
 
 	"github.com/librecosta/gofurry/services/api/internal/catalog"
 	"github.com/librecosta/gofurry/services/api/internal/database"
-	"github.com/librecosta/gofurry/services/api/internal/database/dbgen"
 )
 
 func TestDurableCatalogForward(t *testing.T) {
@@ -59,6 +57,7 @@ func TestDurableCatalogForward(t *testing.T) {
 	seedGame(expired, "50101", "181 days", true)
 	seedGame(revoked, "50102", "", true)
 	seedGame("000000000000000c", "50103", "", false)
+	execSQL(t, pool, "INSERT INTO games(id,public_id,slug,status,archived_at) VALUES(uuidv7(),'000000000000000f','archived-game','archived',now())")
 	known, unknown := uuid.NewV7(), uuid.NewV7()
 	execSQL(t, pool, `INSERT INTO sites(id,public_id,slug,status,revision,published_at,legacy_detail) VALUES
  ($1,'000000000000000d','known-site','published',2,now(),true),($2,'000000000000000e','unknown-site','published',1,now(),true)`, known, unknown)
@@ -69,50 +68,31 @@ func TestDurableCatalogForward(t *testing.T) {
 	must(t, database.Migrate(ctx, cfg, migrations, "up", io.Discard))
 
 	editor := catalog.New(pool)
-	first, err := editor.PublishedGame(ctx, expired)
-	must(t, err)
-	if len(first.Localizations) != 1 || first.Localizations[0].Name != "Legacy Fable" || first.Localizations[0].Summary != "The approved story." {
-		t.Fatalf("forward migration did not recover the approved presentation: %+v", first)
+	for _, id := range []string{expired, revoked, "000000000000000c"} {
+		_, err := editor.PublishedGame(ctx, id)
+		if !errors.Is(err, catalog.ErrNotFound) {
+			t.Fatalf("unverified pre-cutover publication %s is visible: %v", id, err)
+		}
 	}
+	count(t, pool, 3, "SELECT count(*) FROM games WHERE status='draft' AND content_rating='unreviewed' AND published_at IS NOT NULL")
+	count(t, pool, 1, "SELECT count(*) FROM games WHERE public_id='000000000000000f' AND status='archived'")
+	count(t, pool, 2, "SELECT count(*) FROM game_sources")
+	count(t, pool, 2, "SELECT count(*) FROM game_intake_candidates WHERE state='accepted'")
+	count(t, pool, 2, "SELECT count(*) FROM game_source_text_history WHERE name='Legacy Fable'")
+	count(t, pool, 0, "SELECT count(*) FROM game_published_localizations")
+	count(t, pool, 3, "SELECT count(*) FROM catalog_publication_decisions WHERE entity_kind='game' AND action='unpublish' AND actor='schema-migration'")
 	count(t, pool, 1, "SELECT count(*) FROM catalog_publication_decisions WHERE entity_kind='game' AND action='block' AND actor='r1_migration'")
-	count(t, pool, 2, "SELECT count(*) FROM game_approved_presentations")
-	count(t, pool, 0, "SELECT count(*) FROM games WHERE public_id=$1 AND NOT publication_blocked", revoked)
-	execSQL(t, pool, "DELETE FROM game_intake_candidates WHERE external_key='50101'")
-	after, err := editor.PublishedGame(ctx, expired)
-	must(t, err)
-	if !reflect.DeepEqual(first, after) {
-		t.Fatal("removing the historical candidate changed the public response")
-	}
-	decision := catalog.PublicationDecision{Actor: "fixture", Reason: "Explicit disposition fixture"}
-	work, err := dbgen.New(pool).LockGamePublicID(ctx, expired)
-	must(t, err)
-	archived, err := editor.ChangeGamePublication(ctx, expired, work.Revision, "archive", decision)
-	must(t, err)
-	_, err = editor.PublishedGame(ctx, expired)
-	if !errors.Is(err, catalog.ErrNotFound) {
-		t.Fatal("explicit Game archive left the Game public")
-	}
-	_, err = editor.ChangeGamePublication(ctx, expired, work.Revision, "restore", decision)
-	if !errors.Is(err, catalog.ErrConflict) {
-		t.Fatal("stale revision restored an archived Game")
-	}
-	restored, err := editor.ChangeGamePublication(ctx, expired, archived.Revision, "restore", decision)
-	must(t, err)
-	after, err = editor.PublishedGame(ctx, expired)
-	must(t, err)
-	if !reflect.DeepEqual(first, after) || !restored.PublishedAt.Time.Equal(work.PublishedAt.Time) {
-		t.Fatal("restoring an archived Game changed its original identity or publication date")
-	}
-	count(t, pool, 2, "SELECT count(*) FROM catalog_publication_decisions WHERE entity_id=$1 AND actor=$2 AND reason=$3", work.ID, decision.Actor, decision.Reason)
+	count(t, pool, 1, "SELECT count(*) FROM catalog_publication_decisions WHERE entity_kind='game' AND action='unpublish' AND reason LIKE 'Legacy restricted%'")
+	count(t, pool, 0, "SELECT count(*) FROM information_schema.columns WHERE table_name='game_intake_candidates' AND column_name IN ('review','review_until','review_revoked','automation','published_at','decision_version')")
 
 	out, err := editor.DiagnosePublication(ctx, true)
 	must(t, err)
-	if out.LegacyPromoted != 1 || out.LegacyUnknown != 1 || out.GamesMissing != 1 {
+	if out.LegacyPromoted != 1 || out.LegacyUnknown != 1 {
 		t.Fatalf("wrong legacy diagnosis: %+v", out)
 	}
 	out, err = editor.DiagnosePublication(ctx, true)
 	must(t, err)
-	if out.LegacyPromoted != 0 || out.LegacyUnknown != 1 || out.GamesMissing != 1 {
+	if out.LegacyPromoted != 0 || out.LegacyUnknown != 1 {
 		t.Fatalf("legacy upgrade was not repeatable: %+v", out)
 	}
 	count(t, pool, 1, "SELECT count(*) FROM site_public_navigation WHERE id=$1 AND primary_category IS NULL", known)
