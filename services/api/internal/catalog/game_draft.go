@@ -238,8 +238,10 @@ func gameMediaSelections(input []GameMediaSelection, old []GameDraftMedia, candi
 		if len(choice.Media.Movies) == 0 {
 			choice.Media.Movies = nil
 		}
-		if i := slices.IndexFunc(old, func(m GameDraftMedia) bool { return reflect.DeepEqual(m.GameMediaSelection, choice) }); i >= 0 {
-			out = append(out, old[i])
+		if i := slices.IndexFunc(old, func(m GameDraftMedia) bool { return usesSavedGameMedia(m.GameMediaSelection, choice) }); i >= 0 {
+			saved := old[i]
+			saved.GameMediaSelection = choice
+			out = append(out, saved)
 			continue
 		}
 		if choice.MediaSourceID == nil || choice.MediaObservationID == nil {
@@ -257,6 +259,19 @@ func gameMediaSelections(input []GameMediaSelection, old []GameDraftMedia, candi
 	}
 	slices.SortFunc(out, func(a, b GameDraftMedia) int { return strings.Compare(a.Locale, b.Locale) })
 	return out, nil
+}
+
+// An older selection can be reduced or reordered using its saved, verified assets.
+// A different Observation or any newly introduced asset still requires a candidate.
+func usesSavedGameMedia(saved, choice GameMediaSelection) bool {
+	if saved.Locale != choice.Locale || !reflect.DeepEqual(saved.MediaSourceID, choice.MediaSourceID) ||
+		!reflect.DeepEqual(saved.MediaObservationID, choice.MediaObservationID) {
+		return false
+	}
+	if choice.CoverURL == saved.CoverURL {
+		choice.CoverURL = ""
+	}
+	return matchesGameMedia(saved.Media, choice)
 }
 
 func matchesGameMedia(candidate SteamMedia, choice GameMediaSelection) bool {
