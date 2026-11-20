@@ -2,12 +2,14 @@ package catalog
 
 import (
 	"context"
+	"encoding/json/jsontext"
 	"errors"
 	"slices"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/librecosta/gofurry/services/api/internal/database/dbgen"
 	"github.com/librecosta/gofurry/services/api/internal/storage"
 )
@@ -87,7 +89,16 @@ type GameManagement struct {
 	PreviewToken          string                           `json:"preview_token"`
 	Localizations         []dbgen.ManagementGameTextRow    `json:"localizations"`
 	Sources               []dbgen.ManagementGameSourcesRow `json:"sources"`
-	Facts                 []dbgen.ManagementGameFactsRow   `json:"facts"`
+	Facts                 []GameManagementFact             `json:"facts"`
+}
+
+type GameManagementFact struct {
+	Localization
+	PlatformCode     string             `json:"platform_code"`
+	ExternalKey      string             `json:"external_key"`
+	StoreCountry     string             `json:"store_country"`
+	ObservedAt       pgtype.Timestamptz `json:"observed_at"`
+	StorefrontRating jsontext.Value     `json:"storefront_rating"`
 }
 
 func (s *Service) ManagementGame(ctx context.Context, id string) (out GameManagement, err error) {
@@ -112,9 +123,17 @@ func (s *Service) ManagementGame(ctx context.Context, id string) (out GameManage
 		if err != nil {
 			return out, err
 		}
-		out.Facts, err = q.ManagementGameFacts(ctx, row.ID)
+		facts, err := q.ManagementGameFacts(ctx, row.ID)
 		if err != nil {
 			return out, err
+		}
+		out.Facts = make([]GameManagementFact, 0, len(facts))
+		for _, fact := range facts {
+			out.Facts = append(out.Facts, GameManagementFact{
+				Localization: Localization{Locale: fact.Locale, Name: fact.Name, Summary: fact.Summary},
+				PlatformCode: fact.PlatformCode, ExternalKey: fact.ExternalKey, StoreCountry: fact.StoreCountry,
+				ObservedAt: fact.ObservedAt, StorefrontRating: fact.StorefrontRating,
+			})
 		}
 		out.SourceCandidates, err = readGameSourceCandidates(ctx, q, row.ID)
 		if err != nil {

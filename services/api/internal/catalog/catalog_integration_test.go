@@ -4,6 +4,7 @@ package catalog
 
 import (
 	"context"
+	json "encoding/json/v2"
 	"errors"
 	"flag"
 	"io"
@@ -363,6 +364,11 @@ func testGameDraftPublication(t *testing.T, s *Service) {
 	putFact(newMedia, "media", `{"header":"`+newCover+`"}`)
 	published, err := s.ManagementGame(ctx, g.PublicID)
 	ok(t, err)
+	encoded, err := json.Marshal(published.Facts)
+	ok(t, err)
+	if !strings.Contains(string(encoded), `"storefront_rating":{}`) {
+		t.Fatalf("storefront facts must include a JSON rating object: %s", encoded)
+	}
 	if published.HasUnpublishedChanges || len(published.DraftMedia) != 1 || published.DraftMedia[0].CoverURL != oldCover {
 		t.Fatal("source refresh changed the draft or its review status")
 	}
