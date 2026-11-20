@@ -160,7 +160,7 @@ func TestGameIntakeHarvestD(t *testing.T) {
 	count(t, remote, 1, "SELECT count(*) FROM harvest.observations WHERE id=$1 AND job_id=$2 AND attempt_id=$3", accepted.Observation, accepted.Job, accepted.Attempt)
 	count(t, pool, 1, "SELECT count(*) FROM games")
 	count(t, pool, 1, "SELECT count(*) FROM game_sources")
-	count(t, pool, 0, "SELECT count(*) FROM game_localizations WHERE game_id=$1", accepted.Game)
+	count(t, pool, 1, "SELECT count(*) FROM game_localizations WHERE game_id=$1 AND name='Fable of the Foxes' AND text_source_id=$2 AND text_observation_id=$3", accepted.Game, accepted.Source, accepted.Observation)
 	if scalar[string](t, pool, "SELECT profile->>'summary' FROM game_intake_candidates WHERE id=$1", accepted.ID) != "An anthropomorphic fox cast restores a library." {
 		t.Fatal("first intake did not retain only the normalized source synopsis")
 	}
@@ -176,6 +176,7 @@ func TestGameIntakeHarvestD(t *testing.T) {
 		return scalar[string](t, pool, "SELECT profile->>'name' FROM game_intake_candidates WHERE id=$1", accepted.ID) == "Fable of the Foxes Revised"
 	})
 	count(t, remote, 1, "SELECT count(*) FROM harvest.jobs WHERE target_id=$1 AND schedule_id IS NOT NULL AND state IN ('succeeded','partial')", accepted.Target)
+	count(t, pool, 1, "SELECT count(*) FROM game_localizations WHERE game_id=$1 AND name='Fable of the Foxes' AND text_observation_id=$2", accepted.Game, accepted.Observation)
 	assertIntakeHTTP(t, l.http, base, accepted.PublicID, 404)
 	steam := New(pool, cfg)
 	t.Cleanup(steam.Close)
@@ -215,12 +216,19 @@ func TestGameIntakeHarvestD(t *testing.T) {
 	assertIntakeHTTP(t, l.http, base, accepted.PublicID, 404)
 	game, err := dbgen.New(pool).LockGame(ctx, *accepted.Game)
 	must(t, err)
-	game, err = catalogDB.EditGame(ctx, game.ID, game.Revision, catalog.GameInput{Editorial: catalog.Editorial{Localizations: []catalog.Localization{
+	text := []catalog.Localization{
 		{Locale: "en", Name: "Editorial English", Summary: "English review"},
 		{Locale: "zh", Name: "编辑译名", Summary: "中文介绍"},
-	}}})
+	}
+	review, err := catalogDB.ManagementGame(ctx, game.PublicID)
 	must(t, err)
-	_, err = publishFixtureGame(t, catalogDB, game.PublicID, game.Revision)
+	edited, err := catalogDB.SaveManagementGame(ctx, game.PublicID, catalog.GameManagementEdit{
+		Revision: game.Revision, Slug: game.Slug, Localizations: text, DraftMedia: fixtureMediaChoices(review)})
+	must(t, err)
+	published, err := publishFixtureGame(t, catalogDB, game.PublicID, edited.Revision)
+	must(t, err)
+	_, err = catalogDB.SaveManagementGame(ctx, game.PublicID, catalog.GameManagementEdit{
+		Revision: published.Revision, Slug: game.Slug, Localizations: text[:1]})
 	must(t, err)
 	execSQL(t, remote, "UPDATE harvest.consumers SET reset_required=true,reset_reason='fixture' WHERE id=$1", consumer.ID)
 	expectEventually(t, 25*time.Second, "Consumer did not finish real 410 recovery", func() bool {
@@ -234,6 +242,8 @@ func TestGameIntakeHarvestD(t *testing.T) {
 		return scalar[string](t, pool, "SELECT profile->>'name' FROM game_intake_candidates WHERE id=$1", accepted.ID) == "Fable of the Foxes"
 	})
 	assertIntakeHTTP(t, l.http, base, accepted.PublicID, 200, "Editorial English", "编辑译名", "中文介绍")
+	count(t, pool, 1, "SELECT count(*) FROM game_localizations WHERE game_id=$1 AND text_source_id IS NULL AND text_observation_id IS NULL AND locale='en'", accepted.Game)
+	count(t, pool, 0, "SELECT count(*) FROM game_localizations WHERE game_id=$1 AND locale='zh'", accepted.Game)
 
 	run(t, dir, nil, "docker", "pause", redis)
 	t.Cleanup(func() { _ = exec.Command("docker", "unpause", redis).Run() })

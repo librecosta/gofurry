@@ -73,16 +73,21 @@ func (s *Service) ManagementSite(ctx context.Context, id string) (out SiteManage
 }
 
 type GameManagement struct {
-	PublicID      string                           `json:"public_id"`
-	Slug          string                           `json:"slug"`
-	Status        string                           `json:"status"`
-	Revision      int64                            `json:"revision"`
-	ContentRating string                           `json:"content_rating"`
-	Presentation  []GamePublicationLocale          `json:"presentation"`
-	PreviewToken  string                           `json:"preview_token"`
-	Localizations []dbgen.ManagementGameTextRow    `json:"localizations"`
-	Sources       []dbgen.ManagementGameSourcesRow `json:"sources"`
-	Facts         []dbgen.ManagementGameFactsRow   `json:"facts"`
+	PublicID              string                           `json:"public_id"`
+	Slug                  string                           `json:"slug"`
+	Status                string                           `json:"status"`
+	Revision              int64                            `json:"revision"`
+	ContentRating         string                           `json:"content_rating"`
+	DraftSlug             *string                          `json:"draft_slug"`
+	DraftMedia            []GameDraftMedia                 `json:"draft_media"`
+	DraftPresentation     []GamePublicationLocale          `json:"draft_presentation"`
+	PublishedPresentation []GamePublicationLocale          `json:"published_presentation"`
+	SourceCandidates      []GameSourceCandidate            `json:"source_candidates"`
+	HasUnpublishedChanges bool                             `json:"has_unpublished_changes"`
+	PreviewToken          string                           `json:"preview_token"`
+	Localizations         []dbgen.ManagementGameTextRow    `json:"localizations"`
+	Sources               []dbgen.ManagementGameSourcesRow `json:"sources"`
+	Facts                 []dbgen.ManagementGameFactsRow   `json:"facts"`
 }
 
 func (s *Service) ManagementGame(ctx context.Context, id string) (out GameManagement, err error) {
@@ -95,7 +100,10 @@ func (s *Service) ManagementGame(ctx context.Context, id string) (out GameManage
 			return out, err
 		}
 		out = GameManagement{PublicID: row.PublicID, Slug: row.Slug, Revision: row.Revision, Status: row.Status,
-			ContentRating: row.ContentRating}
+			ContentRating: row.ContentRating, PublishedPresentation: []GamePublicationLocale{}}
+		if row.DraftSlug.Valid {
+			out.DraftSlug = &row.DraftSlug.String
+		}
 		out.Localizations, err = q.ManagementGameText(ctx, row.ID)
 		if err != nil {
 			return out, err
@@ -108,7 +116,32 @@ func (s *Service) ManagementGame(ctx context.Context, id string) (out GameManage
 		if err != nil {
 			return out, err
 		}
-		out.Presentation, out.PreviewToken, err = gamePublicationPreview(ctx, q, row.ID, row.Status == Published)
+		out.SourceCandidates, err = readGameSourceCandidates(ctx, q, row.ID)
+		if err != nil {
+			return out, err
+		}
+		out.DraftMedia, err = readGameDraftMedia(ctx, q, row.ID)
+		if err != nil {
+			return out, err
+		}
+		out.DraftPresentation, err = gamePresentation(ctx, q, row.ID, false)
+		if err != nil {
+			return out, err
+		}
+		draft, err := gamePublicationContent(out.DraftPresentation)
+		if err != nil {
+			return out, err
+		}
+		out.PreviewToken, err = gamePreviewToken(row, draft)
+		if err != nil || row.Status != Published {
+			return out, err
+		}
+		out.PublishedPresentation, err = gamePresentation(ctx, q, row.ID, true)
+		if err != nil {
+			return out, err
+		}
+		public, err := gamePublicationContent(out.PublishedPresentation)
+		out.HasUnpublishedChanges = gameDraftDiffers(row, draft, public)
 		return out, err
 	})
 }
@@ -164,9 +197,11 @@ func (s *Service) SaveManagementSite(ctx context.Context, id string, in SiteMana
 }
 
 type GameManagementEdit struct {
-	Slug          string         `json:"slug"`
-	Localizations []Localization `json:"localizations"`
-	Revision      int64          `json:"revision"`
+	Slug          string               `json:"slug"`
+	Localizations []Localization       `json:"localizations"`
+	Revision      int64                `json:"revision"`
+	TextAdoptions []GameTextAdoption   `json:"text_adoptions,omitempty"`
+	DraftMedia    []GameMediaSelection `json:"draft_media,omitempty"`
 }
 
 func (s *Service) SaveManagementGame(ctx context.Context, id string, in GameManagementEdit) (ManagementResult, error) {
@@ -174,17 +209,20 @@ func (s *Service) SaveManagementGame(ctx context.Context, id string, in GameMana
 	var err error
 	data := GameInput{Editorial: Editorial{Slug: in.Slug, Localizations: in.Localizations}}
 	if id == "" {
-		if in.Revision != 0 || len(in.Localizations) == 0 {
+		if in.Revision != 0 || len(in.Localizations) == 0 || len(in.TextAdoptions) > 0 || len(in.DraftMedia) > 0 {
 			return ManagementResult{}, ErrInvalid
 		}
 		row, err = s.CreateGame(ctx, data)
 	} else {
+		if strings.TrimSpace(in.Slug) == "" || in.Localizations == nil {
+			return ManagementResult{}, ErrInvalid
+		}
 		row, err = write(ctx, s, func(ctx context.Context, q *dbgen.Queries) (dbgen.Game, error) {
 			g, e := q.LockGamePublicID(ctx, id)
 			if e != nil {
 				return g, e
 			}
-			return s.editGame(ctx, g.ID, in.Revision, data, true)
+			return saveGameDraft(ctx, q, g, in)
 		})
 	}
 	return ManagementResult{Target: row.PublicID, Revision: row.Revision}, err
@@ -194,20 +232,22 @@ func (s *Service) CorrectGameSources(ctx context.Context, id string, rev int64, 
 	if !decision.Valid() || src == nil {
 		return ManagementResult{}, ErrInvalid
 	}
+	sources, err := normalizeSources(src)
+	if err != nil {
+		return ManagementResult{}, err
+	}
 	return write(ctx, s, func(ctx context.Context, q *dbgen.Queries) (ManagementResult, error) {
 		row, err := q.LockGamePublicID(ctx, id)
 		if err != nil {
 			return ManagementResult{}, err
 		}
-		local, err := q.ManagementGameText(ctx, row.ID)
-		if err != nil {
+		if err := editable(rev, row.Revision, row.Status); err != nil {
 			return ManagementResult{}, err
 		}
-		input := GameInput{Editorial: Editorial{Slug: row.Slug, Localizations: []Localization{}}, Sources: src}
-		for _, item := range local {
-			input.Localizations = append(input.Localizations, Localization(item))
+		if row.Status != Draft {
+			return ManagementResult{}, ErrConflict
 		}
-		row, err = s.EditGame(ctx, row.ID, rev, input)
+		row, err = editGameSources(ctx, q, row, sources, rev)
 		return ManagementResult{Target: row.PublicID, Revision: row.Revision}, err
 	})
 }

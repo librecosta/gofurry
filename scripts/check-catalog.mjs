@@ -228,6 +228,15 @@ navigation:
     if (region === 'CN') await appendFile(fixture.config, `  interaction_origin: ${fixture.edge}
   interaction_hmac_key: ${randomBytes(32).toString('base64url')}
 `)
+    if (region === 'CN') {
+      const managementPort = await port()
+      fixture.management = 'http://127.0.0.1:' + managementPort
+      fixture.managementToken = randomBytes(32).toString('base64url')
+      await appendFile(fixture.config, `management:
+  address: "127.0.0.1:${managementPort}"
+  token: ${fixture.managementToken}
+`)
+    }
     launch(binary, ['--config', fixture.config], root, process.env)
     await waitFor(() => status(fixture.api + '/readyz', 200), region + ' API')
     await waitFor(() => status(fixture.api + '/api/v1/sites/000000000000000a/yearbooks/2025', 200), region + ' automatic yearbook publication')
@@ -397,6 +406,50 @@ navigation:
     fixture.ssrClient = undefined
   }
   console.log('R1: CN/INTL catalog, SSR, canonical URLs and published yearbook survive 31/181/365 days; Game survives disabled source and removed Candidate.')
+  const gofurry = fixtures.CN
+  const reviewID = '000000000000000g'
+  const gameBase = '/en/games/' + reviewID + '/'
+  const managementGame = gofurry.management + '/internal/v1/ops/games/' + reviewID
+  const reviewActor = randomUUID()
+  async function reviewRequest(suffix = '', method = 'GET', data) {
+    const response = await fetch(managementGame + suffix, { method, headers: {
+      Authorization: 'Bearer ' + gofurry.managementToken, 'X-LC-Region': 'CN',
+      'X-LC-Actor-ID': reviewActor, 'X-LC-Actor-Name': 'SSR fixture operator', 'X-LC-Actor-Role': 'operator',
+      'X-Request-ID': randomUUID(), 'Content-Type': 'application/json',
+    }, body: data ? JSON.stringify(data) : undefined })
+    if (!response.ok) throw new Error('Game fixture management ' + method + ' ' + suffix + ' returned ' + response.status)
+    return response.json()
+  }
+  async function assertGamePage(slug, name) {
+    const response = await fetch(gofurry.web + gameBase + slug, { redirect: 'manual' })
+    const html = await response.text()
+    const canonical = 'https://cn.catalog.example' + gameBase + slug
+    if (response.status !== 200 || !html.includes('<title>' + name + '</title>') ||
+        !html.includes('rel="canonical" href="' + canonical + '"') ||
+        !html.match(/<link rel="alternate"[^>]+>/g)?.some(link => link.includes('href="' + canonical + '"'))) {
+      throw new Error('Game SSR title, canonical or alternate URL is inconsistent')
+    }
+    const listing = await fetch(gofurry.api + '/api/v1/games')
+    if (!listing.ok || !(await listing.json()).items.some(game => game.public_id === reviewID && game.slug === slug)) {
+      throw new Error('Published Game listing does not match the public slug')
+    }
+  }
+  async function assertGameRedirect(from, to) {
+    const redirect = await fetch(gofurry.web + gameBase + from, { redirect: 'manual' })
+    if (redirect.status !== 301 || redirect.headers.get('location') !== gameBase + to) throw new Error('Game canonical redirect did not follow the public slug')
+  }
+  const original = await reviewRequest()
+  const editedSlug = 'editorial-starlight'
+  await reviewRequest('', 'PATCH', { revision: original.revision, slug: editedSlug,
+    localizations: [{ locale: 'en', name: 'Editorial Starlight', summary: 'Released by a fixture operator.' }] })
+  await assertGamePage(original.slug, 'Fixture Starlight')
+  await assertGameRedirect(editedSlug, original.slug)
+  const draft = await reviewRequest()
+  await reviewRequest('/publish-changes', 'POST', { revision: draft.revision, preview_token: draft.preview_token,
+    confirm_relevance: true, content_rating: 'sfw' })
+  await assertGamePage(editedSlug, 'Editorial Starlight')
+  await assertGameRedirect(original.slug, editedSlug)
+  console.log('R1-B1: saved draft preserves the public title, canonical and 301 target until Management publishes changes.')
   fixtureSQL('CN', "UPDATE sites SET content_rating='unreviewed',legacy_detail=true WHERE public_id='000000000000000a'")
   const legacy = await fetch(webDetail)
   if (legacy.status !== 200 || legacy.headers.get('x-robots-tag') !== 'noindex' ||

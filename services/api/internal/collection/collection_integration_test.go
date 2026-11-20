@@ -198,6 +198,21 @@ func TestCollectionHarvestD(t *testing.T) {
 	count(t, pool, 1, "SELECT count(*) FROM game_evidence_players WHERE players=0")
 	count(t, pool, 1, "SELECT count(*) FROM game_evidence_news WHERE gid='123456'")
 	assertNotPublic(t, ctx, editor, game.PublicID)
+	review, err := editor.ManagementGame(ctx, game.PublicID)
+	must(t, err)
+	var textAdoptions []catalog.GameTextAdoption
+	for _, source := range review.SourceCandidates {
+		if source.Section == "details" && source.Locale == "zh" && source.StoreCountry == "cn" {
+			text.Localizations = append(text.Localizations, source.Localization)
+			textAdoptions = append(textAdoptions, catalog.GameTextAdoption{Locale: source.Locale, SourceID: source.SourceID,
+				ObservationID: source.ObservationID, UseName: true, UseSummary: true})
+			break
+		}
+	}
+	edited, err := editor.SaveManagementGame(ctx, game.PublicID, catalog.GameManagementEdit{
+		Revision: game.Revision, Slug: game.Slug, Localizations: text.Localizations, DraftMedia: fixtureMediaChoices(review), TextAdoptions: textAdoptions})
+	must(t, err)
+	game.Revision = edited.Revision
 	publication, err := publishFixtureGame(t, editor, game.PublicID, game.Revision)
 	must(t, err)
 	game.Revision = publication.Revision
@@ -450,7 +465,10 @@ func TestCollectionHarvestD(t *testing.T) {
 	must(t, err)
 	game, err = editor.EditGame(ctx, game.ID, withdrawn.Revision, catalog.GameInput{Editorial: text, Sources: []catalog.Source{}})
 	must(t, err)
-	_, err = publishFixtureGame(t, editor, game.PublicID, game.Revision)
+	cleared, err := editor.SaveManagementGame(ctx, game.PublicID, catalog.GameManagementEdit{
+		Revision: game.Revision, Slug: game.Slug, Localizations: text.Localizations, DraftMedia: []catalog.GameMediaSelection{}})
+	must(t, err)
+	_, err = publishFixtureGame(t, editor, game.PublicID, cleared.Revision)
 	must(t, err)
 	must(t, svc.Reconcile(ctx))
 	count(t, remotePool, 0, "SELECT count(*) FROM harvest.schedules WHERE target_id=$1 AND enabled", players.TargetID)

@@ -1,5 +1,5 @@
 -- name: ManagementSchemaReady :one
-SELECT (to_regclass('game_published_localizations') IS NOT NULL AND to_regclass('management_operations') IS NOT NULL)::boolean;
+SELECT (to_regclass('game_draft_media') IS NOT NULL AND to_regclass('management_operations') IS NOT NULL)::boolean;
 
 -- name: RecordManagementOperation :exec
 INSERT INTO management_operations (request_id,actor_id,actor_name,actor_role,action,target,revision)
@@ -29,22 +29,21 @@ SELECT kind,url FROM site_addresses WHERE site_id=$1 AND active ORDER BY kind DE
 
 -- name: ManagementGames :many
 SELECT g.public_id,g.slug,g.revision,g.status,g.content_rating,
- coalesce((SELECT l.name FROM game_draft_text(g.id) l ORDER BY l.locale DESC LIMIT 1),g.public_id)::text AS name
+ coalesce((SELECT l.name FROM game_localizations l WHERE l.game_id=g.id ORDER BY l.locale DESC LIMIT 1),g.public_id)::text AS name
 FROM games g
 WHERE g.public_id>sqlc.arg(after_id)::text AND (sqlc.arg(state)::text='' OR g.status=sqlc.arg(state))
  AND (sqlc.arg(platform)::text='' OR EXISTS (
   SELECT 1 FROM game_sources s WHERE s.game_id=g.id AND s.active AND s.platform_code=sqlc.arg(platform)))
  AND (sqlc.arg(keyword)::text='' OR g.public_id=sqlc.arg(keyword) OR EXISTS (
-  SELECT 1 FROM game_draft_text(g.id) l WHERE strpos(lower(l.name),lower(sqlc.arg(keyword)))>0)
+  SELECT 1 FROM game_localizations l WHERE l.game_id=g.id AND strpos(lower(l.name),lower(sqlc.arg(keyword)))>0)
   OR EXISTS (SELECT 1 FROM game_sources s WHERE s.game_id=g.id AND s.active AND s.external_key=sqlc.arg(keyword)))
 ORDER BY g.public_id LIMIT sqlc.arg(take_rows)::integer;
 
 -- name: ManagementGame :one
-SELECT id,public_id,slug,revision,status,content_rating
-FROM games WHERE public_id=$1;
+SELECT * FROM games WHERE public_id=$1 FOR SHARE;
 
 -- name: ManagementGameText :many
-SELECT locale,name,summary FROM game_localizations WHERE game_id=$1 ORDER BY locale;
+SELECT locale,name,summary,text_source_id,text_observation_id FROM game_localizations WHERE game_id=$1 ORDER BY locale;
 
 -- name: ManagementGameSources :many
 SELECT s.platform_code,s.external_key,s.source_url,s.active,

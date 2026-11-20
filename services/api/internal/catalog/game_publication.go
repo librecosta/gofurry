@@ -1,9 +1,11 @@
 package catalog
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json/jsontext"
 	json "encoding/json/v2"
 	"errors"
 	"strings"
@@ -24,15 +26,16 @@ var (
 
 type GamePublicationLocale struct {
 	Localization
-	TextSourceID      *uuid.UUID `json:"text_source_id,omitempty"`
-	TextObservationID *uuid.UUID `json:"text_observation_id,omitempty"`
-	TextSource        *Source    `json:"text_source,omitempty"`
-	MediaSourceID     *uuid.UUID `json:"media_source_id,omitempty"`
-	MediaSource       *Source    `json:"media_source,omitempty"`
-	MediaObservedAt   *time.Time `json:"media_observed_at,omitempty"`
-	MediaStoreCountry string     `json:"media_store_country,omitempty"`
-	Media             SteamMedia `json:"media"`
-	CoverURL          string     `json:"cover_url,omitempty"`
+	TextSourceID       *uuid.UUID `json:"text_source_id,omitempty"`
+	TextObservationID  *uuid.UUID `json:"text_observation_id,omitempty"`
+	TextSource         *Source    `json:"text_source,omitempty"`
+	MediaSourceID      *uuid.UUID `json:"media_source_id,omitempty"`
+	MediaObservationID *uuid.UUID `json:"media_observation_id,omitempty"`
+	MediaSource        *Source    `json:"media_source,omitempty"`
+	MediaObservedAt    *time.Time `json:"media_observed_at,omitempty"`
+	MediaStoreCountry  string     `json:"media_store_country,omitempty"`
+	Media              SteamMedia `json:"media"`
+	CoverURL           string     `json:"cover_url,omitempty"`
 }
 
 type GamePublicationReview struct {
@@ -42,7 +45,7 @@ type GamePublicationReview struct {
 	PreviewToken     string `json:"preview_token"`
 }
 
-func gamePublicationPreview(ctx context.Context, q *dbgen.Queries, id uuid.UUID, published bool) ([]GamePublicationLocale, string, error) {
+func gamePresentation(ctx context.Context, q *dbgen.Queries, id uuid.UUID, published bool) ([]GamePublicationLocale, error) {
 	var raw []byte
 	var err error
 	if published {
@@ -51,23 +54,49 @@ func gamePublicationPreview(ctx context.Context, q *dbgen.Queries, id uuid.UUID,
 		raw, err = q.PreviewGamePublication(ctx, id)
 	}
 	if err != nil {
-		return nil, "", err
+		return nil, err
 	}
 	var locales []GamePublicationLocale
 	if err = json.Unmarshal(raw, &locales); err != nil {
-		return nil, "", err
+		return nil, err
 	}
 	for i := range locales {
 		locale := &locales[i]
-		m := &locale.Media
-		*m = reviewedSteamMedia(*m)
-		locale.CoverURL = m.Header
-		if locale.CoverURL == "" {
-			locale.CoverURL = m.Capsule
+		locale.Media = reviewedSteamMedia(locale.Media)
+		locale.CoverURL = profileMedia(locale.CoverURL, false)
+		if locale.MediaObservedAt != nil {
+			utc := locale.MediaObservedAt.UTC()
+			locale.MediaObservedAt = &utc
 		}
 	}
+	return locales, nil
+}
+
+func gamePublicationContent(locales []GamePublicationLocale) ([]byte, error) {
+	content := make([]GamePublicationLocale, len(locales))
+	copy(content, locales)
+	for i := range content {
+		content[i].TextSource, content[i].MediaSource = nil, nil
+	}
+	return json.Marshal(content, json.Deterministic(true))
+}
+
+func gamePreviewToken(game dbgen.Game, draft []byte) (string, error) {
+	raw, err := json.Marshal(struct {
+		GameID   uuid.UUID
+		Revision int64
+		Slug     string
+		Content  jsontext.Value
+	}{game.ID, game.Revision, gameEditSlug(game), draft}, json.Deterministic(true))
+	if err != nil {
+		return "", err
+	}
 	hash := sha256.Sum256(raw)
-	return locales, hex.EncodeToString(hash[:]), nil
+	return hex.EncodeToString(hash[:]), nil
+}
+
+func gameDraftDiffers(game dbgen.Game, draft, published []byte) bool {
+	return game.DraftSlug.Valid || !bytes.Equal(draft, published)
 }
 
 func reviewedSteamMedia(media SteamMedia) SteamMedia {
@@ -87,28 +116,63 @@ func validGameRating(rating string) bool {
 // PublishManagementGame may only run inside the authenticated Management operation
 // that records the operator, decision and snapshot in the same transaction.
 func (s *Service) PublishManagementGame(ctx context.Context, id string, in GamePublicationReview) (ManagementResult, error) {
+	return s.publishManagementGame(ctx, id, in, "publish", Draft)
+}
+
+func (s *Service) PublishManagementGameChanges(ctx context.Context, id string, in GamePublicationReview) (ManagementResult, error) {
+	return s.publishManagementGame(ctx, id, in, "publish_changes", Published)
+}
+
+func (s *Service) publishManagementGame(ctx context.Context, id string, in GamePublicationReview, action, status string) (ManagementResult, error) {
 	if !in.ConfirmRelevance || !validGameRating(in.ContentRating) || in.ContentRating == "unreviewed" {
 		return ManagementResult{}, ErrGamePublicationReview
 	}
 	if in.ContentRating != "sfw" {
 		return ManagementResult{}, ErrGamePublicationPolicy
 	}
-	return s.changeManagementGame(ctx, id, in.Revision, "publish", "Confirmed GoFurry relevance, SFW rating and public presentation",
+	return s.changeManagementGame(ctx, id, in.Revision, action, "Confirmed GoFurry relevance, SFW rating and public presentation",
 		func(ctx context.Context, q *dbgen.Queries, g dbgen.Game) (dbgen.Game, error) {
-			if g.Status != Draft {
+			if g.Status != status || (status == Published && g.ContentRating != "sfw") {
 				return g, ErrConflict
 			}
-			locales, token, err := gamePublicationPreview(ctx, q, g.ID, false)
+			locales, err := gamePresentation(ctx, q, g.ID, false)
 			if err != nil {
 				return g, err
 			}
 			if len(locales) == 0 {
 				return g, ErrGamePublicationText
 			}
+			draft, err := gamePublicationContent(locales)
+			if err != nil {
+				return g, err
+			}
+			token, err := gamePreviewToken(g, draft)
+			if err != nil {
+				return g, err
+			}
 			if token != in.PreviewToken {
 				return g, ErrGamePreviewChanged
 			}
-			next, err := q.PublishReviewedGame(ctx, g.ID)
+			var next dbgen.Game
+			if status == Published {
+				published, err := gamePresentation(ctx, q, g.ID, true)
+				if err != nil {
+					return g, err
+				}
+				current, err := gamePublicationContent(published)
+				if err != nil {
+					return g, err
+				}
+				if !gameDraftDiffers(g, draft, current) {
+					return g, ErrConflict
+				}
+				next, err = q.PublishReviewedGameChanges(ctx, g.ID)
+				if err != nil {
+					return g, err
+				}
+			} else {
+				next, err = q.PublishReviewedGame(ctx, g.ID)
+			}
 			if err != nil {
 				return g, err
 			}
@@ -120,14 +184,11 @@ func (s *Service) PublishManagementGame(ctx context.Context, id string, in GameP
 				if err != nil {
 					return g, err
 				}
-				var observed pgtype.Timestamptz
-				if locale.MediaObservedAt != nil {
-					observed = pgtype.Timestamptz{Time: *locale.MediaObservedAt, Valid: true}
-				}
 				err = q.SaveGamePublicationLocale(ctx, dbgen.SaveGamePublicationLocaleParams{
 					GameID: g.ID, Locale: locale.Locale, Name: locale.Name, Summary: locale.Summary, TextSourceID: locale.TextSourceID,
 					TextObservationID: locale.TextObservationID, MediaSourceID: locale.MediaSourceID, Media: media,
-					MediaObservedAt: observed, MediaStoreCountry: locale.MediaStoreCountry, CoverUrl: locale.CoverURL, Revision: next.Revision,
+					MediaObservationID: locale.MediaObservationID, MediaObservedAt: publicationTimestamp(locale.MediaObservedAt),
+					MediaStoreCountry: locale.MediaStoreCountry, CoverUrl: locale.CoverURL, Revision: next.Revision,
 				})
 				if err != nil {
 					return g, err

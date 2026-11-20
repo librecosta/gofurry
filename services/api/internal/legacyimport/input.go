@@ -25,7 +25,7 @@ import (
 )
 
 const deployment = "gofurry_nav_site_cn"
-const schemaVersion = 202611200001
+const schemaVersion = 202611200002
 
 const BootstrapDeployment = deployment
 const BootstrapGooseVersion = schemaVersion

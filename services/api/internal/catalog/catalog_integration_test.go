@@ -253,6 +253,7 @@ func TestCatalogPostgreSQL(t *testing.T) {
 	want(t, err, ErrNotFound)
 	_, err = c.EditGame(ctx, archived.ID, archived.Revision, gameInput)
 	want(t, err, ErrConflict)
+	testGameDraftPublication(t, c)
 
 	// Explicit fixture assignment represents a future approved projection.
 	projected.publicID = func() string { return fixtureSite }
@@ -316,6 +317,152 @@ func TestCatalogPostgreSQL(t *testing.T) {
 	pgCode(t, err, "23001")
 }
 
+func testGameDraftPublication(t *testing.T, s *Service) {
+	t.Helper()
+	ctx := t.Context()
+	s.publicID = func() string { return "00000000000000b1" }
+	text := []Localization{{Locale: "en", Name: "Old copy", Summary: "Old summary"}, {Locale: "zh", Name: "旧版中文"}}
+	g, err := s.CreateGame(ctx, GameInput{Editorial: Editorial{Slug: "old-slug", Localizations: text},
+		Sources: []Source{{PlatformCode: "steam", ExternalKey: "40101"}}})
+	ok(t, err)
+	var source uuid.UUID
+	ok(t, s.pool.QueryRow(ctx, "SELECT id FROM game_sources WHERE game_id=$1", g.ID).Scan(&source))
+	oldMedia, newMedia, observed := uuid.NewV7(), uuid.NewV7(), uuid.NewV7()
+	const oldCover = "https://cdn.steamstatic.com/fixture/old.jpg"
+	const newCover = "https://cdn.steamstatic.com/fixture/new.jpg"
+	putFact := func(id uuid.UUID, section, payload string) {
+		t.Helper()
+		_, err := s.pool.Exec(ctx, `INSERT INTO game_source_metadata(game_source_id,locale,store_country,egress_region,section,
+ binding_id,scope_key,epoch,position,event_at,state,output_schema,ruleset,observation_id,content_hash,observed_at,confirmed_at,payload)
+ VALUES($1,'en','us','cn',$2,uuidv7(),repeat('a',64),uuidv7(),1,now(),'present',1,'gofurry-steam-1',$3,repeat('b',64),now(),now(),$4)
+ ON CONFLICT(game_source_id,locale,store_country,egress_region,section) DO UPDATE SET
+ observation_id=excluded.observation_id,payload=excluded.payload,observed_at=excluded.observed_at`, source, section, id, payload)
+		ok(t, err)
+	}
+	putFact(oldMedia, "media", `{"header":"`+oldCover+`","screenshots":["https://untrusted.example/test.jpg"]}`)
+	putFact(observed, "details", `{"type":"game","name":"Collected replacement","description":"Collected summary"}`)
+	media := func(url string, observation uuid.UUID) []GameMediaSelection {
+		return []GameMediaSelection{{Locale: "en", Media: SteamMedia{Header: url}, CoverURL: url, MediaSourceID: &source, MediaObservationID: &observation}}
+	}
+	before, err := s.SaveManagementGame(ctx, g.PublicID, GameManagementEdit{
+		Slug: g.Slug, Revision: g.Revision, Localizations: text, DraftMedia: media(oldCover, oldMedia)})
+	ok(t, err)
+	g.Revision = before.Revision
+	g, err = publishCatalogGame(t, ctx, s, g)
+	ok(t, err)
+	firstPublished := g.FirstPublishedAt
+	assertPublic := func(slug, name, cover string, locales int) {
+		t.Helper()
+		p, err := s.PublicGameProfile(ctx, ChannelMarket{Region: "CN", Egress: "cn"}, g.PublicID, "en")
+		ok(t, err)
+		if p.Summary.Slug != slug || len(p.Summary.Localizations) != locales || p.Summary.Localizations[0].Name != name || p.CoverURL != cover {
+			t.Fatalf("unexpected public game: %+v", p)
+		}
+	}
+	assertPublic("old-slug", "Old copy", oldCover, 2)
+	putFact(newMedia, "media", `{"header":"`+newCover+`"}`)
+	published, err := s.ManagementGame(ctx, g.PublicID)
+	ok(t, err)
+	if published.HasUnpublishedChanges || len(published.DraftMedia) != 1 || published.DraftMedia[0].CoverURL != oldCover {
+		t.Fatal("source refresh changed the draft or its review status")
+	}
+	edit := GameManagementEdit{Slug: "new-slug", Revision: g.Revision, Localizations: text[:1],
+		TextAdoptions: []GameTextAdoption{{Locale: "en", SourceID: source, ObservationID: observed, UseName: true}}, DraftMedia: media(newCover, newMedia)}
+	for _, reject := range []GameManagementEdit{
+		{Slug: edit.Slug, Revision: edit.Revision, Localizations: text, DraftMedia: media("https://untrusted.example/test.jpg", newMedia)},
+		{Slug: edit.Slug, Revision: edit.Revision, Localizations: text, DraftMedia: media(newCover, uuid.NewV7())},
+		{Slug: edit.Slug, Revision: edit.Revision, Localizations: text, TextAdoptions: []GameTextAdoption{{Locale: "en", SourceID: uuid.NewV7(), ObservationID: observed, UseName: true}}},
+	} {
+		_, err := s.SaveManagementGame(ctx, g.PublicID, reject)
+		want(t, err, ErrInvalid)
+	}
+	draft, err := s.SaveManagementGame(ctx, g.PublicID, edit)
+	ok(t, err)
+	reloaded, err := New(s.pool).ManagementGame(ctx, g.PublicID)
+	ok(t, err)
+	if reloaded.DraftSlug == nil || *reloaded.DraftSlug != edit.Slug || reloaded.Slug != "old-slug" ||
+		!reloaded.HasUnpublishedChanges || len(reloaded.Localizations) != 1 || reloaded.Localizations[0].TextSourceID != nil ||
+		reloaded.Localizations[0].Name != "Collected replacement" || reloaded.Localizations[0].Summary != "Old summary" {
+		t.Fatalf("partial source adoption lost draft ownership: %+v", reloaded)
+	}
+	assertPublic("old-slug", "Old copy", oldCover, 2)
+	noChange, err := s.SaveManagementGame(ctx, g.PublicID, GameManagementEdit{Slug: edit.Slug, Revision: draft.Revision,
+		Localizations: []Localization{{Locale: "en", Name: "Collected replacement", Summary: "Old summary"}}})
+	ok(t, err)
+	if noChange.Revision != draft.Revision {
+		t.Fatal("no-op changed the revision")
+	}
+	g.Revision = draft.Revision
+	intent := GamePublicationReview{Revision: g.Revision, ConfirmRelevance: true, ContentRating: "sfw", PreviewToken: reloaded.PreviewToken}
+	stale := intent
+	stale.PreviewToken = published.PreviewToken
+	_, err = changeCatalogGame(t, ctx, s, g, "publish_changes", stale)
+	want(t, err, ErrGamePreviewChanged)
+
+	receipt := dbgen.RecordManagementOperationParams{RequestID: uuid.NewV7(), ActorID: uuid.NewV7(), ActorName: "Fixture", ActorRole: "owner", Action: "game.publish_changes", Target: g.PublicID, Revision: g.Revision}
+	ok(t, dbgen.New(s.pool).RecordManagementOperation(ctx, receipt))
+	publish := func(receipt dbgen.RecordManagementOperationParams) (ManagementResult, error) {
+		return s.Manage(ctx, receipt, func(ctx context.Context, tx *Service, _ *dbgen.Queries) (ManagementResult, error) {
+			return tx.PublishManagementGameChanges(ctx, g.PublicID, intent)
+		})
+	}
+	_, err = publish(receipt)
+	want(t, err, ErrConflict)
+	assertPublic("old-slug", "Old copy", oldCover, 2)
+	var count int
+	ok(t, s.pool.QueryRow(ctx, "SELECT count(*) FROM catalog_publication_decisions WHERE entity_id=$1 AND action='publish_changes'", g.ID).Scan(&count))
+	if count != 0 {
+		t.Fatal("receipt conflict did not roll back the publication decision")
+	}
+	receipt.RequestID = uuid.NewV7()
+	result, err := publish(receipt)
+	ok(t, err)
+	assertPublic("new-slug", "Collected replacement", newCover, 1)
+	next, err := dbgen.New(s.pool).LockGame(ctx, g.ID)
+	ok(t, err)
+	if next.FirstPublishedAt != firstPublished || next.PublicID != g.PublicID || next.DraftSlug.Valid || next.Revision != result.Revision {
+		t.Fatal("published change altered identity or first publication")
+	}
+	var audited bool
+	ok(t, s.pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM catalog_publication_decisions d
+ JOIN management_operations m ON m.request_id=d.management_request_id
+ WHERE d.entity_id=$1 AND d.action='publish_changes' AND d.actor=$2 AND d.content_rating='sfw' AND d.revision=m.revision)`,
+		g.ID, receipt.ActorID.String()).Scan(&audited))
+	if !audited {
+		t.Fatal("published change is missing its correlated actor and audit")
+	}
+	cleared, err := s.SaveManagementGame(ctx, g.PublicID, GameManagementEdit{Slug: next.Slug, Revision: next.Revision,
+		Localizations: []Localization{{Locale: "en", Name: "Collected replacement", Summary: "Old summary"}}, DraftMedia: []GameMediaSelection{}})
+	ok(t, err)
+	empty, err := s.ManagementGame(ctx, g.PublicID)
+	ok(t, err)
+	if len(empty.DraftMedia) != 0 || empty.DraftPresentation[0].CoverURL != "" || !empty.HasUnpublishedChanges {
+		t.Fatal("empty draft media fell back to the latest source")
+	}
+	assertPublic("new-slug", "Collected replacement", newCover, 1)
+	next.Revision = cleared.Revision
+	next, err = changeCatalogGame(t, ctx, s, next, "publish_changes", GamePublicationReview{
+		Revision: next.Revision, ConfirmRelevance: true, ContentRating: "sfw", PreviewToken: empty.PreviewToken})
+	ok(t, err)
+	assertPublic("new-slug", "Collected replacement", "", 1)
+	pending, err := s.SaveManagementGame(ctx, g.PublicID, GameManagementEdit{Slug: "restore-slug", Revision: next.Revision,
+		Localizations: []Localization{{Locale: "en", Name: "Collected replacement", Summary: "Old summary"}}})
+	ok(t, err)
+	next.Revision = pending.Revision
+	next, err = changeCatalogGame(t, ctx, s, next, "archive", GamePublicationReview{})
+	ok(t, err)
+	_, err = changeCatalogGame(t, ctx, s, next, "publish_changes", GamePublicationReview{
+		Revision: next.Revision, ConfirmRelevance: true, ContentRating: "sfw", PreviewToken: empty.PreviewToken})
+	want(t, err, ErrConflict)
+	next, err = changeCatalogGame(t, ctx, s, next, "restore", GamePublicationReview{})
+	ok(t, err)
+	if next.Status != Draft || next.Slug != "restore-slug" || next.DraftSlug.Valid {
+		t.Fatal("archive and restore did not preserve the edited slug in Draft")
+	}
+	_, err = s.PublishedGame(ctx, next.PublicID)
+	want(t, err, ErrNotFound)
+}
+
 // Seed only the final local projection for the independent CN and INTL SSR
 // fixtures. The real preflight-to-public path runs in TestGameIntakeHarvestD.
 func seedIntakeBrowserGame(t *testing.T, ctx context.Context, s *Service, publicID, key, name string, revoked bool) {
@@ -326,6 +473,7 @@ func seedIntakeBrowserGame(t *testing.T, ctx context.Context, s *Service, public
 	})
 	ok(t, err)
 	source := uuid.NewV7()
+	observation := uuid.NewV7()
 	_, err = s.pool.Exec(ctx, "INSERT INTO game_sources (id,game_id,platform_code,external_key,source_url) VALUES ($1,$2,'steam',$3,$4)",
 		source, game.ID, key, "https://store.steampowered.com/app/"+key+"/")
 	ok(t, err)
@@ -333,8 +481,10 @@ func seedIntakeBrowserGame(t *testing.T, ctx context.Context, s *Service, public
  profile,profile_at,profile_observation_id,next_at)
  VALUES ($1,'steam',$2,'operator','accepted',$3,$4,jsonb_build_object('locale','en','name',$5::text,'summary','Collected English synopsis.'),
  now(),$6,NULL)`,
-		uuid.NewV7(), key, game.ID, source, name, uuid.NewV7())
+		uuid.NewV7(), key, game.ID, source, name, observation)
 	ok(t, err)
+	ok(t, InitializeIntakeGameText(ctx, dbgen.New(s.pool), game, source, observation,
+		Localization{Locale: "en", Name: name, Summary: "Collected English synopsis."}))
 	if !revoked {
 		_, err = publishCatalogGame(t, ctx, s, game)
 		ok(t, err)
@@ -357,6 +507,9 @@ func changeCatalogGame(t *testing.T, ctx context.Context, s *Service, g dbgen.Ga
 	}, func(ctx context.Context, tx *Service, _ *dbgen.Queries) (ManagementResult, error) {
 		if action == "publish" {
 			return tx.PublishManagementGame(ctx, g.PublicID, review)
+		}
+		if action == "publish_changes" {
+			return tx.PublishManagementGameChanges(ctx, g.PublicID, review)
 		}
 		return tx.ChangeManagementGameVisibility(ctx, g.PublicID, g.Revision, action, "Catalog fixture lifecycle")
 	})

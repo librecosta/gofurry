@@ -123,6 +123,7 @@ type Game struct {
 	IntakeDisplaySource *uuid.UUID         `json:"intake_display_source"`
 	FirstPublishedAt    pgtype.Timestamptz `json:"first_published_at"`
 	ContentRating       string             `json:"content_rating"`
+	DraftSlug           pgtype.Text        `json:"draft_slug"`
 }
 
 type GameChannelFeature struct {
@@ -197,6 +198,17 @@ type GameCollectionMember struct {
 type GameCollectionTagRule struct {
 	CollectionID uuid.UUID `json:"collection_id"`
 	TagID        uuid.UUID `json:"tag_id"`
+}
+
+type GameDraftMedium struct {
+	GameID             uuid.UUID          `json:"game_id"`
+	Locale             string             `json:"locale"`
+	Media              []byte             `json:"media"`
+	CoverUrl           string             `json:"cover_url"`
+	MediaSourceID      *uuid.UUID         `json:"media_source_id"`
+	MediaObservationID *uuid.UUID         `json:"media_observation_id"`
+	MediaObservedAt    pgtype.Timestamptz `json:"media_observed_at"`
+	MediaStoreCountry  string             `json:"media_store_country"`
 }
 
 type GameEditorialTag struct {
@@ -277,10 +289,12 @@ type GameIntakeCandidate struct {
 }
 
 type GameLocalization struct {
-	GameID  uuid.UUID `json:"game_id"`
-	Locale  string    `json:"locale"`
-	Name    string    `json:"name"`
-	Summary string    `json:"summary"`
+	GameID            uuid.UUID  `json:"game_id"`
+	Locale            string     `json:"locale"`
+	Name              string     `json:"name"`
+	Summary           string     `json:"summary"`
+	TextSourceID      *uuid.UUID `json:"text_source_id"`
+	TextObservationID *uuid.UUID `json:"text_observation_id"`
 }
 
 type GamePlayerDaily struct {
@@ -307,19 +321,20 @@ type GamePriceObservation struct {
 }
 
 type GamePublishedLocalization struct {
-	GameID            uuid.UUID          `json:"game_id"`
-	Locale            string             `json:"locale"`
-	Name              string             `json:"name"`
-	Summary           string             `json:"summary"`
-	TextSourceID      *uuid.UUID         `json:"text_source_id"`
-	TextObservationID *uuid.UUID         `json:"text_observation_id"`
-	MediaSourceID     *uuid.UUID         `json:"media_source_id"`
-	Media             []byte             `json:"media"`
-	MediaObservedAt   pgtype.Timestamptz `json:"media_observed_at"`
-	MediaStoreCountry string             `json:"media_store_country"`
-	CoverUrl          string             `json:"cover_url"`
-	Revision          int64              `json:"revision"`
-	PublishedAt       pgtype.Timestamptz `json:"published_at"`
+	GameID             uuid.UUID          `json:"game_id"`
+	Locale             string             `json:"locale"`
+	Name               string             `json:"name"`
+	Summary            string             `json:"summary"`
+	TextSourceID       *uuid.UUID         `json:"text_source_id"`
+	TextObservationID  *uuid.UUID         `json:"text_observation_id"`
+	MediaSourceID      *uuid.UUID         `json:"media_source_id"`
+	Media              []byte             `json:"media"`
+	MediaObservedAt    pgtype.Timestamptz `json:"media_observed_at"`
+	MediaStoreCountry  string             `json:"media_store_country"`
+	CoverUrl           string             `json:"cover_url"`
+	Revision           int64              `json:"revision"`
+	PublishedAt        pgtype.Timestamptz `json:"published_at"`
+	MediaObservationID *uuid.UUID         `json:"media_observation_id"`
 }
 
 type GameSource struct {

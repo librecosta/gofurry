@@ -11,6 +11,21 @@ import (
 	"github.com/librecosta/gofurry/services/api/internal/database/dbgen"
 )
 
+func fixtureMediaChoices(review catalog.GameManagement) []catalog.GameMediaSelection {
+	choices := []catalog.GameMediaSelection{}
+	for _, locale := range []string{"en", "zh"} {
+		for _, source := range review.SourceCandidates {
+			if source.Section != "media" || source.Locale != locale || source.Media.Header == "" {
+				continue
+			}
+			choices = append(choices, catalog.GameMediaSelection{Locale: locale, Media: source.Media,
+				CoverURL: source.Media.Header, MediaSourceID: &source.SourceID, MediaObservationID: &source.ObservationID})
+			break
+		}
+	}
+	return choices
+}
+
 func publishFixtureGame(t *testing.T, editor *catalog.Service, id string, revision int64) (catalog.ManagementResult, error) {
 	t.Helper()
 	ctx := t.Context()

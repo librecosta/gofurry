@@ -296,6 +296,9 @@ func (o *Operations) games(g fiber.Router) {
 	g.Post("/games/:id/publish", editOnly, writeOperation(o, "game.publish", func(ctx context.Context, s *catalog.Service, _ *dbgen.Queries, id string, in catalog.GamePublicationReview, _ catalog.PublicationDecision) (catalog.ManagementResult, error) {
 		return s.PublishManagementGame(ctx, id, in)
 	}))
+	g.Post("/games/:id/publish-changes", editOnly, writeOperation(o, "game.publish_changes", func(ctx context.Context, s *catalog.Service, _ *dbgen.Queries, id string, in catalog.GamePublicationReview, _ catalog.PublicationDecision) (catalog.ManagementResult, error) {
+		return s.PublishManagementGameChanges(ctx, id, in)
+	}))
 	for _, action := range []string{"archive", "restore", "unpublish"} {
 		g.Post("/games/:id/"+action, editOnly, writeOperation(o, "game."+action, func(ctx context.Context, s *catalog.Service, _ *dbgen.Queries, id string, in gameVisibility, _ catalog.PublicationDecision) (catalog.ManagementResult, error) {
 			return s.ChangeManagementGameVisibility(ctx, id, in.Revision, action, in.Reason)

@@ -133,29 +133,26 @@ func (q *Queries) ManagementCollections(ctx context.Context, arg ManagementColle
 }
 
 const managementGame = `-- name: ManagementGame :one
-SELECT id,public_id,slug,revision,status,content_rating
-FROM games WHERE public_id=$1
+SELECT id, public_id, slug, status, revision, created_at, updated_at, published_at, archived_at, intake_display_source, first_published_at, content_rating, draft_slug FROM games WHERE public_id=$1 FOR SHARE
 `
 
-type ManagementGameRow struct {
-	ID            uuid.UUID `json:"id"`
-	PublicID      string    `json:"public_id"`
-	Slug          string    `json:"slug"`
-	Revision      int64     `json:"revision"`
-	Status        string    `json:"status"`
-	ContentRating string    `json:"content_rating"`
-}
-
-func (q *Queries) ManagementGame(ctx context.Context, publicID string) (ManagementGameRow, error) {
+func (q *Queries) ManagementGame(ctx context.Context, publicID string) (Game, error) {
 	row := q.db.QueryRow(ctx, managementGame, publicID)
-	var i ManagementGameRow
+	var i Game
 	err := row.Scan(
 		&i.ID,
 		&i.PublicID,
 		&i.Slug,
-		&i.Revision,
 		&i.Status,
+		&i.Revision,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.PublishedAt,
+		&i.ArchivedAt,
+		&i.IntakeDisplaySource,
+		&i.FirstPublishedAt,
 		&i.ContentRating,
+		&i.DraftSlug,
 	)
 	return i, err
 }
@@ -256,13 +253,15 @@ func (q *Queries) ManagementGameSources(ctx context.Context, gameID uuid.UUID) (
 }
 
 const managementGameText = `-- name: ManagementGameText :many
-SELECT locale,name,summary FROM game_localizations WHERE game_id=$1 ORDER BY locale
+SELECT locale,name,summary,text_source_id,text_observation_id FROM game_localizations WHERE game_id=$1 ORDER BY locale
 `
 
 type ManagementGameTextRow struct {
-	Locale  string `json:"locale"`
-	Name    string `json:"name"`
-	Summary string `json:"summary"`
+	Locale            string     `json:"locale"`
+	Name              string     `json:"name"`
+	Summary           string     `json:"summary"`
+	TextSourceID      *uuid.UUID `json:"text_source_id"`
+	TextObservationID *uuid.UUID `json:"text_observation_id"`
 }
 
 func (q *Queries) ManagementGameText(ctx context.Context, gameID uuid.UUID) ([]ManagementGameTextRow, error) {
@@ -274,7 +273,13 @@ func (q *Queries) ManagementGameText(ctx context.Context, gameID uuid.UUID) ([]M
 	items := []ManagementGameTextRow{}
 	for rows.Next() {
 		var i ManagementGameTextRow
-		if err := rows.Scan(&i.Locale, &i.Name, &i.Summary); err != nil {
+		if err := rows.Scan(
+			&i.Locale,
+			&i.Name,
+			&i.Summary,
+			&i.TextSourceID,
+			&i.TextObservationID,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -287,13 +292,13 @@ func (q *Queries) ManagementGameText(ctx context.Context, gameID uuid.UUID) ([]M
 
 const managementGames = `-- name: ManagementGames :many
 SELECT g.public_id,g.slug,g.revision,g.status,g.content_rating,
- coalesce((SELECT l.name FROM game_draft_text(g.id) l ORDER BY l.locale DESC LIMIT 1),g.public_id)::text AS name
+ coalesce((SELECT l.name FROM game_localizations l WHERE l.game_id=g.id ORDER BY l.locale DESC LIMIT 1),g.public_id)::text AS name
 FROM games g
 WHERE g.public_id>$1::text AND ($2::text='' OR g.status=$2)
  AND ($3::text='' OR EXISTS (
   SELECT 1 FROM game_sources s WHERE s.game_id=g.id AND s.active AND s.platform_code=$3))
  AND ($4::text='' OR g.public_id=$4 OR EXISTS (
-  SELECT 1 FROM game_draft_text(g.id) l WHERE strpos(lower(l.name),lower($4))>0)
+  SELECT 1 FROM game_localizations l WHERE l.game_id=g.id AND strpos(lower(l.name),lower($4))>0)
   OR EXISTS (SELECT 1 FROM game_sources s WHERE s.game_id=g.id AND s.active AND s.external_key=$4))
 ORDER BY g.public_id LIMIT $5::integer
 `
@@ -531,7 +536,7 @@ func (q *Queries) ManagementRecentIntake(ctx context.Context) ([]ManagementRecen
 }
 
 const managementSchemaReady = `-- name: ManagementSchemaReady :one
-SELECT (to_regclass('game_published_localizations') IS NOT NULL AND to_regclass('management_operations') IS NOT NULL)::boolean
+SELECT (to_regclass('game_draft_media') IS NOT NULL AND to_regclass('management_operations') IS NOT NULL)::boolean
 `
 
 func (q *Queries) ManagementSchemaReady(ctx context.Context) (bool, error) {

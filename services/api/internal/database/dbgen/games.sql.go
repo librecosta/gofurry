@@ -34,9 +34,11 @@ func (q *Queries) AddGameLocalization(ctx context.Context, arg AddGameLocalizati
 
 const changeGameVisibility = `-- name: ChangeGameVisibility :one
 UPDATE games SET status=$1,content_rating=$2,
+ slug=CASE WHEN $1::text='draft' THEN coalesce(draft_slug,slug) ELSE slug END,
+ draft_slug=CASE WHEN $1::text='draft' THEN NULL ELSE draft_slug END,
  revision=revision+1,updated_at=transaction_timestamp(),
  archived_at=CASE WHEN $1::text='archived' THEN transaction_timestamp() ELSE NULL END
-WHERE id=$3 AND $1::text IN ('archived','draft') RETURNING id, public_id, slug, status, revision, created_at, updated_at, published_at, archived_at, intake_display_source, first_published_at, content_rating
+WHERE id=$3 AND $1::text IN ('archived','draft') RETURNING id, public_id, slug, status, revision, created_at, updated_at, published_at, archived_at, intake_display_source, first_published_at, content_rating, draft_slug
 `
 
 type ChangeGameVisibilityParams struct {
@@ -61,6 +63,7 @@ func (q *Queries) ChangeGameVisibility(ctx context.Context, arg ChangeGameVisibi
 		&i.IntakeDisplaySource,
 		&i.FirstPublishedAt,
 		&i.ContentRating,
+		&i.DraftSlug,
 	)
 	return i, err
 }
@@ -76,7 +79,7 @@ func (q *Queries) ClearGameLocalizations(ctx context.Context, gameID uuid.UUID) 
 
 const createGame = `-- name: CreateGame :one
 INSERT INTO games (id,public_id,slug) VALUES ($1,$2,$3)
-ON CONFLICT (public_id) DO NOTHING RETURNING id, public_id, slug, status, revision, created_at, updated_at, published_at, archived_at, intake_display_source, first_published_at, content_rating
+ON CONFLICT (public_id) DO NOTHING RETURNING id, public_id, slug, status, revision, created_at, updated_at, published_at, archived_at, intake_display_source, first_published_at, content_rating, draft_slug
 `
 
 type CreateGameParams struct {
@@ -101,6 +104,7 @@ func (q *Queries) CreateGame(ctx context.Context, arg CreateGameParams) (Game, e
 		&i.IntakeDisplaySource,
 		&i.FirstPublishedAt,
 		&i.ContentRating,
+		&i.DraftSlug,
 	)
 	return i, err
 }
@@ -115,7 +119,7 @@ func (q *Queries) DisableGameSources(ctx context.Context, gameID uuid.UUID) erro
 }
 
 const lockGame = `-- name: LockGame :one
-SELECT id, public_id, slug, status, revision, created_at, updated_at, published_at, archived_at, intake_display_source, first_published_at, content_rating FROM games WHERE id=$1 FOR UPDATE
+SELECT id, public_id, slug, status, revision, created_at, updated_at, published_at, archived_at, intake_display_source, first_published_at, content_rating, draft_slug FROM games WHERE id=$1 FOR UPDATE
 `
 
 func (q *Queries) LockGame(ctx context.Context, id uuid.UUID) (Game, error) {
@@ -134,6 +138,7 @@ func (q *Queries) LockGame(ctx context.Context, id uuid.UUID) (Game, error) {
 		&i.IntakeDisplaySource,
 		&i.FirstPublishedAt,
 		&i.ContentRating,
+		&i.DraftSlug,
 	)
 	return i, err
 }
@@ -203,6 +208,32 @@ func (q *Queries) PublishedGamePage(ctx context.Context, arg PublishedGamePagePa
 	return items, nil
 }
 
+const saveGameDraftText = `-- name: SaveGameDraftText :exec
+INSERT INTO game_localizations (game_id,locale,name,summary,text_source_id,text_observation_id)
+VALUES ($1,$2,$3,$4,$5,$6)
+`
+
+type SaveGameDraftTextParams struct {
+	GameID            uuid.UUID  `json:"game_id"`
+	Locale            string     `json:"locale"`
+	Name              string     `json:"name"`
+	Summary           string     `json:"summary"`
+	TextSourceID      *uuid.UUID `json:"text_source_id"`
+	TextObservationID *uuid.UUID `json:"text_observation_id"`
+}
+
+func (q *Queries) SaveGameDraftText(ctx context.Context, arg SaveGameDraftTextParams) error {
+	_, err := q.db.Exec(ctx, saveGameDraftText,
+		arg.GameID,
+		arg.Locale,
+		arg.Name,
+		arg.Summary,
+		arg.TextSourceID,
+		arg.TextObservationID,
+	)
+	return err
+}
+
 const saveGameSource = `-- name: SaveGameSource :one
 INSERT INTO game_sources (id,game_id,platform_code,external_key,source_url) VALUES ($1,$2,$3,$4,$5)
 ON CONFLICT (platform_code,external_key) DO UPDATE SET source_url=excluded.source_url,active=true
@@ -230,18 +261,20 @@ func (q *Queries) SaveGameSource(ctx context.Context, arg SaveGameSourceParams) 
 	return id, err
 }
 
-const updateGame = `-- name: UpdateGame :one
-UPDATE games SET slug=$2,revision=revision+1,updated_at=transaction_timestamp()
-WHERE id=$1 RETURNING id, public_id, slug, status, revision, created_at, updated_at, published_at, archived_at, intake_display_source, first_published_at, content_rating
+const updateGameDraft = `-- name: UpdateGameDraft :one
+UPDATE games SET slug=CASE WHEN status='draft' THEN $1::text ELSE slug END,
+ draft_slug=CASE WHEN status='published' THEN nullif($1,slug) END,
+ revision=revision+1,updated_at=transaction_timestamp()
+WHERE id=$2 AND status IN ('draft','published') RETURNING id, public_id, slug, status, revision, created_at, updated_at, published_at, archived_at, intake_display_source, first_published_at, content_rating, draft_slug
 `
 
-type UpdateGameParams struct {
-	ID   uuid.UUID `json:"id"`
-	Slug string    `json:"slug"`
+type UpdateGameDraftParams struct {
+	EditSlug string    `json:"edit_slug"`
+	GameID   uuid.UUID `json:"game_id"`
 }
 
-func (q *Queries) UpdateGame(ctx context.Context, arg UpdateGameParams) (Game, error) {
-	row := q.db.QueryRow(ctx, updateGame, arg.ID, arg.Slug)
+func (q *Queries) UpdateGameDraft(ctx context.Context, arg UpdateGameDraftParams) (Game, error) {
+	row := q.db.QueryRow(ctx, updateGameDraft, arg.EditSlug, arg.GameID)
 	var i Game
 	err := row.Scan(
 		&i.ID,
@@ -256,6 +289,7 @@ func (q *Queries) UpdateGame(ctx context.Context, arg UpdateGameParams) (Game, e
 		&i.IntakeDisplaySource,
 		&i.FirstPublishedAt,
 		&i.ContentRating,
+		&i.DraftSlug,
 	)
 	return i, err
 }

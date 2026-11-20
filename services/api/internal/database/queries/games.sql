@@ -5,12 +5,16 @@ ON CONFLICT (public_id) DO NOTHING RETURNING *;
 -- name: LockGame :one
 SELECT * FROM games WHERE id=$1 FOR UPDATE;
 
--- name: UpdateGame :one
-UPDATE games SET slug=$2,revision=revision+1,updated_at=transaction_timestamp()
-WHERE id=$1 RETURNING *;
+-- name: UpdateGameDraft :one
+UPDATE games SET slug=CASE WHEN status='draft' THEN sqlc.arg(edit_slug)::text ELSE slug END,
+ draft_slug=CASE WHEN status='published' THEN nullif(sqlc.arg(edit_slug),slug) END,
+ revision=revision+1,updated_at=transaction_timestamp()
+WHERE id=sqlc.arg(game_id) AND status IN ('draft','published') RETURNING *;
 
 -- name: ChangeGameVisibility :one
 UPDATE games SET status=sqlc.arg(new_status),content_rating=sqlc.arg(content_rating),
+ slug=CASE WHEN sqlc.arg(new_status)::text='draft' THEN coalesce(draft_slug,slug) ELSE slug END,
+ draft_slug=CASE WHEN sqlc.arg(new_status)::text='draft' THEN NULL ELSE draft_slug END,
  revision=revision+1,updated_at=transaction_timestamp(),
  archived_at=CASE WHEN sqlc.arg(new_status)::text='archived' THEN transaction_timestamp() ELSE NULL END
 WHERE id=sqlc.arg(id) AND sqlc.arg(new_status)::text IN ('archived','draft') RETURNING *;
@@ -20,6 +24,10 @@ DELETE FROM game_localizations WHERE game_id=$1;
 
 -- name: AddGameLocalization :exec
 INSERT INTO game_localizations (game_id,locale,name,summary) VALUES ($1,$2,$3,$4);
+
+-- name: SaveGameDraftText :exec
+INSERT INTO game_localizations (game_id,locale,name,summary,text_source_id,text_observation_id)
+VALUES ($1,$2,$3,$4,$5,$6);
 
 -- name: DisableGameSources :exec
 UPDATE game_sources SET active=false WHERE game_id=$1 AND active;

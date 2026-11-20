@@ -132,6 +132,10 @@ func (s *Intake) resolve(ctx context.Context, claim dbgen.GameIntakeCandidate, o
 				return err
 			}
 			current = &inserted
+			if err := catalog.InitializeIntakeGameText(ctx, q, game, inserted.ID, o.ID,
+				catalog.Localization{Locale: "en", Name: clean(o.detail.Name, 160), Summary: o.detail.Description}); err != nil {
+				return err
+			}
 		}
 		game, err := q.LockGame(ctx, current.GameID)
 		if err != nil {

@@ -59,7 +59,7 @@ func failure(err error) error {
 	case errors.Is(err, catalog.ErrGamePublicationIdentity):
 		return fiber.ErrForbidden
 	case errors.Is(err, catalog.ErrGamePublicationText), errors.Is(err, catalog.ErrGamePublicationReview), errors.Is(err, catalog.ErrGamePublicationPolicy):
-		return fiber.NewError(fiber.StatusUnprocessableEntity, err.Error())
+		return fiber.NewError(fiber.StatusBadRequest, err.Error())
 	case errors.Is(err, catalog.ErrGamePreviewChanged):
 		return fiber.NewError(fiber.StatusConflict, err.Error())
 	case errors.Is(err, catalog.ErrInvalid), errors.Is(err, collection.ErrIntakeInput):

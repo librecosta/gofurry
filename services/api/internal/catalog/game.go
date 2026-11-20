@@ -24,7 +24,12 @@ func (s *Service) CreateGame(ctx context.Context, in GameInput) (dbgen.Game, err
 		if err != nil {
 			return row, err
 		}
-		return row, saveGameContent(ctx, q, row.ID, in, true)
+		for _, l := range in.Localizations {
+			if err := q.AddGameLocalization(ctx, dbgen.AddGameLocalizationParams{GameID: row.ID, Locale: l.Locale, Name: l.Name, Summary: l.Summary}); err != nil {
+				return row, err
+			}
+		}
+		return row, saveGameSources(ctx, q, row.ID, in.Sources)
 	})
 }
 
@@ -35,8 +40,7 @@ func (s *Service) createGame(ctx context.Context, q *dbgen.Queries, slug string)
 	})
 }
 
-// CreateIntakeGame is part of the caller's identity transaction. Display
-// data remains in the source projection and never enters editorial rows.
+// CreateIntakeGame is part of the caller's identity transaction.
 func (s *Service) CreateIntakeGame(ctx context.Context, q *dbgen.Queries, name string) (dbgen.Game, error) {
 	ed, err := normalizeEditorial(Editorial{Localizations: []Localization{{Locale: "en", Name: name}}}, "")
 	if err != nil {
@@ -45,6 +49,17 @@ func (s *Service) CreateIntakeGame(ctx context.Context, q *dbgen.Queries, name s
 		ed.Slug = "game"
 	}
 	return s.createGame(ctx, q, ed.Slug)
+}
+
+// InitializeIntakeGameText runs only when Intake has created a new identity.
+func InitializeIntakeGameText(ctx context.Context, q *dbgen.Queries, game dbgen.Game, source, observation uuid.UUID, text Localization) error {
+	ed, err := normalizeEditorial(Editorial{Localizations: []Localization{text}}, game.Slug)
+	if err != nil || observation == uuid.Nil() {
+		return nil // An incomplete first observation leaves an empty draft.
+	}
+	text = ed.Localizations[0]
+	return q.SaveGameDraftText(ctx, dbgen.SaveGameDraftTextParams{GameID: game.ID, Locale: text.Locale,
+		Name: text.Name, Summary: text.Summary, TextSourceID: &source, TextObservationID: &observation})
 }
 
 func NormalizeGameSource(source Source) (Source, error) {
@@ -56,10 +71,6 @@ func NormalizeGameSource(source Source) (Source, error) {
 }
 
 func (s *Service) EditGame(ctx context.Context, id uuid.UUID, revision int64, in GameInput) (dbgen.Game, error) {
-	return s.editGame(ctx, id, revision, in, false)
-}
-
-func (s *Service) editGame(ctx context.Context, id uuid.UUID, revision int64, in GameInput, preserveSources bool) (dbgen.Game, error) {
 	hasSources := in.Sources != nil
 	var err error
 	in.Sources, err = normalizeSources(in.Sources)
@@ -71,44 +82,35 @@ func (s *Service) editGame(ctx context.Context, id uuid.UUID, revision int64, in
 		if err != nil {
 			return row, err
 		}
-		if err = editable(revision, row.Revision, row.Status); err != nil {
-			return row, err
-		}
-		in.Editorial, err = normalizeEditorial(in.Editorial, row.Slug)
-		if err != nil {
-			return row, err
-		}
-		if row.Status != Draft {
+		if hasSources && row.Status != Draft {
 			return row, ErrConflict
 		}
-		if err = saveGameContent(ctx, q, id, in, !preserveSources && hasSources); err != nil {
+		row, err = saveGameDraft(ctx, q, row, GameManagementEdit{Revision: revision, Slug: in.Slug, Localizations: in.Localizations})
+		if err != nil || !hasSources {
 			return row, err
 		}
-		if err = q.CloseRemovedGameBindings(ctx, &id); err != nil {
-			return row, err
-		}
-		return q.UpdateGame(ctx, dbgen.UpdateGameParams{ID: id, Slug: in.Slug})
+		return editGameSources(ctx, q, row, in.Sources, revision)
 	})
 }
 
-func saveGameContent(ctx context.Context, q *dbgen.Queries, id uuid.UUID, in GameInput, editSources bool) error {
-	if err := q.ClearGameLocalizations(ctx, id); err != nil {
-		return err
+func editGameSources(ctx context.Context, q *dbgen.Queries, row dbgen.Game, sources []Source, previousRevision int64) (dbgen.Game, error) {
+	if err := saveGameSources(ctx, q, row.ID, sources); err != nil {
+		return row, err
 	}
-	for _, localization := range in.Localizations {
-		if err := q.AddGameLocalization(ctx, dbgen.AddGameLocalizationParams{
-			GameID: id, Locale: localization.Locale, Name: localization.Name, Summary: localization.Summary,
-		}); err != nil {
-			return err
-		}
+	if err := q.CloseRemovedGameBindings(ctx, &row.ID); err != nil {
+		return row, err
 	}
-	if !editSources {
-		return nil
+	if row.Revision != previousRevision {
+		return row, nil
 	}
+	return q.UpdateGameDraft(ctx, dbgen.UpdateGameDraftParams{GameID: row.ID, EditSlug: row.Slug})
+}
+
+func saveGameSources(ctx context.Context, q *dbgen.Queries, id uuid.UUID, sources []Source) error {
 	if err := q.DisableGameSources(ctx, id); err != nil {
 		return err
 	}
-	for _, source := range in.Sources {
+	for _, source := range sources {
 		_, err := q.SaveGameSource(ctx, dbgen.SaveGameSourceParams{
 			ID: uuid.NewV7(), GameID: id, PlatformCode: source.PlatformCode, ExternalKey: source.ExternalKey, SourceUrl: source.SourceURL,
 		})

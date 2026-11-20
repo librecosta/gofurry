@@ -87,7 +87,7 @@ func (q *Queries) LegacySitePolicyPending(ctx context.Context) (int64, error) {
 }
 
 const lockGamePublicID = `-- name: LockGamePublicID :one
-SELECT id, public_id, slug, status, revision, created_at, updated_at, published_at, archived_at, intake_display_source, first_published_at, content_rating FROM games WHERE public_id=$1 FOR UPDATE
+SELECT id, public_id, slug, status, revision, created_at, updated_at, published_at, archived_at, intake_display_source, first_published_at, content_rating, draft_slug FROM games WHERE public_id=$1 FOR UPDATE
 `
 
 func (q *Queries) LockGamePublicID(ctx context.Context, publicID string) (Game, error) {
@@ -106,6 +106,7 @@ func (q *Queries) LockGamePublicID(ctx context.Context, publicID string) (Game, 
 		&i.IntakeDisplaySource,
 		&i.FirstPublishedAt,
 		&i.ContentRating,
+		&i.DraftSlug,
 	)
 	return i, err
 }
