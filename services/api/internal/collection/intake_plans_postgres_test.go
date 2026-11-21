@@ -2,8 +2,12 @@ package collection
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	json "encoding/json/v2"
 	"flag"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 	"uuid"
@@ -195,6 +199,63 @@ func TestSteamProjectionPostgres(t *testing.T) {
 				t.Fatal("projection lost valid media or changed editorial data")
 			}
 		})
+	}
+}
+
+func TestWebSweepRecoversConfirmedBaselinePostgres(t *testing.T) {
+	ctx, conn := nativeCollectionPostgres(t)
+	tx := nativeCollectionTables(t, ctx, conn, "collection_sources", "collection_bindings", "collection_plans",
+		"collection_plan_bindings", "collection_current", "site_evidence_changes", "site_daily_coverage")
+	exec := func(query string, args ...any) {
+		t.Helper()
+		_, err := tx.Exec(ctx, query, args...)
+		requirePlanTest(t, err)
+	}
+	source, target, binding, plan, site := uuid.NewV7(), uuid.NewV7(), uuid.NewV7(), uuid.NewV7(), uuid.NewV7()
+	const namespace, domain = "test-web-sweep", "example.org"
+	bound := time.Date(2026, 11, 21, 14, 0, 0, 0, time.UTC)
+	exec(`INSERT INTO collection_sources (id,namespace,provider,resource_type,external_key,target_id)
+		VALUES ($1,$2,'web','domain',$3,$4)`, source, namespace, domain, target)
+	exec(`INSERT INTO collection_bindings (id,source_id,resource_type,site_id,address_id,purpose,effective_from)
+		VALUES ($1,$2,'domain',$3,$4,'domain',$5)`, binding, source, site, uuid.NewV7(), bound)
+	exec(`INSERT INTO collection_plans (id,source_id,capability,request_schema,params,scope,interval_seconds,anchor_at,policy)
+		VALUES ($1,$2,'web.dns',1,'{"types":["a"]}','{"egress_region":"cn"}',3600,$3,'state_refresh')`, plan, source, bound)
+	exec(`INSERT INTO collection_plan_bindings (plan_id,binding_id,source_id,attached_at)
+		VALUES ($1,$2,$3,$4)`, plan, binding, source, bound)
+
+	semantic := segmentScope{Namespace: namespace, scope: scope{EgressRegion: "cn"},
+		Dimensions: map[string]string{"section": "dns", "rrtype": "a", "resolver": "google-public-dns"}}
+	raw, err := json.Marshal(semantic, json.Deterministic(true))
+	requirePlanTest(t, err)
+	key := sha256.Sum256(raw)
+	original := observation{identity: identity{TargetID: target, Capability: "web.dns", Schema: 1, ScopeKey: hex.EncodeToString(key[:])},
+		ID: uuid.NewV7(), Scope: semantic, State: "confirmed_empty", Source: "web", Evidence: "dns_response",
+		ObservedAt: bound.Add(-2 * time.Second), ReceivedAt: bound.Add(time.Second), Hash: strings.Repeat("a", 64),
+		Data: []byte(`{"domain":"example.org","type":"a","rcode":"noerror","resolver":"google-public-dns","vantage":"recursive_doh","records":[]}`)}
+	generation, epoch := uuid.NewV7(), uuid.NewV7()
+	q := dbgen.New(tx)
+	svc := &Service{namespace: namespace}
+	confirmed := bound.Add(time.Minute)
+	current := currentItem{observation: original, Position: 1, Confirmed: confirmed}
+	requirePlanTest(t, svc.project(ctx, q, generation, epoch, result{observation: original, Position: 1, Confirmed: original.ReceivedAt}, false))
+	var count int
+	requirePlanTest(t, tx.QueryRow(ctx, "SELECT count(*) FROM collection_current").Scan(&count))
+	if count != 0 {
+		t.Fatal("stream result preceding eligible binding was projected")
+	}
+	for range 2 {
+		requirePlanTest(t, svc.sweepPage(ctx, q, generation, epoch, []currentItem{current}))
+	}
+	var observationID uuid.UUID
+	var firstObserved time.Time
+	requirePlanTest(t, tx.QueryRow(ctx, `SELECT source_observation_id,first_observed_at FROM site_evidence_changes
+		WHERE binding_id=$1 AND fact_key='dns.rrset' AND event_kind='baseline'`, binding).Scan(&observationID, &firstObserved))
+	if observationID != original.ID || !firstObserved.Equal(confirmed) {
+		t.Fatal("baseline did not preserve observation identity and use the eligible confirmation time")
+	}
+	requirePlanTest(t, tx.QueryRow(ctx, `SELECT count(*) FROM site_evidence_changes WHERE binding_id=$1`, binding).Scan(&count))
+	if count != 1 {
+		t.Fatal("replaying the same confirmation wrote duplicate evidence")
 	}
 }
 

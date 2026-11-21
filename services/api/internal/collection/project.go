@@ -359,6 +359,21 @@ func (s *Service) sweepPage(ctx context.Context, q *dbgen.Queries, generation, e
 		if err != nil {
 			return err
 		}
+		if n == 0 {
+			_, err = q.CollectionCurrent(ctx, dbgen.CollectionCurrentParams{
+				Generation: generation, SourceID: source.ID, Capability: r.Capability, OutputSchema: r.Schema, ScopeKey: r.ScopeKey,
+			})
+			if errors.Is(err, pgx.ErrNoRows) {
+				// A result may have first arrived before the binding was effective.
+				// A later confirmation can establish a baseline through the snapshot rules.
+				if err := s.project(ctx, q, generation, epoch, r, true); err != nil {
+					return err
+				}
+				n = 1
+			} else if err != nil {
+				return err
+			}
+		}
 		if n != 0 {
 			if err = q.ActivateSiteBaselines(ctx, dbgen.ActivateSiteBaselinesParams{
 				Generation: generation, Epoch: epoch, SourceID: &source.ID, ScopeKey: pgtype.Text{String: r.ScopeKey, Valid: true},
