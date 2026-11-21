@@ -138,16 +138,14 @@ The [container notes](deploy/cn/README.md) cover the shared middleware network, 
 ```sh
 task tools
 task check:api
-task build:web
+pnpm --filter @gofurry/web build
 pnpm --filter @gofurry/web typecheck
 pnpm --filter @gofurry/web test:e2e
 task check:hmr
-task check:docker
-task check:containers
 ```
 
 Check INTL defaults separately by setting `WEB_REGION=INTL` and running `pnpm --filter @gofurry/web exec playwright test governance.spec.ts`. Remove that setting before CN/HMR checks. Browser setup: `pnpm --filter @gofurry/web exec playwright install chromium`; an installed Chrome may be selected with `PLAYWRIGHT_CHANNEL=chrome`.
 
-These are focused runtime/configuration/SSR checks, not a multi-browser business matrix. `task check` remains the general repository entry point. HMR temporarily edits/restores the diagnostic route and its SCSS Module; do not edit them concurrently. Container smoke uses example YAML, random ports and its own disposable project, checks the mount/log policy/SIGTERM, then removes only its resources. It never overwrites private YAML.
+`task check` remains the native general repository entry point. HMR temporarily edits and restores the diagnostic route and its SCSS Module. Leave both files untouched while it runs. `task check:docker` and `task check:containers` are for explicitly authorized container work. The container smoke check uses example YAML, random ports and its own disposable Compose project.
 
 See [B0 verification](docs/v0.1-b0.md), [architecture](.agents/architecture.md) and [historical V0.1-A verification](docs/v0.1-a.md). Legacy source is read-only and excluded from builds/CI. Issue #1 tracks deferred integrations; Issue #2 defers shared UI/Go libraries.

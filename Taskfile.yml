@@ -52,20 +52,24 @@ tasks:
     dir: services/api
     cmds:
       - go run github.com/sqlc-dev/sqlc/cmd/sqlc@v1.31.1 diff
-  check:catalog:
-    desc: Verify Site, Game, Yearbook and both regional Navigation pages with disposable PostgreSQL 18 and Redis 8
+  check:docker:catalog:
+    aliases: [check:catalog]
+    desc: Docker-only. Verify Site, Game, Yearbook and both regional Navigation pages with disposable PostgreSQL 18 and Redis 8
     cmds:
       - node scripts/check-catalog.mjs
-  check:legacy-seed:
-    desc: Exercise the D5-A legacy CLI against a disposable PostgreSQL 18 fixture and local Logo bytes
+  check:docker:legacy-seed:
+    aliases: [check:legacy-seed]
+    desc: Docker-only. Exercise the D5-A legacy CLI against a disposable PostgreSQL 18 fixture and local Logo bytes
     cmds:
       - go -C services/api test -tags=integration ./internal/legacyseed -count=1 -timeout=8m -v
-  check:legacy-import:
-    desc: Exercise the D5-B1 importer against disposable PostgreSQL 18 and isolated TLS object storage
+  check:docker:legacy-import:
+    aliases: [check:legacy-import]
+    desc: Docker-only. Exercise the D5-B1 importer against disposable PostgreSQL 18 and isolated TLS object storage
     cmds:
       - go -C services/api test -tags=integration ./internal/legacyimport -count=1 -timeout=8m -v
-  check:collection:
-    desc: Verify GoFurry and pinned Harvest against separate disposable PostgreSQL 18 databases
+  check:docker:collection:
+    aliases: [check:collection]
+    desc: Docker-only. Verify GoFurry and pinned Harvest against separate disposable PostgreSQL 18 databases
     vars:
       HARVEST_SOURCE: '{{default (print .ROOT_DIR "/../harvest") .HARVEST_SOURCE}}'
     cmds:
@@ -108,11 +112,12 @@ tasks:
       - task: check:build
       - task: check:web
   check:build:
+    desc: Verify the API and SSR build with the native toolchain
     cmds:
       - task: tools
       - pnpm exec node scripts/check-go-format.mjs
       - task: check:api
-      - task: build:web
+      - pnpm --filter @gofurry/web build
       - pnpm --filter @gofurry/web typecheck
   check:web:
     cmds:
@@ -133,8 +138,9 @@ tasks:
       GOARCH: '{{.ARCH}}'
     cmds:
       - go -C services/api build -trimpath -ldflags="-s -w" -o ../../bin/linux/{{.ARCH}}/api ./cmd/api
-  build:web:
-    desc: Build SSR in a disposable Node container and export runtime artifacts
+  build:docker:web:
+    aliases: [build:web]
+    desc: Docker-only. Build SSR in a disposable Node container and export runtime artifacts
     cmds:
       - >-
         docker run --rm --network none
@@ -152,10 +158,10 @@ tasks:
     desc: Build the Go API on the host and SSR in Docker, then package runtime images
     cmds:
       - task: build:linux
-      - task: build:web
+      - task: build:docker:web
       - docker compose -f deploy/compose/compose.yaml config --quiet
       - docker compose -f deploy/compose/compose.yaml build --build-arg "NODE_IMAGE={{.NODE_IMAGE}}"
   check:containers:
-    desc: Smoke-test prebuilt images on random ports in an isolated disposable Compose project
+    desc: Docker-only. Smoke-test prebuilt images on random ports in an isolated Compose project
     cmds:
       - pnpm exec node scripts/check-containers.mjs
