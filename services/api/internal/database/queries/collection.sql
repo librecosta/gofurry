@@ -1,7 +1,17 @@
 -- name: CollectionSiteAddress :one
 SELECT a.id,a.site_id,a.url,a.kind FROM site_addresses a JOIN sites s ON s.id=a.site_id
-WHERE s.public_id=$1 AND s.status='published' AND a.active AND a.url=$2
+WHERE s.public_id=$1 AND s.status<>'archived' AND a.active AND a.url=$2
 FOR UPDATE OF s;
+
+-- name: CollectionPrimarySiteAddress :one
+SELECT a.id,a.site_id,a.url,a.kind FROM site_addresses a JOIN sites s ON s.id=a.site_id
+WHERE s.public_id=$1 AND s.status<>'archived' AND a.active AND a.kind='primary'
+FOR UPDATE OF s;
+
+-- name: FindMatchingCollectionPlan :one
+SELECT id FROM collection_plans
+WHERE source_id=$1 AND capability=$2 AND request_schema=1 AND params=$3 AND scope=$4 AND policy=$5
+ORDER BY (schedule_id IS NOT NULL) DESC,id LIMIT 1;
 
 -- name: CollectionSteamSource :one
 SELECT p.id,p.game_id,p.external_key FROM game_sources p JOIN games g ON g.id=p.game_id
@@ -85,12 +95,12 @@ UPDATE collection_sources SET target_id=$2 WHERE id=$1 AND target_id IS NULL;
 -- name: PendingCollectionPlans :many
 SELECT p.*,s.target_id,s.namespace,s.provider,s.resource_type,s.external_key,
  EXISTS (SELECT 1 FROM collection_plan_bindings m JOIN collection_bindings b ON b.id=m.binding_id
- WHERE m.plan_id=p.id AND m.source_id=p.source_id AND b.source_id=m.source_id AND b.effective_until IS NULL) AS desired
+ WHERE m.plan_id=p.id AND m.source_id=p.source_id AND b.source_id=m.source_id AND b.effective_until IS NULL AND m.enabled AND EXISTS (SELECT FROM sites st WHERE st.id=b.site_id AND st.status<>'archived' UNION ALL SELECT FROM games g WHERE g.id=b.game_id AND g.status<>'archived')) AS desired
 FROM collection_plans p JOIN collection_sources s ON s.id=p.source_id
 WHERE s.namespace=$1 AND s.target_id IS NOT NULL AND
  (p.checked_at IS NULL OR p.checked_at < transaction_timestamp() - CASE WHEN p.schedule_id IS NULL THEN interval '30 seconds' ELSE interval '30 minutes' END OR
   (p.schedule_id IS NOT NULL AND p.remote_enabled IS DISTINCT FROM (EXISTS (SELECT 1 FROM collection_plan_bindings m JOIN collection_bindings b ON b.id=m.binding_id
-         WHERE m.plan_id=p.id AND m.source_id=p.source_id AND b.source_id=m.source_id AND b.effective_until IS NULL))))
+         WHERE m.plan_id=p.id AND m.source_id=p.source_id AND b.source_id=m.source_id AND b.effective_until IS NULL AND m.enabled AND EXISTS (SELECT FROM sites st WHERE st.id=b.site_id AND st.status<>'archived' UNION ALL SELECT FROM games g WHERE g.id=b.game_id AND g.status<>'archived')))))
 ORDER BY p.checked_at NULLS FIRST,p.id LIMIT 8;
 
 -- name: TouchCollectionPlan :exec

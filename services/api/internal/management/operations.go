@@ -54,10 +54,13 @@ func receipt(c fiber.Ctx, action string) dbgen.RecordManagementOperationParams {
 func failure(err error) error {
 	var pe *pgconn.PgError
 	var duplicate catalog.SiteAddressConflict
+	var steamDuplicate collection.SteamGameExists
 	switch {
 	case err == nil:
 		return nil
 	case errors.Is(err, catalog.ErrGamePublicationIdentity):
+		return fiber.ErrForbidden
+	case errors.Is(err, collection.ErrCollectionPermission):
 		return fiber.ErrForbidden
 	case errors.Is(err, catalog.ErrGamePublicationText), errors.Is(err, catalog.ErrGamePublicationReview), errors.Is(err, catalog.ErrGamePublicationPolicy):
 		return fiber.NewError(fiber.StatusBadRequest, err.Error())
@@ -68,11 +71,13 @@ func failure(err error) error {
 		return fiber.NewError(fiber.StatusConflict, err.Error())
 	case errors.As(err, &duplicate):
 		return fiber.NewError(fiber.StatusConflict, duplicate.Error())
+	case errors.As(err, &steamDuplicate):
+		return fiber.NewError(fiber.StatusConflict, steamDuplicate.Error())
 	case errors.Is(err, catalog.ErrSiteNameRequired), errors.Is(err, catalog.ErrSiteChineseRequired),
 		errors.Is(err, catalog.ErrSiteAddressRequired), errors.Is(err, catalog.ErrSiteAddressInvalid),
 		errors.Is(err, catalog.ErrSiteCategoryRequired), errors.Is(err, catalog.ErrSiteReviewRequired):
 		return fiber.NewError(fiber.StatusUnprocessableEntity, err.Error())
-	case errors.Is(err, catalog.ErrInvalid), errors.Is(err, collection.ErrIntakeInput):
+	case errors.Is(err, catalog.ErrInvalid), errors.Is(err, collection.ErrIntakeInput), errors.Is(err, collection.ErrIntent):
 		return fiber.ErrBadRequest
 	case catalog.ManagementMissing(err):
 		return fiber.ErrNotFound
@@ -193,6 +198,7 @@ func (o *Operations) register(app *fiber.App) {
 	o.games(g)
 	o.entityCollection(g, "sites")
 	o.entityCollection(g, "games")
+	o.collectionControl(g)
 	o.acquisition(g)
 }
 

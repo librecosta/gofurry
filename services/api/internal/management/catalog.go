@@ -86,8 +86,12 @@ func (o *Operations) sites(g fiber.Router) {
 	})
 	o.features(g, "/sites/features/:slot", "site.feature", true)
 	g.Get("/sites/:id", readOperation(o.site))
-	save := func(ctx context.Context, s *catalog.Service, _ *dbgen.Queries, id string, in catalog.SiteManagementEdit, d catalog.PublicationDecision) (catalog.ManagementResult, error) {
-		return s.SaveManagementSite(ctx, id, in, o.Region, d.Actor)
+	save := func(ctx context.Context, s *catalog.Service, q *dbgen.Queries, id string, in catalog.SiteManagementEdit, d catalog.PublicationDecision) (catalog.ManagementResult, error) {
+		result, err := s.SaveManagementSite(ctx, id, in, o.Region, d.Actor)
+		if err == nil {
+			err = o.Collector.RegisterSite(ctx, q, result.Target, o.Region)
+		}
+		return result, err
 	}
 	g.Post("/sites/bulk", editOnly, writeOperation(o, "site.bulk", func(ctx context.Context, s *catalog.Service, _ *dbgen.Queries, _ string, in catalog.BulkSiteEdit, d catalog.PublicationDecision) (catalog.ManagementResult, error) {
 		return s.BulkEditSites(ctx, in, o.Region, d.Actor)
@@ -234,6 +238,7 @@ func (o *Operations) game(ctx context.Context, id string) (gameDetail, error) {
 }
 
 func (o *Operations) games(g fiber.Router) {
+	o.steamPrefill(g)
 	g.Get("/games", func(c fiber.Ctx) error {
 		v, err := search(c, "q", "status", "after", "platform")
 		if err != nil {
@@ -258,7 +263,10 @@ func (o *Operations) games(g fiber.Router) {
 	}))
 
 	g.Get("/games/:id", readOperation(o.game))
-	save := func(ctx context.Context, s *catalog.Service, _ *dbgen.Queries, id string, in catalog.GameManagementEdit, _ catalog.PublicationDecision) (catalog.ManagementResult, error) {
+	save := func(ctx context.Context, s *catalog.Service, q *dbgen.Queries, id string, in catalog.GameManagementEdit, _ catalog.PublicationDecision) (catalog.ManagementResult, error) {
+		if id == "" && in.SteamAppID != "" {
+			return o.Collector.CreateSteamGame(ctx, s, q, in, o.Region)
+		}
 		return s.SaveManagementGame(ctx, id, in)
 	}
 	g.Post("/games", editOnly, writeOperation(o, "game.create", save))

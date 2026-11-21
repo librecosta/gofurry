@@ -14,7 +14,7 @@ ORDER BY src.id LIMIT 33;
 WITH bound AS MATERIALIZED (
  SELECT DISTINCT ON (p.id) p.id,p.source_id,p.capability,p.request_schema,p.params,p.scope,p.interval_seconds,p.anchor_at,
   p.policy,p.schedule_id,p.remote_enabled,p.checked_at,src.namespace,src.provider,src.external_key,src.target_id,
-  b.id AS binding_id,b.site_id,b.game_source_id,greatest(b.effective_from,m.attached_at)::timestamptz AS since
+  b.id AS binding_id,b.site_id,b.game_source_id,m.enabled AS desired_enabled,EXISTS (SELECT FROM sites st WHERE st.id=b.site_id AND st.status<>'archived' UNION ALL SELECT FROM games g WHERE g.id=b.game_id AND g.status<>'archived')::boolean AS actionable,greatest(b.effective_from,m.attached_at)::timestamptz AS since
  FROM collection_bindings b JOIN collection_sources src ON src.id=b.source_id
  JOIN collection_plan_bindings m ON m.binding_id=b.id AND m.source_id=b.source_id
  JOIN collection_plans p ON p.id=m.plan_id AND p.source_id=m.source_id

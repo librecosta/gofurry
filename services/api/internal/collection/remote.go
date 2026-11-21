@@ -32,8 +32,8 @@ type remoteStatus int
 func (s remoteStatus) Error() string { return fmt.Sprintf("Harvest HTTP %d", int(s)) }
 
 type client struct {
-	base, writer, reader string
-	http                 *http.Client
+	base, writer, reader, operator string
+	http                           *http.Client
 }
 
 func newClient(c platform.HarvestConfig) *client {
@@ -43,7 +43,7 @@ func newClient(c platform.HarvestConfig) *client {
 		TLSHandshakeTimeout: 3 * time.Second, ResponseHeaderTimeout: 8 * time.Second,
 		MaxIdleConns: 2, MaxIdleConnsPerHost: 2, MaxConnsPerHost: 2, IdleConnTimeout: 30 * time.Second,
 	}
-	return &client{strings.TrimSuffix(c.URL, "/"), c.WriterToken, c.ReaderToken,
+	return &client{strings.TrimSuffix(c.URL, "/"), c.WriterToken, c.ReaderToken, c.OperatorToken,
 		&http.Client{Transport: tr, Timeout: 12 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}
 }
 

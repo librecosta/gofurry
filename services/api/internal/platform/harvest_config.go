@@ -11,6 +11,7 @@ type HarvestConfig struct {
 	URL                string           `mapstructure:"url" json:"-"`
 	Namespace          string           `mapstructure:"namespace"`
 	WriterToken        string           `mapstructure:"writer_token" json:"-"`
+	OperatorToken      string           `mapstructure:"operator_token" json:"-"`
 	ReaderToken        string           `mapstructure:"reader_token" json:"-"`
 	ConsumerID         string           `mapstructure:"consumer_id"`
 	Consume            bool             `mapstructure:"consume"`
@@ -37,6 +38,10 @@ func (c *Config) validateHarvest() error {
 	}
 	if !harvestNamespace.MatchString(h.Namespace) || h.WriterToken != "" && !harvestToken.MatchString(h.WriterToken) {
 		return errors.New("invalid harvest namespace or writer credential")
+	}
+	if h.OperatorToken != "" && (!harvestToken.MatchString(h.OperatorToken) ||
+		h.OperatorToken == h.ReaderToken || h.OperatorToken == h.WriterToken || h.WriterToken == "" || !h.Consume) {
+		return errors.New("harvest operator requires a distinct credential, writer and consumer")
 	}
 	if h.Consume {
 		id, err := uuid.Parse(h.ConsumerID)

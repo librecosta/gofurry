@@ -22,11 +22,13 @@ type ManagementResult struct {
 
 // Manage commits one verified operator receipt with all local catalogue changes.
 func (s *Service) Manage(ctx context.Context, receipt dbgen.RecordManagementOperationParams, change func(context.Context, *Service, *dbgen.Queries) (ManagementResult, error)) (ManagementResult, error) {
-	return write(ctx, s, func(ctx context.Context, q *dbgen.Queries) (ManagementResult, error) {
+	var decisionError error
+	result, err := write(ctx, s, func(ctx context.Context, q *dbgen.Queries) (ManagementResult, error) {
 		managed := s.InTransaction(q)
 		managed.management = &receipt
 		result, err := change(ctx, managed, q)
 		if err != nil {
+			decisionError = err
 			return result, err
 		}
 		receipt.Target, receipt.Revision = result.Target, result.Revision
@@ -37,6 +39,12 @@ func (s *Service) Manage(ctx context.Context, receipt dbgen.RecordManagementOper
 		}
 		return result, err
 	})
+	// Management composes domain services that report their own operation errors.
+	// Database and receipt failures still use the catalog transaction classifier.
+	if decisionError != nil {
+		return ManagementResult{}, decisionError
+	}
+	return result, err
 }
 
 type SiteManagement struct {
@@ -246,6 +254,7 @@ func (s *Service) SaveManagementSite(ctx context.Context, id string, in SiteMana
 
 type GameManagementEdit struct {
 	Slug          string               `json:"slug"`
+	SteamAppID    string               `json:"steam_app_id,omitempty"`
 	Localizations []Localization       `json:"localizations"`
 	Revision      int64                `json:"revision"`
 	TextAdoptions []GameTextAdoption   `json:"text_adoptions,omitempty"`
@@ -260,15 +269,24 @@ func (s *Service) SaveManagementGame(ctx context.Context, id string, in GameMana
 		if in.Revision != 0 || len(in.Localizations) == 0 || len(in.TextAdoptions) > 0 || len(in.DraftMedia) > 0 {
 			return ManagementResult{}, ErrInvalid
 		}
+		if data.Slug == "" {
+			data.Slug = NewGameSlug(data.Localizations)
+		}
 		row, err = s.CreateGame(ctx, data)
 	} else {
-		if strings.TrimSpace(in.Slug) == "" || in.Localizations == nil {
+		if in.SteamAppID != "" || in.Localizations == nil {
 			return ManagementResult{}, ErrInvalid
 		}
 		row, err = write(ctx, s, func(ctx context.Context, q *dbgen.Queries) (dbgen.Game, error) {
 			g, e := q.LockGamePublicID(ctx, id)
 			if e != nil {
 				return g, e
+			}
+			if in.Slug == "" {
+				in.Slug = g.Slug
+				if g.DraftSlug.Valid {
+					in.Slug = g.DraftSlug.String
+				}
 			}
 			return saveGameDraft(ctx, q, g, in)
 		})

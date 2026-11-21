@@ -41,6 +41,8 @@ type CollectionPlan struct {
 	Region          string           `json:"region,omitempty"`
 	EgressRegion    string           `json:"egress_region,omitempty"`
 	IntervalSeconds int32            `json:"interval_seconds"`
+	DesiredEnabled  bool             `json:"desired_enabled"`
+	Actionable      bool             `json:"actionable"`
 	Connection      string           `json:"connection"`
 	State           string           `json:"state"`
 	Enabled         *bool            `json:"enabled,omitempty"`
@@ -157,6 +159,7 @@ func (s *Service) planDetail(ctx context.Context, row dbgen.ListEntityCollection
 		ID: row.ID, SourceID: row.SourceID, TargetID: row.TargetID, BindingID: row.BindingID, GameSourceID: row.GameSourceID,
 		ScheduleID: row.ScheduleID, Provider: row.Provider, ExternalKey: row.ExternalKey, Capability: row.Capability,
 		Locale: semantic.Locale, Region: semantic.Region, EgressRegion: semantic.EgressRegion, IntervalSeconds: row.IntervalSeconds,
+		DesiredEnabled: row.DesiredEnabled, Actionable: row.Actionable,
 		State: "unknown", LastSuccessAt: knownTime(row.LastSuccessAt),
 	}
 	if row.ObservationState != "" {
@@ -177,7 +180,10 @@ func (s *Service) planDetail(ctx context.Context, row dbgen.ListEntityCollection
 		}
 	}
 	if connection == "not_scheduled" {
-		out.State = "waiting"
+		out.State = "pending_sync"
+	}
+	if !row.DesiredEnabled || !row.Actionable {
+		out.State = "paused"
 	}
 	if page.LastFailure != nil {
 		failure := projectJob(*page.LastFailure)
@@ -269,11 +275,14 @@ func validScheduleJobs(page scheduleJobsPage, req request, row dbgen.ListEntityC
 var boundedJobCode = regexp.MustCompile(`^[a-z0-9][a-z0-9_.-]{0,63}$`)
 
 func projectJob(j scheduledJob) CollectionJob {
-	code := j.Code
+	return CollectionJob{j.ID, j.AcceptedAttempt, j.AttemptCount, j.State, safeJobCode(j.Code), j.CreatedAt, j.Updated}
+}
+
+func safeJobCode(code string) string {
 	if !boundedJobCode.MatchString(code) {
-		code = ""
+		return ""
 	}
-	return CollectionJob{j.ID, j.AcceptedAttempt, j.AttemptCount, j.State, code, j.CreatedAt, j.Updated}
+	return code
 }
 
 func jobDisplayState(state string) string {

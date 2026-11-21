@@ -1,5 +1,6 @@
 -- name: ManagementSchemaReady :one
-SELECT (to_regclass('game_draft_media') IS NOT NULL AND to_regclass('management_operations') IS NOT NULL)::boolean;
+SELECT (to_regclass('game_draft_media') IS NOT NULL AND to_regclass('management_operations') IS NOT NULL
+ AND to_regclass('steam_editorial_prefills') IS NOT NULL)::boolean;
 
 -- name: RecordManagementOperation :exec
 INSERT INTO management_operations (request_id,actor_id,actor_name,actor_role,action,target,revision)

@@ -97,6 +97,7 @@ harvest: null
 #   namespace: gofurry_cn
 #   reader_token: <private-namespace-reader>
 #   writer_token: <private-namespace-writer>
+#   operator_token: <optional-private-namespace-operator> # Job controls and statistics
 #   consumer_id: <registered-consumer-uuid>
 #   consume: true
 #   intake_enabled: true

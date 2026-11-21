@@ -98,6 +98,7 @@ type CollectionPlanBinding struct {
 	BindingID  uuid.UUID          `json:"binding_id"`
 	SourceID   uuid.UUID          `json:"source_id"`
 	AttachedAt pgtype.Timestamptz `json:"attached_at"`
+	Enabled    bool               `json:"enabled"`
 }
 
 type CollectionSource struct {
@@ -721,6 +722,23 @@ type SteamDiscoveryState struct {
 	Admitted      int64              `json:"admitted"`
 	Pending       []byte             `json:"pending"`
 	LastCode      string             `json:"last_code"`
+}
+
+type SteamEditorialPrefill struct {
+	Namespace          string             `json:"namespace"`
+	AppID              string             `json:"app_id"`
+	Locale             string             `json:"locale"`
+	Generation         uuid.UUID          `json:"generation"`
+	StartedAt          pgtype.Timestamptz `json:"started_at"`
+	SubmissionCode     string             `json:"submission_code"`
+	JobID              *uuid.UUID         `json:"job_id"`
+	TargetID           *uuid.UUID         `json:"target_id"`
+	TextObservationID  *uuid.UUID         `json:"text_observation_id"`
+	MediaObservationID *uuid.UUID         `json:"media_observation_id"`
+	Name               string             `json:"name"`
+	Summary            string             `json:"summary"`
+	Facts              []byte             `json:"facts"`
+	Media              []byte             `json:"media"`
 }
 
 type WallpaperAuditLog struct {

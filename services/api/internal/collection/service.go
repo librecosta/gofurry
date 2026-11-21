@@ -18,6 +18,7 @@ type Service struct {
 	pool      *pgxpool.Pool
 	remote    *client
 	namespace string
+	egress    string
 	consumer  uuid.UUID
 	poll      time.Duration
 	pageSize  int
@@ -26,7 +27,7 @@ type Service struct {
 
 func New(pool *pgxpool.Pool, cfg platform.HarvestConfig) *Service {
 	consumer, _ := uuid.Parse(cfg.ConsumerID)
-	return &Service{pool: pool, remote: newClient(cfg), namespace: cfg.Namespace, consumer: consumer, poll: cfg.PollInterval, pageSize: cfg.PageSize}
+	return &Service{pool: pool, remote: newClient(cfg), namespace: cfg.Namespace, egress: cfg.IntakeEgressRegion, consumer: consumer, poll: cfg.PollInterval, pageSize: cfg.PageSize}
 }
 
 func (s *Service) Close() { s.remote.http.CloseIdleConnections() }

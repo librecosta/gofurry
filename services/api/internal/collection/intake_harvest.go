@@ -26,6 +26,9 @@ type intakeJob struct {
 	Code            string     `json:"code"`
 	Deadline        time.Time  `json:"deadline_at"`
 	Updated         time.Time  `json:"updated_at"`
+	Created         time.Time  `json:"created_at"`
+	OriginJobID     *uuid.UUID `json:"origin_job_id"`
+	AttemptCount    int32      `json:"attempt_count"`
 	AcceptedAttempt *uuid.UUID `json:"accepted_attempt_id"`
 	ScheduleID      *uuid.UUID `json:"schedule_id"`
 }
@@ -35,12 +38,14 @@ type intakeAttempt struct {
 	State   string    `json:"state"`
 	Claimed time.Time `json:"claimed_at"`
 	Ended   time.Time `json:"ended_at"`
+	Code    string    `json:"code,omitempty"`
 }
 
 type intakeJobDetail struct {
 	Job      intakeJob       `json:"job"`
 	Attempts []intakeAttempt `json:"attempts"`
 	Results  []observation   `json:"confirmed_results"`
+	Waiting  string          `json:"waiting_reason"`
 }
 
 type intakeObservation struct {

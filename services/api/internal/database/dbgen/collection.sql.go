@@ -473,6 +473,31 @@ func (q *Queries) CollectionCurrent(ctx context.Context, arg CollectionCurrentPa
 	return i, err
 }
 
+const collectionPrimarySiteAddress = `-- name: CollectionPrimarySiteAddress :one
+SELECT a.id,a.site_id,a.url,a.kind FROM site_addresses a JOIN sites s ON s.id=a.site_id
+WHERE s.public_id=$1 AND s.status<>'archived' AND a.active AND a.kind='primary'
+FOR UPDATE OF s
+`
+
+type CollectionPrimarySiteAddressRow struct {
+	ID     uuid.UUID `json:"id"`
+	SiteID uuid.UUID `json:"site_id"`
+	Url    string    `json:"url"`
+	Kind   string    `json:"kind"`
+}
+
+func (q *Queries) CollectionPrimarySiteAddress(ctx context.Context, publicID string) (CollectionPrimarySiteAddressRow, error) {
+	row := q.db.QueryRow(ctx, collectionPrimarySiteAddress, publicID)
+	var i CollectionPrimarySiteAddressRow
+	err := row.Scan(
+		&i.ID,
+		&i.SiteID,
+		&i.Url,
+		&i.Kind,
+	)
+	return i, err
+}
+
 const collectionResultSource = `-- name: CollectionResultSource :one
 SELECT s.id, s.namespace, s.provider, s.resource_type, s.external_key, s.target_id, s.checked_at FROM collection_sources s WHERE s.target_id=$1 AND s.namespace=$2 AND EXISTS (
  SELECT 1 FROM collection_plans p JOIN collection_plan_bindings m ON m.plan_id=p.id AND m.source_id=p.source_id
@@ -518,7 +543,7 @@ func (q *Queries) CollectionResultSource(ctx context.Context, arg CollectionResu
 
 const collectionSiteAddress = `-- name: CollectionSiteAddress :one
 SELECT a.id,a.site_id,a.url,a.kind FROM site_addresses a JOIN sites s ON s.id=a.site_id
-WHERE s.public_id=$1 AND s.status='published' AND a.active AND a.url=$2
+WHERE s.public_id=$1 AND s.status<>'archived' AND a.active AND a.url=$2
 FOR UPDATE OF s
 `
 
@@ -645,6 +670,33 @@ DELETE FROM collection_current WHERE ctid IN (
 func (q *Queries) DeleteRetiredCollectionCurrent(ctx context.Context, namespace string) error {
 	_, err := q.db.Exec(ctx, deleteRetiredCollectionCurrent, namespace)
 	return err
+}
+
+const findMatchingCollectionPlan = `-- name: FindMatchingCollectionPlan :one
+SELECT id FROM collection_plans
+WHERE source_id=$1 AND capability=$2 AND request_schema=1 AND params=$3 AND scope=$4 AND policy=$5
+ORDER BY (schedule_id IS NOT NULL) DESC,id LIMIT 1
+`
+
+type FindMatchingCollectionPlanParams struct {
+	SourceID   uuid.UUID `json:"source_id"`
+	Capability string    `json:"capability"`
+	Params     []byte    `json:"params"`
+	Scope      []byte    `json:"scope"`
+	Policy     string    `json:"policy"`
+}
+
+func (q *Queries) FindMatchingCollectionPlan(ctx context.Context, arg FindMatchingCollectionPlanParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, findMatchingCollectionPlan,
+		arg.SourceID,
+		arg.Capability,
+		arg.Params,
+		arg.Scope,
+		arg.Policy,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const getCollectionConsumer = `-- name: GetCollectionConsumer :one
@@ -792,12 +844,12 @@ func (q *Queries) OpenCollectionBinding(ctx context.Context, arg OpenCollectionB
 const pendingCollectionPlans = `-- name: PendingCollectionPlans :many
 SELECT p.id, p.source_id, p.capability, p.request_schema, p.params, p.scope, p.interval_seconds, p.anchor_at, p.policy, p.schedule_id, p.remote_revision, p.remote_enabled, p.post_started, p.checked_at,s.target_id,s.namespace,s.provider,s.resource_type,s.external_key,
  EXISTS (SELECT 1 FROM collection_plan_bindings m JOIN collection_bindings b ON b.id=m.binding_id
- WHERE m.plan_id=p.id AND m.source_id=p.source_id AND b.source_id=m.source_id AND b.effective_until IS NULL) AS desired
+ WHERE m.plan_id=p.id AND m.source_id=p.source_id AND b.source_id=m.source_id AND b.effective_until IS NULL AND m.enabled AND EXISTS (SELECT FROM sites st WHERE st.id=b.site_id AND st.status<>'archived' UNION ALL SELECT FROM games g WHERE g.id=b.game_id AND g.status<>'archived')) AS desired
 FROM collection_plans p JOIN collection_sources s ON s.id=p.source_id
 WHERE s.namespace=$1 AND s.target_id IS NOT NULL AND
  (p.checked_at IS NULL OR p.checked_at < transaction_timestamp() - CASE WHEN p.schedule_id IS NULL THEN interval '30 seconds' ELSE interval '30 minutes' END OR
   (p.schedule_id IS NOT NULL AND p.remote_enabled IS DISTINCT FROM (EXISTS (SELECT 1 FROM collection_plan_bindings m JOIN collection_bindings b ON b.id=m.binding_id
-         WHERE m.plan_id=p.id AND m.source_id=p.source_id AND b.source_id=m.source_id AND b.effective_until IS NULL))))
+         WHERE m.plan_id=p.id AND m.source_id=p.source_id AND b.source_id=m.source_id AND b.effective_until IS NULL AND m.enabled AND EXISTS (SELECT FROM sites st WHERE st.id=b.site_id AND st.status<>'archived' UNION ALL SELECT FROM games g WHERE g.id=b.game_id AND g.status<>'archived')))))
 ORDER BY p.checked_at NULLS FIRST,p.id LIMIT 8
 `
 

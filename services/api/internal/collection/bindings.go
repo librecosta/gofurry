@@ -18,7 +18,7 @@ import (
 	"github.com/librecosta/gofurry/services/api/internal/database/dbgen"
 )
 
-var ErrIntent = errors.New("collection requires a published record, active source and supported schedule")
+var ErrIntent = errors.New("collection requires an active record, source and supported schedule")
 var scopePart = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,34}$`)
 
 func (s *Service) BindSite(ctx context.Context, publicID, address string) ([]dbgen.CollectionBinding, error) {
@@ -32,33 +32,36 @@ func (s *Service) BindSite(ctx context.Context, publicID, address string) ([]dbg
 			if err != nil {
 				return missingIntent(err)
 			}
-			u, err := url.Parse(row.Url)
-			if err != nil || !strings.Contains(u.Hostname(), ".") || net.ParseIP(u.Hostname()) != nil {
-				return ErrIntent
-			}
-			for _, source := range []struct{ resource, key, purpose string }{
-				{"origin", u.Scheme + "://" + u.Host, row.Kind},
-				{"domain", u.Hostname(), "domain"},
-			} {
-				identity, err := q.SaveCollectionSource(ctx, dbgen.SaveCollectionSourceParams{
-					ID: uuid.NewV7(), Namespace: s.namespace, Provider: "web", ResourceType: source.resource, ExternalKey: source.key,
-				})
-				if err != nil {
-					return err
-				}
-				binding, err := q.AddCollectionSiteBinding(ctx, dbgen.AddCollectionSiteBindingParams{
-					ID: uuid.NewV7(), SourceID: identity.ID, ResourceType: source.resource, SiteID: &row.SiteID, AddressID: &row.ID, Purpose: source.purpose,
-				})
-				if err != nil {
-					return err
-				}
-				bindings = append(bindings, binding)
-			}
-			return nil
+			bindings, err = s.bindSiteAddress(ctx, q, row.SiteID, row.ID, row.Url, row.Kind)
+			return err
 		})
 	})
-	if err != nil {
-		return nil, err
+	return bindings, err
+}
+
+func (s *Service) bindSiteAddress(ctx context.Context, q *dbgen.Queries, siteID, addressID uuid.UUID, address, kind string) ([]dbgen.CollectionBinding, error) {
+	u, err := url.Parse(address)
+	if err != nil || !strings.Contains(u.Hostname(), ".") || net.ParseIP(u.Hostname()) != nil {
+		return nil, ErrIntent
+	}
+	bindings := make([]dbgen.CollectionBinding, 0, 2)
+	for _, source := range []struct{ resource, key, purpose string }{
+		{"origin", u.Scheme + "://" + u.Host, kind},
+		{"domain", u.Hostname(), "domain"},
+	} {
+		identity, err := q.SaveCollectionSource(ctx, dbgen.SaveCollectionSourceParams{
+			ID: uuid.NewV7(), Namespace: s.namespace, Provider: "web", ResourceType: source.resource, ExternalKey: source.key,
+		})
+		if err != nil {
+			return nil, err
+		}
+		binding, err := q.AddCollectionSiteBinding(ctx, dbgen.AddCollectionSiteBindingParams{
+			ID: uuid.NewV7(), SourceID: identity.ID, ResourceType: source.resource, SiteID: &siteID, AddressID: &addressID, Purpose: source.purpose,
+		})
+		if err != nil {
+			return nil, err
+		}
+		bindings = append(bindings, binding)
 	}
 	return bindings, nil
 }

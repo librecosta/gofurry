@@ -9,10 +9,12 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 	"uuid"
@@ -21,6 +23,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/librecosta/gofurry/services/api/internal/catalog"
+	"github.com/librecosta/gofurry/services/api/internal/collection"
 	"github.com/librecosta/gofurry/services/api/internal/database"
 	"github.com/librecosta/gofurry/services/api/internal/database/dbgen"
 	"github.com/librecosta/gofurry/services/api/internal/handlers"
@@ -46,8 +49,10 @@ func TestSiteIntakePostgresHTTP(t *testing.T) {
 	siteMust(t, err)
 	policyMigration, err := os.ReadFile("../../migrations/202611210002_site_asset_and_tag_policy.sql")
 	siteMust(t, err)
+	collectionMigration, err := os.ReadFile("../../migrations/202611210003_collection_editorial_controls.sql")
+	siteMust(t, err)
 	opts.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
-		return prepareSiteIntakeSchema(ctx, conn, string(migration), string(policyMigration))
+		return prepareSiteIntakeSchema(ctx, conn, string(migration), string(policyMigration), string(collectionMigration))
 	}
 	ctx, cancel := context.WithTimeout(t.Context(), 40*time.Second)
 	defer cancel()
@@ -59,7 +64,18 @@ func TestSiteIntakePostgresHTTP(t *testing.T) {
 	token, actor := uuid.NewV7().String()+uuid.NewV7().String(), uuid.NewV7().String()
 	cfg.Management.Token = token
 	sites := catalog.New(pool)
-	admin := New(platform.NewLogger(io.Discard), cfg, wallpaper.New(pool, nil, true), &Operations{Pool: pool, Catalog: sites, Region: "CN"})
+	var harvest atomic.Pointer[http.ServeMux]
+	remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if fixture := harvest.Load(); fixture != nil {
+			fixture.ServeHTTP(w, r)
+			return
+		}
+		http.Error(w, "isolated Harvest unavailable", 503)
+	}))
+	defer remote.Close()
+	collector := collection.New(pool, platform.HarvestConfig{URL: remote.URL, Namespace: "test_editorial", WriterToken: token, ReaderToken: token, IntakeEgressRegion: "cn"})
+	defer collector.Close()
+	admin := New(platform.NewLogger(io.Discard), cfg, wallpaper.New(pool, nil, true), &Operations{Pool: pool, Catalog: sites, Region: "CN", Collector: collector})
 	api := fiber.New(fiber.Config{JSONEncoder: platform.MarshalJSON})
 	nav := navigation.New(pool)
 	api.Get("/api/v1/sites/directory", handlers.NavigationDirectory(nav, "CN"))
@@ -107,6 +123,95 @@ func TestSiteIntakePostgresHTTP(t *testing.T) {
 		len(detail.Addresses) != 1 || detail.Addresses[0].Url != "https://www.xn--fsqu00a.example" {
 		t.Fatalf("unexpected new draft: %+v", detail)
 	}
+	var sitePlans collection.EntityCollection
+	request("GET", adminURL, mgmt+"/"+created.Target+"/collection", "owner", nil, 200, &sitePlans)
+	if len(sitePlans.Targets) != 2 || len(sitePlans.Plans) != 3 {
+		t.Fatalf("Draft site needs two targets and three pending plans: %+v", sitePlans)
+	}
+	for _, plan := range sitePlans.Plans {
+		if plan.ScheduleID != nil || !plan.Actionable || !plan.DesiredEnabled || plan.State != "pending_sync" {
+			t.Fatalf("unexpected pending site plan: %+v", plan)
+		}
+	}
+
+	const games = "/internal/v1/ops/games"
+	const prefill = games + "/steam-prefill"
+	const app = "3999999990"
+	gameInput := map[string]any{"steam_app_id": app, "localizations": []catalog.Localization{
+		{Locale: "en", Name: "Editorial Test: Wolf", Summary: "Edited"},
+		{Locale: "zh", Name: "隔离测试", Summary: "独立人工文案"},
+	}}
+	request("POST", adminURL, prefill, "developer", map[string]string{"app_id": app}, 403, nil)
+	request("POST", adminURL, prefill, "operator", map[string]string{"app_id": app}, 200, nil)
+	request("POST", adminURL, prefill, "owner", map[string]string{"app_id": app}, 200, nil)
+	var gameCount int
+	siteMust(t, pool.QueryRow(ctx, "SELECT count(*) FROM games").Scan(&gameCount))
+	if gameCount != 0 {
+		t.Fatal("prefill created a game")
+	}
+	var progress collection.SteamPrefill
+	request("GET", adminURL, prefill+"?app_id="+app, "operator", nil, 200, &progress)
+	if len(progress.Scopes) != 2 || progress.Scopes[0].Locale != "en" || progress.Scopes[1].Locale != "zh-cn" {
+		t.Fatalf("two independent store scopes required: %+v", progress)
+	}
+	var newGame catalog.ManagementResult
+	request("POST", adminURL, games, "operator", gameInput, 200, &newGame)
+	request("POST", adminURL, games, "owner", gameInput, 409, nil)
+	request("GET", adminURL, prefill+"?app_id="+app, "owner", nil, 200, &progress)
+	if progress.ExistingGame != newGame.Target {
+		t.Fatal("duplicate source did not return the managed Game")
+	}
+	var gameStatus, slug string
+	siteMust(t, pool.QueryRow(ctx, "SELECT status,slug FROM games WHERE public_id=$1", newGame.Target).Scan(&gameStatus, &slug))
+	if gameStatus != "draft" || slug != "editorial-test-wolf" {
+		t.Fatalf("unexpected creation result: %s %s", gameStatus, slug)
+	}
+	gamePath := games + "/" + newGame.Target
+	var gamePlans collection.EntityCollection
+	request("GET", adminURL, gamePath+"/collection", "developer", nil, 200, &gamePlans)
+	if len(gamePlans.Targets) != 1 || len(gamePlans.Plans) != 2 {
+		t.Fatalf("expected one binding with two plans: %+v", gamePlans)
+	}
+	var locales []string
+	for _, plan := range gamePlans.Plans {
+		locales = append(locales, plan.Locale+"/"+plan.Region)
+		if plan.Capability != "steam.details" || plan.State != "pending_sync" || plan.ScheduleID != nil || plan.GameSourceID == nil {
+			t.Fatalf("invalid Steam plan: %+v", plan)
+		}
+	}
+	slices.Sort(locales)
+	if !slices.Equal(locales, []string{"en/us", "zh-cn/cn"}) {
+		t.Fatal(locales)
+	}
+
+	planID := gamePlans.Plans[0].ID.String()
+	control := gamePath + "/collection/" + planID
+	pause := map[string]bool{"enabled": false, "expected": true}
+	request("POST", adminURL, control+"/state", "", pause, 401, nil)
+	request("POST", adminURL, control+"/state", "developer", pause, 403, nil)
+	request("POST", adminURL, mgmt+"/"+created.Target+"/collection/"+planID+"/state", "owner", pause, 404, nil)
+	request("POST", adminURL, control+"/run", "owner", struct{}{}, 409, nil)
+	request("POST", adminURL, control+"/state", "operator", pause, 200, nil)
+	request("POST", adminURL, control+"/state", "operator", pause, 409, nil)
+	request("POST", adminURL, gamePath+"/collection/register", "owner", map[string]string{"app_id": app}, 200, nil)
+	request("GET", adminURL, gamePath+"/collection", "owner", nil, 200, &gamePlans)
+	if len(gamePlans.Plans) != 2 || gamePlans.Plans[0].DesiredEnabled {
+		t.Fatal("registration duplicated plans or removed an explicit pause")
+	}
+	request("POST", adminURL, control+"/state", "owner", map[string]bool{"enabled": true, "expected": false}, 200, nil)
+	request("POST", adminURL, gamePath+"/collection/plans", "operator",
+		map[string]string{"source_id": gamePlans.Targets[0].ID.String(), "capability": "steam.players"}, 200, nil)
+	var managed collection.ManagedPlans
+	request("GET", adminURL, "/internal/v1/ops/operations/collection/plans?kind=games&entity="+newGame.Target, "operator", nil, 200, &managed)
+	if len(managed.Items) != 3 {
+		t.Fatal("explicit Players plan did not appear alongside two storefront scopes")
+	}
+	var summary collection.ControlSummary
+	request("GET", adminURL, "/internal/v1/ops/operations/collection/summary", "owner", nil, 200, &summary)
+	if summary.Server != "unavailable" || summary.ReadyWorkers != nil || summary.Unsynced != 6 {
+		t.Fatalf("unavailable Harvest should preserve pending intent: %+v", summary)
+	}
+
 	intake["addresses"] = []catalog.Address{{Kind: "primary", URL: "http://www.xn--fsqu00a.example/"}}
 	var duplicate struct {
 		Error struct {
@@ -132,6 +237,14 @@ func TestSiteIntakePostgresHTTP(t *testing.T) {
 		len(detail.Localizations) != 2 || detail.Localizations[0].Summary != "English summary" || detail.Localizations[1].Summary != "中文简介" ||
 		!slices.Equal(detail.Tags, edit.Tags) || !slices.Equal(detail.Secondary, edit.Secondary) {
 		t.Fatalf("edit lost stable identity or bilingual data: %+v", detail)
+	}
+
+	var closed, open int
+	siteMust(t, pool.QueryRow(ctx, `SELECT count(*) FILTER (WHERE b.effective_until IS NOT NULL),
+count(*) FILTER (WHERE b.effective_until IS NULL) FROM collection_bindings b JOIN sites s ON s.id=b.site_id WHERE s.public_id=$1`,
+		created.Target).Scan(&closed, &open))
+	if closed != 2 || open != 2 {
+		t.Fatalf("address change should close two old bindings and keep two new: closed=%d open=%d", closed, open)
 	}
 
 	operation := func(id, action string, rev int64, sfw bool, status int) catalog.ManagementResult {
@@ -213,6 +326,23 @@ WHERE d.entity_kind='collection' AND d.reason LIKE 'System: Collection%' AND m.t
 	if legacy.Slug != "old-link" {
 		t.Fatal("the migration changed an existing site's public link")
 	}
+	execution := tempCollectionExecution(t, ctx, pool, gamePlans.Plans[0])
+	harvest.Store(execution.api)
+	if execution.runCalls.Load() != 0 {
+		t.Fatal("setup submitted an unexpected Job")
+	}
+	request("POST", adminURL, control+"/run", "operator", struct{}{}, 200, nil)
+	request("POST", adminURL, mgmt+"/"+created.Target+"/collection/"+planID+"/run", "operator", struct{}{}, 404, nil)
+	jobPath := "/internal/v1/ops/operations/collection/jobs/" + execution.jobID.String()
+	request("GET", adminURL, jobPath+"?entity="+newGame.Target, "developer", nil, 200, nil)
+	request("GET", adminURL, jobPath+"?entity="+created.Target, "owner", nil, 404, nil)
+	request("POST", adminURL, jobPath+"/cancel", "developer", map[string]string{"entity": newGame.Target}, 403, nil)
+	request("POST", adminURL, jobPath+"/cancel", "owner", map[string]string{"entity": created.Target}, 404, nil)
+	request("POST", adminURL, jobPath+"/cancel", "owner", map[string]string{"entity": newGame.Target}, 200, nil)
+	request("POST", adminURL, jobPath+"/retry", "operator", map[string]string{"entity": newGame.Target}, 200, nil)
+	if execution.runCalls.Load() != 1 || execution.cancelCalls.Load() != 1 || execution.retryCalls.Load() != 1 {
+		t.Fatal("an operation was duplicated or sent for an unrelated target")
+	}
 }
 
 func nilIfError(status int, output any) any {
@@ -222,7 +352,7 @@ func nilIfError(status int, output any) any {
 	return output
 }
 
-func prepareSiteIntakeSchema(ctx context.Context, conn *pgx.Conn, migration, policyMigration string) error {
+func prepareSiteIntakeSchema(ctx context.Context, conn *pgx.Conn, migration, policyMigration, collectionMigration string) error {
 	var name string
 	if err := conn.QueryRow(ctx, "SELECT current_database()").Scan(&name); err != nil || name != "gofurry_cn_dev" {
 		return fmt.Errorf("unexpected development database")
@@ -231,7 +361,8 @@ func prepareSiteIntakeSchema(ctx context.Context, conn *pgx.Conn, migration, pol
 		for _, table := range []string{"sites", "site_localizations", "site_addresses", "site_navigation_reviews",
 			"catalog_publication_decisions", "management_operations", "site_yearbooks", "site_yearbook_revisions",
 			"site_navigation_heat", "site_navigation_heat_state", "collection_bindings", "site_monthly_coverage",
-			"games", "game_collections", "game_collection_members"} {
+			"games", "game_sources", "game_localizations", "game_collections", "game_collection_members",
+			"game_source_metadata", "site_daily_coverage", "collection_consumer", "collection_current", "collection_sources", "collection_plans", "collection_plan_bindings"} {
 			if _, err := tx.Exec(ctx, "CREATE TEMP TABLE "+table+" (LIKE public."+table+" INCLUDING ALL)"); err != nil {
 				return err
 			}
@@ -291,7 +422,8 @@ INSERT INTO site_localizations(site_id,locale,name,summary) SELECT id,'zh','存�
 		if guarded == nil {
 			return fmt.Errorf("retired tag remains writable")
 		}
-		return nil
+		_, err = tx.Exec(ctx, strings.Replace(collectionMigration, "CREATE TABLE ", "CREATE TEMP TABLE ", 1))
+		return err
 	})
 }
 
