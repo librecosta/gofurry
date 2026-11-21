@@ -67,6 +67,7 @@ type CollectionJob struct {
 	AttemptCount int32      `json:"attempt_count"`
 	State        string     `json:"state"`
 	Code         string     `json:"code,omitempty"`
+	Cause        string     `json:"cause,omitempty"`
 	CreatedAt    time.Time  `json:"created_at"`
 	UpdatedAt    time.Time  `json:"updated_at"`
 }
@@ -275,7 +276,7 @@ func validScheduleJobs(page scheduleJobsPage, req request, row dbgen.ListEntityC
 var boundedJobCode = regexp.MustCompile(`^[a-z0-9][a-z0-9_.-]{0,63}$`)
 
 func projectJob(j scheduledJob) CollectionJob {
-	return CollectionJob{j.ID, j.AcceptedAttempt, j.AttemptCount, j.State, safeJobCode(j.Code), j.CreatedAt, j.Updated}
+	return CollectionJob{j.ID, j.AcceptedAttempt, j.AttemptCount, j.State, safeJobCode(j.Code), j.Cause, j.CreatedAt, j.Updated}
 }
 
 func safeJobCode(code string) string {

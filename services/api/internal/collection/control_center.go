@@ -319,7 +319,7 @@ func matchesJobOwner(j intakeJob, owner dbgen.ManagementJobOwnersRow) bool {
 
 func (s *Service) projectManagedJob(j intakeJob, o dbgen.ManagementJobOwnersRow) ManagedJob {
 	return ManagedJob{
-		CollectionJob: CollectionJob{j.ID, j.AcceptedAttempt, j.AttemptCount, j.State, safeJobCode(j.Code), j.Created, j.Updated},
+		CollectionJob: CollectionJob{j.ID, j.AcceptedAttempt, j.AttemptCount, j.State, safeJobCode(j.Code), j.Cause, j.Created, j.Updated},
 		Entity:        EntityRef{o.EntityKind, o.PublicID, o.Name}, PlanID: o.ID, Capability: o.Capability, Provider: o.Provider, External: o.ExternalKey,
 		Locale: j.Request.Scope.Locale, Region: j.Request.Scope.Region,
 		CanCancel: o.Actionable && s.tokenForOperator() != "" && slices.Contains([]string{"queued", "running", "retry_wait"}, j.State),
@@ -328,11 +328,13 @@ func (s *Service) projectManagedJob(j intakeJob, o dbgen.ManagementJobOwnersRow)
 }
 
 type ManagedObservation struct {
-	ID         *uuid.UUID     `json:"id,omitempty"`
-	State      string         `json:"state"`
-	ObservedAt *time.Time     `json:"observed_at,omitempty"`
-	Dimension  string         `json:"dimension,omitempty"`
-	Data       jsontext.Value `json:"data"`
+	ID          *uuid.UUID     `json:"id,omitempty"`
+	State       string         `json:"state"`
+	ObservedAt  *time.Time     `json:"observed_at,omitempty"`
+	Dimension   string         `json:"dimension,omitempty"`
+	Evidence    string         `json:"evidence,omitempty"`
+	Description string         `json:"description,omitempty"`
+	Data        jsontext.Value `json:"data"`
 }
 
 type ManagedJobDetail struct {
@@ -377,13 +379,22 @@ func (s *Service) ManagedJob(ctx context.Context, q *dbgen.Queries, jobID uuid.U
 	for i := range out.Attempts {
 		out.Attempts[i].Code = safeJobCode(out.Attempts[i].Code)
 	}
-	for _, item := range detail.Results {
+	items := detail.Results
+	if owner.Provider == "web" && slices.Contains([]string{"succeeded", "partial", "failed"}, detail.Job.State) {
+		items = s.webJobObservations(ctx, detail, owner)
+	}
+	for _, item := range items {
 		req := detail.Job.Request
 		if item.TargetID != req.TargetID || item.Capability != req.Capability || item.Scope.Namespace != s.namespace ||
-			item.Scope.scope != req.Scope || !scopeMatches(item.Scope, item.ScopeKey) || !validObservation(result{observation: item}) {
+			item.Scope.scope != req.Scope || !scopeMatches(item.Scope, item.ScopeKey) {
 			continue
 		}
-		itemResult := ManagedObservation{ID: &item.ID, State: item.State, ObservedAt: &item.ObservedAt, Data: jsontext.Value("{}")}
+		confirmed := item.State == "present" || item.State == "confirmed_empty"
+		if (confirmed || owner.Provider != "web") && !validObservation(result{observation: item}) {
+			continue
+		}
+		itemResult := ManagedObservation{ID: &item.ID, State: item.State, ObservedAt: &item.ObservedAt,
+			Evidence: safeJobCode(item.Evidence), Data: jsontext.Value("{}")}
 		if owner.Provider == "steam" {
 			itemResult.Dimension = item.Scope.Dimensions["section"]
 		} else {
@@ -392,7 +403,7 @@ func (s *Service) ManagedJob(ctx context.Context, q *dbgen.Queries, jobID uuid.U
 				itemResult.Dimension = item.Scope.Dimensions["section"]
 			}
 		}
-		if item.State == "present" {
+		if item.State == "present" || owner.Provider == "web" && item.State == "confirmed_empty" {
 			var value compact
 			if owner.Provider == "steam" {
 				value, err = normalizeSteam(item, owner.ExternalKey)
@@ -401,11 +412,70 @@ func (s *Service) ManagedJob(ctx context.Context, q *dbgen.Queries, jobID uuid.U
 			}
 			if err == nil {
 				itemResult.Data = value.Data
+				if itemResult.Dimension == "html" {
+					var summary struct {
+						Description string `json:"description"`
+					}
+					if json.Unmarshal(item.Data, &summary) == nil {
+						itemResult.Description = clean(summary.Description, 600)
+					}
+				}
 			}
 		}
 		out.Results = append(out.Results, itemResult)
 	}
 	return out, nil
+}
+
+// Web history retains new observations and diagnostics. An unchanged fact
+// can be confirmed without writing another observation for this attempt.
+// readManagedJob already authorized the entity and its plan.
+func (s *Service) webJobObservations(ctx context.Context, detail intakeJobDetail, owner dbgen.ManagementJobOwnersRow) []observation {
+	j := detail.Job
+	var attempt intakeAttempt
+	for _, candidate := range detail.Attempts {
+		if candidate.Ended.After(attempt.Ended) {
+			attempt = candidate
+		}
+	}
+	if !v7(attempt.ID) || attempt.Claimed.IsZero() || attempt.Ended.Before(attempt.Claimed) {
+		return nil
+	}
+	filter := url.Values{"stream": {j.Namespace}, "target": {j.Request.TargetID.String()}, "capability": {j.Request.Capability},
+		"since": {attempt.Ended.UTC().Format(time.RFC3339Nano)}, "until": {attempt.Ended.UTC().Format(time.RFC3339Nano)}, "limit": {"16"}}
+	var page struct {
+		Items []observation `json:"items"`
+	}
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	if s.remote.call(ctx, s.remote.reader, http.MethodGet, "observations/history", filter, nil, &page, 200) != nil || len(page.Items) > 16 {
+		return nil
+	}
+	req := j.Request
+	spec := capabilities[req.Capability]
+	var out []observation
+	for _, item := range page.Items {
+		if item.JobID != j.ID || item.AttemptID != attempt.ID || item.TargetID != req.TargetID || item.Schema != 1 ||
+			item.Capability != req.Capability || item.Scope.Namespace != j.Namespace || item.Scope.scope != req.Scope ||
+			item.Source != owner.Provider || item.Sample || !v7(item.ID) || !item.ReceivedAt.Equal(attempt.Ended) ||
+			!scopeMatches(item.Scope, item.ScopeKey) || !slices.Contains([]string{"present", "confirmed_empty", "unavailable", "invalid", "not_covered"}, item.State) {
+			continue
+		}
+		dimension := item.Scope.Dimensions["section"]
+		if !slices.Contains(spec.sections, dimension) {
+			continue
+		}
+		if dimension == "dns" {
+			dimension = item.Scope.Dimensions["rrtype"]
+			if len(item.Scope.Dimensions) != 3 || !slices.Contains(dnsTypes, dimension) || item.Scope.Dimensions["resolver"] != "google-public-dns" {
+				continue
+			}
+		} else if len(item.Scope.Dimensions) != 1 {
+			continue
+		}
+		out = append(out, item)
+	}
+	return out
 }
 
 func (s *Service) ChangeManagedJob(ctx context.Context, q *dbgen.Queries, jobID uuid.UUID, entity, action string) error {

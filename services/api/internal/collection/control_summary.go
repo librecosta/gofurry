@@ -83,7 +83,7 @@ func (s *Service) PlanResults(ctx context.Context, q *dbgen.Queries, kind, id st
 		return out, err
 	}
 	for _, item := range items {
-		out = append(out, ManagedObservation{item.ObservationID, item.State, knownTime(item.ObservedAt), item.Dimension, item.Data})
+		out = append(out, ManagedObservation{ID: item.ObservationID, State: item.State, ObservedAt: knownTime(item.ObservedAt), Dimension: item.Dimension, Data: item.Data})
 	}
 	return out, nil
 }
