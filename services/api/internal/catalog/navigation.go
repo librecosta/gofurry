@@ -32,7 +32,7 @@ var navigationTags = [...]NavigationTerm{
 	{"forum", "论坛", "Forum"}, {"portfolio", "作品集", "Portfolio"}, {"fursuit", "兽装", "Fursuit"},
 	{"tutorial", "教程", "Tutorial"}, {"wiki", "维基", "Wiki"}, {"directory", "目录", "Directory"},
 	{"podcast", "播客", "Podcast"}, {"webcomic", "网络漫画", "Webcomic"}, {"roleplay", "角色扮演", "Roleplay"},
-	{"modding", "游戏模组", "Modding"}, {"convention", "展会", "Convention"}, {"translation", "翻译", "Translation"},
+	{"modding", "游戏模组", "Modding"}, {"convention", "展会", "Convention"},
 }
 
 func NavigationCategories() []NavigationTerm { return slices.Clone(categories[:]) }

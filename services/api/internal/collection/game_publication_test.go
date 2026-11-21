@@ -47,6 +47,6 @@ func changeFixtureGame(t *testing.T, editor *catalog.Service, id string, revisio
 	return editor.Manage(t.Context(), dbgen.RecordManagementOperationParams{
 		RequestID: uuid.NewV7(), ActorID: uuid.NewV7(), ActorName: "Game fixture operator", ActorRole: "operator", Action: "game." + action,
 	}, func(ctx context.Context, tx *catalog.Service, _ *dbgen.Queries) (catalog.ManagementResult, error) {
-		return tx.ChangeManagementGameVisibility(ctx, id, revision, action, "Fixture lifecycle")
+		return tx.ChangeManagementGameVisibility(ctx, id, revision, action)
 	})
 }

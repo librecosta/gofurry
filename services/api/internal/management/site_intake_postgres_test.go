@@ -44,8 +44,10 @@ func TestSiteIntakePostgresHTTP(t *testing.T) {
 	opts.MinConns, opts.MaxConns = 0, 1
 	migration, err := os.ReadFile("../../migrations/202611210001_site_intake.sql")
 	siteMust(t, err)
+	policyMigration, err := os.ReadFile("../../migrations/202611210002_site_asset_and_tag_policy.sql")
+	siteMust(t, err)
 	opts.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
-		return prepareSiteIntakeSchema(ctx, conn, string(migration))
+		return prepareSiteIntakeSchema(ctx, conn, string(migration), string(policyMigration))
 	}
 	ctx, cancel := context.WithTimeout(t.Context(), 40*time.Second)
 	defer cancel()
@@ -135,7 +137,7 @@ func TestSiteIntakePostgresHTTP(t *testing.T) {
 	operation := func(id, action string, rev int64, sfw bool, status int) catalog.ManagementResult {
 		t.Helper()
 		var result catalog.ManagementResult
-		request("POST", adminURL, mgmt+"/"+id+"/"+action, "owner", publication{Revision: rev, ConfirmSFW: sfw, Reason: "Review the site"},
+		request("POST", adminURL, mgmt+"/"+id+"/"+action, "owner", publication{Revision: rev, ConfirmSFW: sfw},
 			status, nilIfError(status, &result))
 		return result
 	}
@@ -185,6 +187,27 @@ func TestSiteIntakePostgresHTTP(t *testing.T) {
 	if listings.Total != 2 {
 		t.Fatal("restored site did not return to navigation")
 	}
+	var decisions int
+	siteMust(t, pool.QueryRow(ctx, `SELECT count(*) FROM catalog_publication_decisions d JOIN management_operations m ON m.request_id=d.management_request_id
+WHERE d.reason LIKE 'System: Site%' AND m.target=$1 AND d.actor=m.actor_id::text AND d.revision=m.revision`, created.Target).Scan(&decisions))
+	if decisions != 3 {
+		t.Fatal("status transitions did not record a generated audit linked to the authenticated request")
+	}
+	const collections = "/internal/v1/ops/games/collections"
+	var set catalog.ManagementResult
+	request("POST", adminURL, collections, "owner", collectionEdit{
+		Slug: "test-collection", Localizations: []catalog.Localization{{Locale: "en", Name: "Test collection"}},
+	}, 200, &set)
+	collectionPath := collections + "/" + set.Target
+	request("POST", adminURL, collectionPath+"/publish", "developer", publication{Revision: set.Revision}, 403, nil)
+	request("POST", adminURL, collectionPath+"/publish", "operator", publication{Revision: set.Revision}, 200, &set)
+	request("POST", adminURL, collectionPath+"/archive", "operator", publication{Revision: set.Revision}, 200, &set)
+	request("POST", adminURL, collectionPath+"/restore", "owner", publication{Revision: set.Revision}, 200, &set)
+	siteMust(t, pool.QueryRow(ctx, `SELECT count(*) FROM catalog_publication_decisions d JOIN management_operations m ON m.request_id=d.management_request_id
+WHERE d.entity_kind='collection' AND d.reason LIKE 'System: Collection%' AND m.target=$1 AND d.actor=m.actor_id::text AND d.revision=m.revision`, set.Target).Scan(&decisions))
+	if decisions != 3 {
+		t.Fatal("collection transitions did not record a generated audit")
+	}
 	legacy, err := dbgen.New(pool).PublishedSite(ctx, "0000000000000001")
 	siteMust(t, err)
 	if legacy.Slug != "old-link" {
@@ -199,7 +222,7 @@ func nilIfError(status int, output any) any {
 	return output
 }
 
-func prepareSiteIntakeSchema(ctx context.Context, conn *pgx.Conn, migration string) error {
+func prepareSiteIntakeSchema(ctx context.Context, conn *pgx.Conn, migration, policyMigration string) error {
 	var name string
 	if err := conn.QueryRow(ctx, "SELECT current_database()").Scan(&name); err != nil || name != "gofurry_cn_dev" {
 		return fmt.Errorf("unexpected development database")
@@ -207,7 +230,8 @@ func prepareSiteIntakeSchema(ctx context.Context, conn *pgx.Conn, migration stri
 	return pgx.BeginFunc(ctx, conn, func(tx pgx.Tx) error {
 		for _, table := range []string{"sites", "site_localizations", "site_addresses", "site_navigation_reviews",
 			"catalog_publication_decisions", "management_operations", "site_yearbooks", "site_yearbook_revisions",
-			"site_navigation_heat", "site_navigation_heat_state", "collection_bindings", "site_monthly_coverage"} {
+			"site_navigation_heat", "site_navigation_heat_state", "collection_bindings", "site_monthly_coverage",
+			"games", "game_collections", "game_collection_members"} {
 			if _, err := tx.Exec(ctx, "CREATE TEMP TABLE "+table+" (LIKE public."+table+" INCLUDING ALL)"); err != nil {
 				return err
 			}
@@ -239,8 +263,35 @@ INSERT INTO site_localizations(site_id,locale,name,summary) SELECT id,'zh','å­˜é
 		if _, err = tx.Exec(ctx, "UPDATE sites SET supported_languages='{}'"); err != nil {
 			return err
 		}
-		_, err = tx.Exec(ctx, migration)
-		return err
+		if _, err = tx.Exec(ctx, migration); err != nil {
+			return err
+		}
+		if _, err = tx.Exec(ctx, `UPDATE sites SET navigation_tags=ARRAY['wiki','directory'], featured_cover_asset_key='sites/covers/'||repeat('a',64)||'.avif'`); err != nil {
+			return err
+		}
+		if _, err = tx.Exec(ctx, strings.ReplaceAll(policyMigration, "navigation_distinct_codes(", "public.navigation_distinct_codes(")); err != nil {
+			return err
+		}
+		var preserved bool
+		err = tx.QueryRow(ctx, `SELECT navigation_tags=ARRAY['wiki','directory'] AND featured_cover_asset_key LIKE '%.avif' FROM sites`).Scan(&preserved)
+		if err != nil || !preserved {
+			return fmt.Errorf("policy migration did not preserve existing tags and cover: %v", err)
+		}
+		if _, err = tx.Exec(ctx, `UPDATE sites SET featured_cover_asset_key='sites/covers/'||repeat('a',64)||'.webp'`); err != nil {
+			return err
+		}
+		attempt, err = tx.Begin(ctx)
+		if err != nil {
+			return err
+		}
+		_, guarded = attempt.Exec(ctx, "UPDATE sites SET navigation_tags=ARRAY['translation']")
+		if err = attempt.Rollback(ctx); err != nil {
+			return err
+		}
+		if guarded == nil {
+			return fmt.Errorf("retired tag remains writable")
+		}
+		return nil
 	})
 }
 

@@ -145,6 +145,7 @@ type scheduleView struct {
 	ID        uuid.UUID `json:"id"`
 	Namespace string    `json:"namespace"`
 	Revision  int64     `json:"revision"`
+	NextDueAt time.Time `json:"next_due_at"`
 }
 type schedulePage struct {
 	Items []scheduleView `json:"items"`

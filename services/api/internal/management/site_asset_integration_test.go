@@ -130,10 +130,10 @@ func TestManagedSiteAsset(t *testing.T) {
 	}
 	current := site.Revision
 	for _, entry := range []struct{ kind, mime, file string }{
-		{"logo", "image/webp", "site-logo.webp"},
-		{"cover", "image/avif", "site-cover.avif"},
+		{"logo", "image/webp", "../storage/testdata/site-logo.webp"},
+		{"cover", "image/webp", "../wallpaper/testdata/preview.webp"},
 	} {
-		raw, e := os.ReadFile("../storage/testdata/" + entry.file)
+		raw, e := os.ReadFile(entry.file)
 		if e != nil {
 			t.Fatal(e)
 		}

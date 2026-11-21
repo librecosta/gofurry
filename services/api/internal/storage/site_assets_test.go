@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/librecosta/gofurry/services/api/internal/platform"
+	"golang.org/x/image/webp"
 )
 
 func TestSiteAssetImport(t *testing.T) {
@@ -25,12 +26,25 @@ func TestSiteAssetImport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	webCover, err := os.ReadFile("../wallpaper/testdata/preview.webp")
+	if err != nil {
+		t.Fatal(err)
+	}
+	coverDimensions, err := webp.DecodeConfig(bytes.NewReader(webCover))
+	if err != nil {
+		t.Fatal(err)
+	}
 	var mu sync.Mutex
 	type stored struct {
 		data       []byte
 		mime, hash string
 	}
 	objects := map[string]stored{}
+	legacy, err := inspectSiteRaster(SiteCover, cover, "avif")
+	if err != nil {
+		t.Fatal(err)
+	}
+	objects[legacy.Key] = stored{cover, legacy.ContentType, legacy.SHA256}
 	uploads := 0
 	mode := ""
 	backend := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -85,12 +99,19 @@ func TestSiteAssetImport(t *testing.T) {
 	store := New(platform.StorageConfig{Endpoint: backend.URL, Region: "auto", Bucket: "objects", AccessKeyID: "fixture", SecretAccessKey: "fixture", PublicBaseURL: backend.URL + "/cdn"})
 	store.transport.TLSClientConfig = backend.Client().Transport.(*http.Transport).TLSClientConfig.Clone()
 	defer store.Close()
+	if historical, err := store.VerifySiteAsset(ctx, SiteCover, legacy.Key); err != nil || historical.ContentType != "image/avif" ||
+		historical.URL != backend.URL+"/cdn/"+legacy.Key || historical.Width != 960 || historical.Height != 540 {
+		t.Fatalf("historical AVIF: %+v %v", historical, err)
+	}
+	if _, err := store.ImportSiteAsset(ctx, SiteCover, bytes.NewReader(cover), false); !errors.Is(err, ErrSiteAsset) {
+		t.Fatalf("new AVIF cover accepted: %v", err)
+	}
 	for _, fixture := range []struct {
 		kind          SiteAssetKind
 		raw           []byte
 		width, height int
 	}{
-		{SiteLogo, logo, 160, 160}, {SiteCover, cover, 960, 540},
+		{SiteLogo, logo, 160, 160}, {SiteCover, webCover, coverDimensions.Width, coverDimensions.Height},
 	} {
 		var preflight *Store
 		expected, err := preflight.ImportSiteAsset(ctx, fixture.kind, bytes.NewReader(fixture.raw), true)

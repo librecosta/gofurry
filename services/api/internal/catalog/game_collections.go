@@ -229,7 +229,18 @@ func (s *Service) SetGameCollectionStatus(ctx context.Context, id string, rev in
 				return row, ErrInvalid
 			}
 		}
-		return q.UpdateGameCollectionStatus(ctx, dbgen.UpdateGameCollectionStatusParams{ID: row.ID, NewStatus: status})
+		next, err := q.UpdateGameCollectionStatus(ctx, dbgen.UpdateGameCollectionStatusParams{ID: row.ID, NewStatus: status})
+		if actor := s.management; err == nil && actor != nil {
+			action, valid := strings.CutPrefix(actor.Action, "collection.")
+			if !valid || actor.ActorID == uuid.Nil() || actor.RequestID == uuid.Nil() ||
+				(actor.ActorRole != "owner" && actor.ActorRole != "operator") ||
+				(status == Archived && action != "archive") || (status == Published && action != "publish" && action != "restore") {
+				return row, ErrInvalid
+			}
+			d := PublicationDecision{Actor: actor.ActorID.String(), Reason: publicationReason("Collection", action, row.Status, next.Status), ManagementRequestID: &actor.RequestID}
+			err = d.Save(ctx, q, "collection", row.ID, next.Revision, action)
+		}
+		return next, err
 	})
 }
 

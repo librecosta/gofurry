@@ -101,13 +101,12 @@ func (o *Operations) sites(g fiber.Router) {
 	g.Patch("/sites/:id", editOnly, writeOperation(o, "site.edit", save))
 	for _, action := range []string{"publish", "archive", "restore", "unpublish"} {
 		g.Post("/sites/:id/"+action, editOnly, writeOperation(o, "site."+action, func(ctx context.Context, s *catalog.Service, _ *dbgen.Queries, id string, in publication, d catalog.PublicationDecision) (catalog.ManagementResult, error) {
-			d.Reason = in.Reason
 			row, err := s.ChangeSitePublication(ctx, id, in.Revision, action, in.ConfirmSFW, d)
 			return catalog.ManagementResult{Target: row.PublicID, Revision: row.Revision}, err
 		}))
 	}
 	g.Post("/sites/:id/policy", ownerOnly, writeOperation(o, "site.policy", func(ctx context.Context, s *catalog.Service, _ *dbgen.Queries, id string, in policy, d catalog.PublicationDecision) (catalog.ManagementResult, error) {
-		row, err := s.ReviewSiteNavigation(ctx, o.Region, id, in.Revision, catalog.NavigationEdit{Rating: in.Rating, Actor: d.Actor, Reason: in.Reason, KeepTaxonomy: true})
+		row, err := s.ReviewSiteNavigation(ctx, o.Region, id, in.Revision, catalog.NavigationEdit{Rating: in.Rating, Actor: d.Actor, Reason: "System: Site content rating updated by operator", KeepTaxonomy: true})
 		return catalog.ManagementResult{Target: row.PublicID, Revision: row.Revision}, err
 	}))
 	g.Post("/sites/:id/assets/:kind", editOnly, o.asset)
@@ -143,13 +142,13 @@ func (o *Operations) asset(c fiber.Ctx) error {
 	if !catalog.ValidPublicID(id) || err != nil || rev < 1 {
 		return fiber.ErrBadRequest
 	}
-	var mime string
+	const mime = "image/webp"
 	var limit int
 	switch kind {
 	case storage.SiteLogo:
-		mime, limit = "image/webp", 1<<20
+		limit = 1 << 20
 	case storage.SiteCover:
-		mime, limit = "image/avif", 4<<20
+		limit = 4 << 20
 	default:
 		return fiber.ErrBadRequest
 	}
@@ -272,11 +271,11 @@ func (o *Operations) games(g fiber.Router) {
 	}))
 	for _, action := range []string{"archive", "restore", "unpublish"} {
 		g.Post("/games/:id/"+action, editOnly, writeOperation(o, "game."+action, func(ctx context.Context, s *catalog.Service, _ *dbgen.Queries, id string, in gameVisibility, _ catalog.PublicationDecision) (catalog.ManagementResult, error) {
-			return s.ChangeManagementGameVisibility(ctx, id, in.Revision, action, in.Reason)
+			return s.ChangeManagementGameVisibility(ctx, id, in.Revision, action)
 		}))
 	}
 	g.Post("/games/:id/rating", editOnly, writeOperation(o, "game.rating", func(ctx context.Context, s *catalog.Service, _ *dbgen.Queries, id string, in policy, _ catalog.PublicationDecision) (catalog.ManagementResult, error) {
-		return s.RateManagementGame(ctx, id, in.Revision, in.Rating, in.Reason)
+		return s.RateManagementGame(ctx, id, in.Revision, in.Rating)
 	}))
 	g.Post("/games/:id/sources", ownerOnly, writeOperation(o, "game.sources", func(ctx context.Context, s *catalog.Service, q *dbgen.Queries, id string, in sources, d catalog.PublicationDecision) (catalog.ManagementResult, error) {
 		d.Reason = in.Reason
@@ -335,11 +334,7 @@ func (o *Operations) collections(g fiber.Router) {
 	g.Post(base, editOnly, writeOperation(o, "collection.create", save))
 	g.Patch(base+"/:id", editOnly, writeOperation(o, "collection.edit", save))
 	for _, action := range []string{"publish", "archive", "restore"} {
-		g.Post(base+"/:id/"+action, editOnly, writeOperation(o, "collection."+action, func(ctx context.Context, s *catalog.Service, _ *dbgen.Queries, id string, in publication, d catalog.PublicationDecision) (catalog.ManagementResult, error) {
-			d.Reason = in.Reason
-			if !d.Valid() {
-				return catalog.ManagementResult{}, catalog.ErrInvalid
-			}
+		g.Post(base+"/:id/"+action, editOnly, writeOperation(o, "collection."+action, func(ctx context.Context, s *catalog.Service, _ *dbgen.Queries, id string, in publication, _ catalog.PublicationDecision) (catalog.ManagementResult, error) {
 			status := catalog.Published
 			if action == "archive" {
 				status = catalog.Archived

@@ -30,7 +30,7 @@ const (
 
 var ErrSiteAsset = errors.New("invalid Site asset")
 var siteLogoKey = regexp.MustCompile(`^sites/logos/[a-f0-9]{64}[.]webp$`)
-var siteCoverKey = regexp.MustCompile(`^sites/covers/[a-f0-9]{64}[.]avif$`)
+var siteCoverKey = regexp.MustCompile(`^sites/covers/[a-f0-9]{64}[.](webp|avif)$`)
 
 func (k SiteAssetKind) ValidKey(key string) bool {
 	switch k {
@@ -47,7 +47,7 @@ func (k SiteAssetKind) format() (prefix, extension string, limit int64) {
 	case SiteLogo:
 		return "sites/logos/", "webp", 1 << 20
 	case SiteCover:
-		return "sites/covers/", "avif", 4 << 20
+		return "sites/covers/", "webp", 4 << 20
 	}
 	return "", "", 0
 }
@@ -69,29 +69,36 @@ func inspectSiteAsset(kind SiteAssetKind, raw []byte) (asset SiteAsset, err erro
 			asset, err = SiteAsset{}, ErrSiteAsset
 		}
 	}()
-	prefix, ext, limit := kind.format()
+	_, ext, _ := kind.format()
+	return inspectSiteRaster(kind, raw, ext)
+}
+
+func inspectSiteRaster(kind SiteAssetKind, raw []byte, ext string) (asset SiteAsset, err error) {
+	prefix, _, limit := kind.format()
 	if limit == 0 || len(raw) < 12 || int64(len(raw)) > limit {
 		return asset, ErrSiteAsset
 	}
 	var config image.Config
 	var decoded image.Image
-	if kind == SiteLogo {
+	if ext == "webp" {
 		if !siteWebPEnvelope(raw) {
 			return asset, ErrSiteAsset
 		}
 		config, err = webp.DecodeConfig(bytes.NewReader(raw))
-		if err != nil || config.Width < 1 || config.Width > 1024 || config.Width != config.Height {
-			return asset, ErrSiteAsset
-		}
-		decoded, err = webp.Decode(bytes.NewReader(raw))
-	} else {
+	} else if ext == "avif" && kind == SiteCover {
 		if !siteAVIFEnvelope(raw) {
 			return asset, ErrSiteAsset
 		}
 		config, err = avif.DecodeConfig(bytes.NewReader(raw))
-		if err != nil || config.Width < 1 || config.Height < 1 || config.Width > 2560 || config.Height > 1440 || config.Width*9 != config.Height*16 {
-			return asset, ErrSiteAsset
-		}
+	} else {
+		return asset, ErrSiteAsset
+	}
+	if err != nil || !siteAssetDimensions(kind, config.Width, config.Height) {
+		return asset, ErrSiteAsset
+	}
+	if ext == "webp" {
+		decoded, err = webp.Decode(bytes.NewReader(raw))
+	} else {
 		decoded, err = avif.Decode(bytes.NewReader(raw), avif.Options{FrameSizeLimit: 2560 * 1440, MaxFrames: 1})
 	}
 	if err != nil || decoded == nil || decoded.Bounds().Dx() != config.Width || decoded.Bounds().Dy() != config.Height {
@@ -99,6 +106,16 @@ func inspectSiteAsset(kind SiteAssetKind, raw []byte) (asset SiteAsset, err erro
 	}
 	hash := fmt.Sprintf("%x", sha256.Sum256(raw))
 	return SiteAsset{Object: Object{Key: prefix + hash + "." + ext, Bytes: int64(len(raw)), SHA256: hash, ContentType: "image/" + ext}, Width: config.Width, Height: config.Height}, nil
+}
+
+func siteAssetDimensions(kind SiteAssetKind, width, height int) bool {
+	if width < 1 || height < 1 {
+		return false
+	}
+	if kind == SiteLogo {
+		return width <= 1024 && width == height
+	}
+	return width <= 2560 && height <= 1440 && width*9 == height*16
 }
 
 // SiteAssetURL is a pure projection of configured storage and a typed object key.
@@ -155,6 +172,9 @@ func (s *Store) VerifySiteAsset(ctx context.Context, kind SiteAssetKind, key str
 		return SiteAsset{}, ErrSiteAsset
 	}
 	_, extension, limit := kind.format()
+	if strings.HasSuffix(key, ".avif") {
+		extension = "avif"
+	}
 	wantType := "image/" + extension
 	head, err := s.Head(ctx, key)
 	if err != nil {
@@ -172,7 +192,7 @@ func (s *Store) VerifySiteAsset(ctx context.Context, kind SiteAssetKind, key str
 	if err != nil || int64(len(raw)) != head.Bytes || object.ContentType != wantType {
 		return SiteAsset{}, ErrSiteAsset
 	}
-	asset, err := inspectSiteAsset(kind, raw)
+	asset, err := inspectSiteRaster(kind, raw, extension)
 	if err != nil || asset.Key != key || head.SHA256 != asset.SHA256 || object.SHA256 != asset.SHA256 {
 		return SiteAsset{}, ErrSiteAsset
 	}

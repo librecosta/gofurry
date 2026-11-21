@@ -522,7 +522,7 @@ func changeCatalogGame(t *testing.T, ctx context.Context, s *Service, g dbgen.Ga
 		if action == "publish_changes" {
 			return tx.PublishManagementGameChanges(ctx, g.PublicID, review)
 		}
-		return tx.ChangeManagementGameVisibility(ctx, g.PublicID, g.Revision, action, "Catalog fixture lifecycle")
+		return tx.ChangeManagementGameVisibility(ctx, g.PublicID, g.Revision, action)
 	})
 	if err != nil {
 		return g, err

@@ -4,7 +4,7 @@ import type { Locale, Region } from '../preferences'
 import { categoryCodes } from './contracts'
 
 export type CategoryCode = typeof categoryCodes[number]
-export const tagCodes = ['forum', 'portfolio', 'fursuit', 'tutorial', 'wiki', 'directory', 'podcast', 'webcomic', 'roleplay', 'modding', 'convention', 'translation'] as const
+export const tagCodes = ['forum', 'portfolio', 'fursuit', 'tutorial', 'wiki', 'directory', 'podcast', 'webcomic', 'roleplay', 'modding', 'convention'] as const
 export const sorts = ['relevance', 'published_desc', 'heat_7d', 'name_asc'] as const
 export type Sort = typeof sorts[number]
 export type Term = { code: string; zh: string; en: string }

@@ -2,6 +2,7 @@ package catalog
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"uuid"
 
@@ -9,8 +10,9 @@ import (
 )
 
 type PublicationDecision struct {
-	Actor  string
-	Reason string
+	Actor               string
+	Reason              string
+	ManagementRequestID *uuid.UUID
 }
 
 func (d PublicationDecision) Valid() bool { return reviewText(d.Actor, d.Reason) }
@@ -21,12 +23,38 @@ func (d PublicationDecision) Save(ctx context.Context, q *dbgen.Queries, kind st
 	}
 	return q.AddCatalogPublicationDecision(ctx, dbgen.AddCatalogPublicationDecisionParams{
 		ID: uuid.NewV7(), EntityKind: kind, EntityID: id, Revision: revision, Action: action,
-		Actor: d.Actor, Reason: strings.TrimSpace(d.Reason),
+		Actor: d.Actor, Reason: strings.TrimSpace(d.Reason), ManagementRequestID: d.ManagementRequestID,
 	})
 }
 
+func publicationReason(kind, action, before, after string) string {
+	var intent string
+	switch action {
+	case "publish":
+		intent = "Publication confirmed by operator"
+		if kind == "Site" || kind == "Game" {
+			intent = "SFW publication confirmed by operator"
+		}
+	case "publish_changes":
+		intent = "Publication changes confirmed by operator"
+	case "unpublish":
+		intent = "Publication withdrawn by operator"
+	case "archive":
+		intent = "Archive confirmed by operator"
+	case "restore":
+		intent = "Restore confirmed by operator"
+	case "rating":
+		intent = "Content rating updated by operator"
+	}
+	return fmt.Sprintf("System: %s %s (%s → %s)", kind, intent, before, after)
+}
+
 func (s *Service) ChangeSitePublication(ctx context.Context, publicID string, revision int64, action string, sfw bool, d PublicationDecision) (dbgen.Site, error) {
-	if !ValidPublicID(publicID) || !d.Valid() || sfw && action != "publish" {
+	if !ValidPublicID(publicID) || sfw && action != "publish" || s.management == nil && !d.Valid() {
+		return dbgen.Site{}, ErrInvalid
+	}
+	if actor := s.management; actor != nil && (actor.ActorID == uuid.Nil() || actor.RequestID == uuid.Nil() ||
+		(actor.ActorRole != "owner" && actor.ActorRole != "operator") || actor.Action != "site."+action) {
 		return dbgen.Site{}, ErrInvalid
 	}
 	return write(ctx, s, func(ctx context.Context, q *dbgen.Queries) (dbgen.Site, error) {
@@ -36,6 +64,16 @@ func (s *Service) ChangeSitePublication(ctx context.Context, publicID string, re
 		}
 		if revision != site.Revision {
 			return site, ErrConflict
+		}
+		if actor := s.management; actor != nil {
+			desired := Published
+			switch action {
+			case "unpublish":
+				desired = Draft
+			case "archive":
+				desired = Archived
+			}
+			d = PublicationDecision{Actor: actor.ActorID.String(), Reason: publicationReason("Site", action, site.Status, desired), ManagementRequestID: &actor.RequestID}
 		}
 		if sfw && site.Status == Draft && !site.PublishedAt.Valid && site.ContentRating == "unreviewed" {
 			site, err = q.InitialSitePolicy(ctx, site.ID)

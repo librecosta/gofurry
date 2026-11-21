@@ -8,7 +8,6 @@ import (
 	"encoding/json/jsontext"
 	json "encoding/json/v2"
 	"errors"
-	"strings"
 	"time"
 	"uuid"
 
@@ -130,7 +129,7 @@ func (s *Service) publishManagementGame(ctx context.Context, id string, in GameP
 	if in.ContentRating != "sfw" {
 		return ManagementResult{}, ErrGamePublicationPolicy
 	}
-	return s.changeManagementGame(ctx, id, in.Revision, action, "Confirmed GoFurry relevance, SFW rating and public presentation",
+	return s.changeManagementGame(ctx, id, in.Revision, action,
 		func(ctx context.Context, q *dbgen.Queries, g dbgen.Game) (dbgen.Game, error) {
 			if g.Status != status || (status == Published && g.ContentRating != "sfw") {
 				return g, ErrConflict
@@ -198,8 +197,8 @@ func (s *Service) publishManagementGame(ctx context.Context, id string, in GameP
 		})
 }
 
-func (s *Service) ChangeManagementGameVisibility(ctx context.Context, id string, revision int64, action, reason string) (ManagementResult, error) {
-	return s.changeManagementGame(ctx, id, revision, action, reason, func(ctx context.Context, q *dbgen.Queries, g dbgen.Game) (dbgen.Game, error) {
+func (s *Service) ChangeManagementGameVisibility(ctx context.Context, id string, revision int64, action string) (ManagementResult, error) {
+	return s.changeManagementGame(ctx, id, revision, action, func(ctx context.Context, q *dbgen.Queries, g dbgen.Game) (dbgen.Game, error) {
 		var desired string
 		switch {
 		case action == "archive" && (g.Status == Draft || g.Status == Published):
@@ -213,11 +212,11 @@ func (s *Service) ChangeManagementGameVisibility(ctx context.Context, id string,
 	})
 }
 
-func (s *Service) RateManagementGame(ctx context.Context, id string, revision int64, rating, reason string) (ManagementResult, error) {
+func (s *Service) RateManagementGame(ctx context.Context, id string, revision int64, rating string) (ManagementResult, error) {
 	if !validGameRating(rating) {
 		return ManagementResult{}, ErrInvalid
 	}
-	return s.changeManagementGame(ctx, id, revision, "rating", reason, func(ctx context.Context, q *dbgen.Queries, g dbgen.Game) (dbgen.Game, error) {
+	return s.changeManagementGame(ctx, id, revision, "rating", func(ctx context.Context, q *dbgen.Queries, g dbgen.Game) (dbgen.Game, error) {
 		if g.Status != Draft {
 			return g, ErrConflict
 		}
@@ -225,14 +224,14 @@ func (s *Service) RateManagementGame(ctx context.Context, id string, revision in
 	})
 }
 
-func (s *Service) changeManagementGame(ctx context.Context, id string, revision int64, action, reason string,
+func (s *Service) changeManagementGame(ctx context.Context, id string, revision int64, action string,
 	change func(context.Context, *dbgen.Queries, dbgen.Game) (dbgen.Game, error)) (ManagementResult, error) {
 	actor := s.management
 	if actor == nil || actor.ActorID == uuid.Nil() || actor.RequestID == uuid.Nil() ||
 		(actor.ActorRole != "owner" && actor.ActorRole != "operator") || actor.Action != "game."+action {
 		return ManagementResult{}, ErrGamePublicationIdentity
 	}
-	if !ValidPublicID(id) || revision < 1 || !reviewText(actor.ActorID.String(), reason) {
+	if !ValidPublicID(id) || revision < 1 {
 		return ManagementResult{}, ErrInvalid
 	}
 	return write(ctx, s, func(ctx context.Context, q *dbgen.Queries) (ManagementResult, error) {
@@ -247,9 +246,13 @@ func (s *Service) changeManagementGame(ctx context.Context, id string, revision 
 		if err != nil {
 			return ManagementResult{}, err
 		}
+		before, after := row.Status, next.Status
+		if action == "rating" {
+			before, after = row.ContentRating, next.ContentRating
+		}
 		err = q.AddCatalogPublicationDecision(ctx, dbgen.AddCatalogPublicationDecisionParams{
 			ID: uuid.NewV7(), EntityKind: "game", EntityID: row.ID, Revision: next.Revision, Action: action,
-			Actor: actor.ActorID.String(), Reason: strings.TrimSpace(reason), ManagementRequestID: &actor.RequestID,
+			Actor: actor.ActorID.String(), Reason: publicationReason("Game", action, before, after), ManagementRequestID: &actor.RequestID,
 			ContentRating: pgtype.Text{String: next.ContentRating, Valid: true},
 		})
 		return ManagementResult{Target: id, Revision: next.Revision}, err
