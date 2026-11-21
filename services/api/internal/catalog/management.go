@@ -172,12 +172,29 @@ type SiteManagementEdit struct {
 	Primary       string             `json:"primary_category"`
 	Secondary     []string           `json:"secondary_categories"`
 	Tags          []string           `json:"tags"`
-	Languages     []string           `json:"languages"`
 	Revision      int64              `json:"revision"`
 }
 
 func (s *Service) SaveManagementSite(ctx context.Context, id string, in SiteManagementEdit, region, actor string) (ManagementResult, error) {
 	return write(ctx, s, func(ctx context.Context, q *dbgen.Queries) (ManagementResult, error) {
+		s := s.InTransaction(q)
+		if id == "" {
+			var chineseName string
+			for _, text := range in.Localizations {
+				if text.Locale == "zh" {
+					chineseName = strings.TrimSpace(text.Name)
+				}
+			}
+			if chineseName == "" {
+				return ManagementResult{}, ErrSiteChineseRequired
+			}
+			in.Localizations = slices.Clone(in.Localizations)
+			for i, text := range in.Localizations {
+				if text.Locale == "en" && strings.TrimSpace(text.Name) == "" && strings.TrimSpace(text.Summary) != "" {
+					in.Localizations[i].Name = chineseName
+				}
+			}
+		}
 		input := SiteInput{Editorial: Editorial{Slug: in.Slug, Localizations: []Localization{}}, Addresses: in.Addresses}
 		for _, locale := range in.Localizations {
 			input.Localizations = append(input.Localizations, locale.Localization)
@@ -185,8 +202,20 @@ func (s *Service) SaveManagementSite(ctx context.Context, id string, in SiteMana
 		var row dbgen.Site
 		var err error
 		if id == "" {
-			if in.Revision != 0 || len(input.Localizations) == 0 {
+			if in.Revision != 0 {
 				return ManagementResult{}, ErrInvalid
+			}
+			if !NavigationCategory(in.Primary) {
+				return ManagementResult{}, ErrSiteCategoryRequired
+			}
+			addresses, address, addressErr := normalizeSiteIntakeAddress(input.Addresses)
+			if addressErr != nil {
+				return ManagementResult{}, addressErr
+			}
+			input.Addresses = addresses
+			input.Slug = siteIntakeSlug(address)
+			if err := checkSiteIntakeAddress(ctx, q, address); err != nil {
+				return ManagementResult{}, err
 			}
 			row, err = s.CreateSite(ctx, input)
 		} else {
@@ -206,9 +235,9 @@ func (s *Service) SaveManagementSite(ctx context.Context, id string, in SiteMana
 		}
 		// Taxonomy edits retain the durable content policy and its prior decision.
 		if in.Primary != row.PrimaryCategory.String || !slices.Equal(in.Secondary, row.SecondaryCategories) ||
-			!slices.Equal(in.Tags, row.NavigationTags) || !slices.Equal(in.Languages, row.SupportedLanguages) {
+			!slices.Equal(in.Tags, row.NavigationTags) {
 			p, err := s.ReviewSiteNavigation(ctx, region, row.PublicID, row.Revision, NavigationEdit{Rating: row.ContentRating, Primary: in.Primary, Secondary: in.Secondary,
-				Tags: in.Tags, Languages: in.Languages, Actor: actor, Reason: "Catalog taxonomy edit"})
+				Tags: in.Tags, Actor: actor, Reason: "Catalog taxonomy edit"})
 			return ManagementResult{Target: p.PublicID, Revision: p.Revision}, err
 		}
 		return ManagementResult{Target: row.PublicID, Revision: row.Revision}, nil

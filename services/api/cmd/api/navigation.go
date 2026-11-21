@@ -57,7 +57,6 @@ func navigationCommand(cfg *platform.Config) *cobra.Command {
 	review.Flags().StringVar(&in.Primary, "primary", "", "Primary category code")
 	review.Flags().StringSliceVar(&in.Secondary, "secondary", nil, "Up to two supplemental category codes")
 	review.Flags().StringSliceVar(&in.Tags, "tags", nil, "Reviewed tag codes")
-	review.Flags().StringSliceVar(&in.Languages, "languages", nil, "Verified supported language codes")
 	review.Flags().StringVar(&in.Actor, "actor", "", "Operator assertion")
 	review.Flags().StringVar(&in.Reason, "reason", "", "Review reason")
 	add("features", "Preview all three slots and their effective visibility", cobra.NoArgs,

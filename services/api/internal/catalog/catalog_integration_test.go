@@ -288,10 +288,15 @@ func TestCatalogPostgreSQL(t *testing.T) {
 		ok(t, err)
 		decision := PublicationDecision{Actor: "fixture", Reason: "Reviewed ordinary reference material"}
 		_, err = editor.ChangeSitePublication(ctx, pending.PublicID, pending.Revision, "publish", false, decision)
-		want(t, err, ErrInvalid)
-		published, err := editor.ChangeSitePublication(ctx, pending.PublicID, pending.Revision, "publish", true, decision)
+		want(t, err, ErrSiteCategoryRequired)
+		_, err = editor.ChangeSitePublication(ctx, pending.PublicID, pending.Revision, "publish", true, decision)
+		want(t, err, ErrSiteCategoryRequired)
+		classified, err := editor.ReviewSiteNavigation(ctx, "CN", pending.PublicID, pending.Revision,
+			NavigationEdit{Rating: "unreviewed", Primary: "knowledge", Actor: decision.Actor, Reason: "Set the primary category"})
 		ok(t, err)
-		if published.PrimaryCategory.Valid || len(published.NavigationTags) != 0 {
+		published, err := editor.ChangeSitePublication(ctx, pending.PublicID, classified.Revision, "publish", true, decision)
+		ok(t, err)
+		if published.PrimaryCategory.String != "knowledge" || len(published.NavigationTags) != 0 {
 			t.Fatal("publishing invented optional taxonomy")
 		}
 		_, err = editor.SetNavigationFeature(ctx, "secondary_2", published.PublicID, 0, decision.Actor, decision.Reason)

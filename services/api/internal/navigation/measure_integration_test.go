@@ -26,10 +26,10 @@ func measureNavigation(t *testing.T, pool *pgxpool.Pool, svc *Service) {
 		execute(t, pool, `WITH fixture AS MATERIALIZED (
  SELECT i,uuidv7() AS id FROM generate_series(1,$1::integer) i
 ), published AS (
- INSERT INTO sites(id,public_id,slug,status,published_at,first_published_at,content_rating,primary_category,secondary_categories,navigation_tags,supported_languages,logo_asset_key)
+ INSERT INTO sites(id,public_id,slug,status,published_at,first_published_at,content_rating,primary_category,secondary_categories,navigation_tags,logo_asset_key)
  SELECT id,lpad(to_hex(i),16,'0'),'measure-site','published',timestamptz '2026-01-01 UTC'+i*interval '1 second',
   timestamptz '2026-01-01 UTC'+i*interval '1 second','sfw',
-  CASE WHEN i%2=0 THEN 'gallery' ELSE 'community' END,ARRAY['resources'],ARRAY['tutorial'],ARRAY['en','zh'],
+  CASE WHEN i%2=0 THEN 'gallery' ELSE 'community' END,ARRAY['resources'],ARRAY['tutorial'],
   CASE WHEN i%4=0 THEN 'sites/logos/'||repeat('a',64)||'.webp' END FROM fixture
 ), names AS (
  INSERT INTO site_localizations SELECT id,'en','Fixture community '||i,'A measured directory with resources and galleries' FROM fixture

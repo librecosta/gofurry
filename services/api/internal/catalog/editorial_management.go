@@ -27,27 +27,17 @@ type SiteCategories struct {
 type BulkSiteEdit struct {
 	Sites      []RevisionedSite `json:"sites"`
 	Categories *SiteCategories  `json:"categories,omitzero"`
-	Languages  *[]string        `json:"languages,omitzero"`
 }
 
 func (s *Service) BulkEditSites(ctx context.Context, in BulkSiteEdit, region, actor string) (ManagementResult, error) {
-	if len(in.Sites) == 0 || len(in.Sites) > 30 || in.Categories == nil && in.Languages == nil {
+	if len(in.Sites) == 0 || len(in.Sites) > 30 || in.Categories == nil {
 		return ManagementResult{}, ErrInvalid
 	}
-	if c := in.Categories; c != nil {
-		secondary, ok := navigationCodes(c.Secondary, 2, NavigationCategory)
-		if !ok || c.Primary == "" && len(secondary) > 0 || c.Primary != "" &&
-			(!NavigationCategory(c.Primary) || slices.Contains(secondary, c.Primary)) {
-			return ManagementResult{}, ErrInvalid
-		}
-		in.Categories = &SiteCategories{Primary: c.Primary, Secondary: secondary}
-	}
-	if in.Languages != nil {
-		languages, ok := navigationCodes(*in.Languages, 8, NavigationLanguage)
-		if !ok {
-			return ManagementResult{}, ErrInvalid
-		}
-		in.Languages = &languages
+	c := in.Categories
+	secondary, ok := navigationCodes(c.Secondary, 2, NavigationCategory)
+	if !ok || c.Primary == "" && len(secondary) > 0 || c.Primary != "" &&
+		(!NavigationCategory(c.Primary) || slices.Contains(secondary, c.Primary)) {
+		return ManagementResult{}, ErrInvalid
 	}
 	targets := slices.Clone(in.Sites)
 	slices.SortFunc(targets, func(a, b RevisionedSite) int { return strings.Compare(a.PublicID, b.PublicID) })
@@ -66,18 +56,11 @@ func (s *Service) BulkEditSites(ctx context.Context, in BulkSiteEdit, region, ac
 			if err = editable(target.Revision, row.Revision, row.Status); err != nil {
 				return ManagementResult{}, err
 			}
-			edit := NavigationEdit{Rating: row.ContentRating, Primary: row.PrimaryCategory.String, Secondary: row.SecondaryCategories,
-				Tags: row.NavigationTags, Languages: row.SupportedLanguages, Actor: actor, Reason: "Admin bulk taxonomy edit"}
-			if c := in.Categories; c != nil {
-				edit.Primary, edit.Secondary = c.Primary, c.Secondary
-			}
-			if in.Languages != nil {
-				edit.Languages = *in.Languages
-			}
-			if edit.Primary == row.PrimaryCategory.String && slices.Equal(edit.Secondary, row.SecondaryCategories) &&
-				slices.Equal(edit.Languages, row.SupportedLanguages) {
+			if c.Primary == row.PrimaryCategory.String && slices.Equal(secondary, row.SecondaryCategories) {
 				continue
 			}
+			edit := NavigationEdit{Rating: row.ContentRating, Primary: c.Primary, Secondary: secondary,
+				Tags: row.NavigationTags, Actor: actor, Reason: "Admin bulk taxonomy edit"}
 			if _, err = s.InTransaction(q).ReviewSiteNavigation(ctx, region, row.PublicID, row.Revision, edit); err != nil {
 				return ManagementResult{}, err
 			}

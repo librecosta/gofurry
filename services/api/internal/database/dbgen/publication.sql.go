@@ -46,7 +46,7 @@ func (q *Queries) AddCatalogPublicationDecision(ctx context.Context, arg AddCata
 
 const initialSitePolicy = `-- name: InitialSitePolicy :one
 UPDATE sites SET content_rating='sfw',revision=revision+1,updated_at=transaction_timestamp()
-WHERE id=$1 RETURNING id, public_id, slug, status, revision, created_at, updated_at, published_at, archived_at, first_published_at, content_rating, legacy_detail, primary_category, secondary_categories, navigation_tags, supported_languages, logo_asset_key, featured_cover_asset_key
+WHERE id=$1 RETURNING id, public_id, slug, status, revision, created_at, updated_at, published_at, archived_at, first_published_at, content_rating, legacy_detail, primary_category, secondary_categories, navigation_tags, logo_asset_key, featured_cover_asset_key
 `
 
 func (q *Queries) InitialSitePolicy(ctx context.Context, id uuid.UUID) (Site, error) {
@@ -68,7 +68,6 @@ func (q *Queries) InitialSitePolicy(ctx context.Context, id uuid.UUID) (Site, er
 		&i.PrimaryCategory,
 		&i.SecondaryCategories,
 		&i.NavigationTags,
-		&i.SupportedLanguages,
 		&i.LogoAssetKey,
 		&i.FeaturedCoverAssetKey,
 	)
@@ -154,7 +153,7 @@ func (q *Queries) PromoteLegacySitePolicy(ctx context.Context, batchSize int32) 
 const restoreSitePublication = `-- name: RestoreSitePublication :one
 UPDATE sites SET status='published',archived_at=NULL,published_at=coalesce(published_at,transaction_timestamp()),
  revision=revision+1,updated_at=transaction_timestamp()
-WHERE id=$1 RETURNING id, public_id, slug, status, revision, created_at, updated_at, published_at, archived_at, first_published_at, content_rating, legacy_detail, primary_category, secondary_categories, navigation_tags, supported_languages, logo_asset_key, featured_cover_asset_key
+WHERE id=$1 RETURNING id, public_id, slug, status, revision, created_at, updated_at, published_at, archived_at, first_published_at, content_rating, legacy_detail, primary_category, secondary_categories, navigation_tags, logo_asset_key, featured_cover_asset_key
 `
 
 func (q *Queries) RestoreSitePublication(ctx context.Context, id uuid.UUID) (Site, error) {
@@ -176,7 +175,6 @@ func (q *Queries) RestoreSitePublication(ctx context.Context, id uuid.UUID) (Sit
 		&i.PrimaryCategory,
 		&i.SecondaryCategories,
 		&i.NavigationTags,
-		&i.SupportedLanguages,
 		&i.LogoAssetKey,
 		&i.FeaturedCoverAssetKey,
 	)

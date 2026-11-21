@@ -160,7 +160,7 @@ func (q *Queries) LockNavigationHeat(ctx context.Context) (bool, error) {
 }
 
 const lockNavigationSite = `-- name: LockNavigationSite :one
-SELECT id, public_id, slug, status, revision, created_at, updated_at, published_at, archived_at, first_published_at, content_rating, legacy_detail, primary_category, secondary_categories, navigation_tags, supported_languages, logo_asset_key, featured_cover_asset_key FROM sites WHERE public_id=$1 FOR UPDATE
+SELECT id, public_id, slug, status, revision, created_at, updated_at, published_at, archived_at, first_published_at, content_rating, legacy_detail, primary_category, secondary_categories, navigation_tags, logo_asset_key, featured_cover_asset_key FROM sites WHERE public_id=$1 FOR UPDATE
 `
 
 func (q *Queries) LockNavigationSite(ctx context.Context, publicID string) (Site, error) {
@@ -182,7 +182,6 @@ func (q *Queries) LockNavigationSite(ctx context.Context, publicID string) (Site
 		&i.PrimaryCategory,
 		&i.SecondaryCategories,
 		&i.NavigationTags,
-		&i.SupportedLanguages,
 		&i.LogoAssetKey,
 		&i.FeaturedCoverAssetKey,
 	)
@@ -243,20 +242,19 @@ WITH scored AS MATERIALIZED (
  WHERE (cardinality($7::text[])=0 OR s.primary_category=ANY($7::text[])
   OR s.secondary_categories && $7::text[])
  AND (cardinality($8::text[])=0 OR s.navigation_tags && $8::text[])
- AND (cardinality($9::text[])=0 OR s.supported_languages && $9::text[])
  AND ($6::text='' OR f.in_name OR f.in_summary OR s.navigation_tags && $4::text[])
 ), anchor AS MATERIALIZED (
  SELECT id, public_id, metric, name_key FROM scored WHERE public_id=$1::text
 ), page AS (
  SELECT a.id, a.public_id, a.metric, a.name_key FROM scored a LEFT JOIN anchor b ON true
  WHERE $1::text='' OR a.metric<b.metric OR (a.metric=b.metric AND (a.name_key,a.public_id)>(b.name_key,b.public_id))
- ORDER BY a.metric DESC,a.name_key,a.public_id LIMIT $10
+ ORDER BY a.metric DESC,a.name_key,a.public_id LIMIT $9
 )
 SELECT (SELECT count(*) FROM scored)::bigint AS total, ($1::text='' OR EXISTS(SELECT 1 FROM anchor))::boolean AS cursor_valid,
  coalesce(jsonb_agg(jsonb_build_object(
   'public_id',s.public_id,'slug',s.slug,'primary_category',s.primary_category,'secondary_categories',s.secondary_categories,
    'heat_qualified',$2::boolean AND p.metric>0,
-   'tags',s.navigation_tags,'languages',s.supported_languages,'first_published_at',s.first_published_at,
+   'tags',s.navigation_tags,'first_published_at',s.first_published_at,
    'logo_asset_key',s.logo_asset_key,'visit_url',a.url,
    'localizations',coalesce((SELECT jsonb_agg(jsonb_build_object('locale',l.locale,'name',l.name,'summary',l.summary) ORDER BY l.locale)
     FROM site_localizations l WHERE l.site_id=s.id),'[]'::jsonb)) ORDER BY p.metric DESC,p.name_key,p.public_id),'[]'::jsonb)::jsonb AS items
@@ -273,7 +271,6 @@ type NavigationDirectoryParams struct {
 	Keyword    string   `json:"keyword"`
 	Categories []string `json:"categories"`
 	Tags       []string `json:"tags"`
-	Languages  []string `json:"languages"`
 	PageSize   int32    `json:"page_size"`
 }
 
@@ -293,7 +290,6 @@ func (q *Queries) NavigationDirectory(ctx context.Context, arg NavigationDirecto
 		arg.Keyword,
 		arg.Categories,
 		arg.Tags,
-		arg.Languages,
 		arg.PageSize,
 	)
 	var i NavigationDirectoryRow
@@ -344,7 +340,7 @@ WITH featured AS MATERIALIZED (
  UNION ALL SELECT 'random','',0,id FROM random_site
 )
 SELECT x.section,x.key,jsonb_build_object('public_id',s.public_id,'slug',s.slug,'primary_category',s.primary_category,
- 'secondary_categories',s.secondary_categories,'tags',s.navigation_tags,'languages',s.supported_languages,'first_published_at',s.first_published_at,
+ 'secondary_categories',s.secondary_categories,'tags',s.navigation_tags,'first_published_at',s.first_published_at,
  'logo_asset_key',s.logo_asset_key,'visit_url',a.url,
  'cover_asset_key',CASE WHEN x.section='featured' THEN s.featured_cover_asset_key END,
  'rank',CASE WHEN x.section='trending' THEN x.rank END,
@@ -386,35 +382,9 @@ func (q *Queries) NavigationHome(ctx context.Context, arg NavigationHomeParams) 
 	return items, nil
 }
 
-const navigationLanguages = `-- name: NavigationLanguages :many
-SELECT DISTINCT c.code::text AS code FROM site_public_navigation s
-CROSS JOIN LATERAL unnest(s.supported_languages) AS c(code)
-ORDER BY code
-`
-
-func (q *Queries) NavigationLanguages(ctx context.Context) ([]string, error) {
-	rows, err := q.db.Query(ctx, navigationLanguages)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []string{}
-	for rows.Next() {
-		var code string
-		if err := rows.Scan(&code); err != nil {
-			return nil, err
-		}
-		items = append(items, code)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const navigationRelated = `-- name: NavigationRelated :one
 WITH subject AS MATERIALIZED (
- SELECT origin.id,origin.primary_category,origin.secondary_categories,origin.navigation_tags,origin.supported_languages
+ SELECT origin.id,origin.primary_category,origin.secondary_categories,origin.navigation_tags
  FROM site_public_navigation origin WHERE origin.public_id=$1
 ), scored AS (
  SELECT n.id,n.public_id,
@@ -422,7 +392,6 @@ WITH subject AS MATERIALIZED (
    WHEN n.primary_category=ANY(s.secondary_categories) OR s.primary_category=ANY(n.secondary_categories) THEN 2
    WHEN n.secondary_categories&&s.secondary_categories THEN 1 ELSE 0 END AS category_score,
   (SELECT count(*) FROM unnest(n.navigation_tags) t(code) WHERE t.code=ANY(s.navigation_tags)) AS tags_score,
-  (SELECT count(*) FROM unnest(n.supported_languages) l(code) WHERE l.code=ANY(s.supported_languages)) AS languages_score,
   coalesce(h.score,0) AS heat_score
  FROM subject s JOIN site_public_navigation n ON n.id<>s.id
  LEFT JOIN site_navigation_heat h ON $2::boolean AND h.site_id=n.id
@@ -430,13 +399,13 @@ WITH subject AS MATERIALIZED (
   OR n.secondary_categories&&(ARRAY[s.primary_category]||s.secondary_categories)
   OR n.navigation_tags&&s.navigation_tags
 ), picks AS MATERIALIZED (
- SELECT id,row_number() OVER (ORDER BY category_score DESC,tags_score DESC,languages_score DESC,heat_score DESC,public_id COLLATE "C") AS ordinal
+ SELECT id,row_number() OVER (ORDER BY category_score DESC,tags_score DESC,heat_score DESC,public_id COLLATE "C") AS ordinal
  FROM scored WHERE category_score>0 OR tags_score>=2
  ORDER BY ordinal LIMIT 6
 )
 SELECT coalesce((SELECT jsonb_agg(jsonb_build_object(
  'public_id',s.public_id,'slug',s.slug,'primary_category',s.primary_category,'secondary_categories',s.secondary_categories,
- 'tags',s.navigation_tags,'languages',s.supported_languages,'first_published_at',s.first_published_at,
+ 'tags',s.navigation_tags,'first_published_at',s.first_published_at,
  'logo_asset_key',s.logo_asset_key,
  'localizations',coalesce((SELECT jsonb_agg(jsonb_build_object('locale',l.locale,'name',l.name) ORDER BY l.locale)
   FROM site_localizations l WHERE l.site_id=s.id),'[]'::jsonb)) ORDER BY p.ordinal)
@@ -548,8 +517,8 @@ func (q *Queries) UpdateNavigationFeature(ctx context.Context, arg UpdateNavigat
 
 const updateNavigationSite = `-- name: UpdateNavigationSite :one
 UPDATE sites SET content_rating=$2,legacy_detail=false,primary_category=$3,secondary_categories=$4,
- navigation_tags=$5,supported_languages=$6,revision=revision+1,updated_at=transaction_timestamp()
-WHERE id=$1 RETURNING id, public_id, slug, status, revision, created_at, updated_at, published_at, archived_at, first_published_at, content_rating, legacy_detail, primary_category, secondary_categories, navigation_tags, supported_languages, logo_asset_key, featured_cover_asset_key
+ navigation_tags=$5,revision=revision+1,updated_at=transaction_timestamp()
+WHERE id=$1 RETURNING id, public_id, slug, status, revision, created_at, updated_at, published_at, archived_at, first_published_at, content_rating, legacy_detail, primary_category, secondary_categories, navigation_tags, logo_asset_key, featured_cover_asset_key
 `
 
 type UpdateNavigationSiteParams struct {
@@ -558,7 +527,6 @@ type UpdateNavigationSiteParams struct {
 	PrimaryCategory     pgtype.Text `json:"primary_category"`
 	SecondaryCategories []string    `json:"secondary_categories"`
 	NavigationTags      []string    `json:"navigation_tags"`
-	SupportedLanguages  []string    `json:"supported_languages"`
 }
 
 func (q *Queries) UpdateNavigationSite(ctx context.Context, arg UpdateNavigationSiteParams) (Site, error) {
@@ -568,7 +536,6 @@ func (q *Queries) UpdateNavigationSite(ctx context.Context, arg UpdateNavigation
 		arg.PrimaryCategory,
 		arg.SecondaryCategories,
 		arg.NavigationTags,
-		arg.SupportedLanguages,
 	)
 	var i Site
 	err := row.Scan(
@@ -587,7 +554,6 @@ func (q *Queries) UpdateNavigationSite(ctx context.Context, arg UpdateNavigation
 		&i.PrimaryCategory,
 		&i.SecondaryCategories,
 		&i.NavigationTags,
-		&i.SupportedLanguages,
 		&i.LogoAssetKey,
 		&i.FeaturedCoverAssetKey,
 	)

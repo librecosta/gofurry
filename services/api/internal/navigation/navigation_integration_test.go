@@ -160,7 +160,7 @@ func TestNavigationPostgreSQLRedis(t *testing.T) {
 	mustError(t, err, catalog.ErrNotFound)
 
 	input := catalog.NavigationEdit{Rating: "sfw", Primary: "gallery", Secondary: []string{"community", "resources"},
-		Tags: []string{"portfolio", "fursuit"}, Languages: []string{"ja"}, Actor: "fixture", Reason: "Verified classification"}
+		Tags: []string{"portfolio", "fursuit"}, Actor: "fixture", Reason: "Verified classification"}
 	add := func(name, zh, summary string, intent catalog.NavigationEdit) dbgen.Site {
 		t.Helper()
 		localizations := []catalog.Localization{{Locale: "en", Name: name, Summary: summary}}
@@ -184,7 +184,7 @@ func TestNavigationPostgreSQLRedis(t *testing.T) {
 	}
 	a := add("Art %_Hub", "兽装展示", "Bilingual fixture", input)
 	b := add("Art %_Hub", "", "Another fixture", catalog.NavigationEdit{Rating: "sfw", Primary: "community",
-		Tags: []string{"forum"}, Languages: []string{"en", "zh"}, Actor: "fixture", Reason: "Verified classification"})
+		Tags: []string{"forum"}, Actor: "fixture", Reason: "Verified classification"})
 	c := add("Different catalogue", "", "", input)
 	draft := add("Hidden Secret", "", "", catalog.NavigationEdit{Rating: "unreviewed", Actor: "fixture", Reason: "Draft remains unreviewed"})
 	for _, invalid := range []catalog.NavigationEdit{
@@ -193,7 +193,6 @@ func TestNavigationPostgreSQLRedis(t *testing.T) {
 		{Rating: "sfw", Primary: "gallery", Secondary: []string{"resources", "events", "gaming"}, Actor: "fixture", Reason: "invalid"},
 		{Rating: "sfw", Primary: "gallery", Tags: []string{"forum", "forum"}, Actor: "fixture", Reason: "invalid"},
 		{Rating: "sfw", Primary: "gallery", Tags: []string{"unknown"}, Actor: "fixture", Reason: "invalid"},
-		{Rating: "sfw", Primary: "gallery", Languages: []string{"zh-CN"}, Actor: "fixture", Reason: "invalid"},
 	} {
 		_, err := editor.ReviewSiteNavigation(ctx, "CN", a.PublicID, a.Revision, invalid)
 		mustError(t, err, catalog.ErrInvalid)
@@ -227,8 +226,8 @@ func TestNavigationPostgreSQLRedis(t *testing.T) {
 		{Filters{Locale: "en", Keyword: "ART %_hUB"}, 2}, {Filters{Locale: "zh", Keyword: "兽装展示"}, 1},
 		{Filters{Locale: "zh", Keyword: "兽装"}, 2}, {Filters{Locale: "en", Keyword: "%_"}, 2},
 		{Filters{Locale: "en", Keyword: "' OR 1=1 --"}, 0}, {Filters{Locale: "en", Keyword: "  "}, 3},
-		{Filters{Locale: "en", Categories: []string{"community", "resources"}, Tags: []string{"portfolio", "forum"}, Languages: []string{"ja"}}, 2},
-		{Filters{Locale: "en", Categories: []string{"marketplace"}, Languages: []string{"ja"}}, 0},
+		{Filters{Locale: "en", Categories: []string{"community", "resources"}, Tags: []string{"portfolio", "forum"}}, 3},
+		{Filters{Locale: "en", Categories: []string{"marketplace"}}, 0},
 		{Filters{Locale: "en", Keyword: "Hidden Secret"}, 0},
 	} {
 		out, err := svc.Directory(ctx, tc.query, "")
@@ -300,8 +299,7 @@ func TestNavigationPostgreSQLRedis(t *testing.T) {
 	}
 	rank, err := svc.Directory(ctx, Filters{Locale: "en", Sort: "heat_7d", PageSize: 1}, "")
 	must(t, err)
-	if rank.Items[0].PublicID != a.PublicID || !rank.Items[0].HeatQualified || rank.Items[0].CoverURL != "" || rank.Items[0].LogoURL == "" ||
-		!slices.Equal(rank.Languages, []string{"en", "ja", "zh"}) {
+	if rank.Items[0].PublicID != a.PublicID || !rank.Items[0].HeatQualified || rank.Items[0].CoverURL != "" || rank.Items[0].LogoURL == "" {
 		t.Fatal("featured selection altered the natural heat ranking")
 	}
 	low, err := svc.Stats(ctx, c.PublicID)

@@ -6,14 +6,13 @@ WITH fixture AS MATERIALIZED (
  SELECT i,uuidv7() id,'0000000000001'||lpad(to_hex(i),3,'0') AS public_id FROM generate_series(1,40) i
 ), sites_written AS (
  INSERT INTO sites(id,public_id,slug,status,published_at,first_published_at,archived_at,content_rating,primary_category,secondary_categories,
-   navigation_tags,supported_languages,logo_asset_key,featured_cover_asset_key)
+   navigation_tags,logo_asset_key,featured_cover_asset_key)
  SELECT id,public_id,'field-guide-'||i,CASE WHEN i=40 THEN 'archived' ELSE 'published' END,
   now()-i*interval '1 day',now()-i*interval '1 day',CASE WHEN i=40 THEN now() END,
   CASE WHEN i=39 THEN '${region === 'CN' ? 'unreviewed' : 'adult'}' ELSE 'sfw' END,
   (ARRAY['community','gallery','literature','resources','marketplace','knowledge','gaming','events'])[1+(i-1)%8],
   CASE WHEN i%8=0 THEN ARRAY['community'] ELSE '{}'::text[] END,
   CASE WHEN i%2=0 THEN ARRAY['portfolio','tutorial'] ELSE ARRAY['forum'] END,
-  CASE WHEN i%3=0 THEN ARRAY['ja'] WHEN i%3=1 THEN ARRAY['en','zh'] ELSE ARRAY['en'] END,
   CASE WHEN i IN (1,4,13,14,15) THEN '${logo}' END,CASE WHEN i=1 THEN '${cover}' END
  FROM fixture
 ), names AS (

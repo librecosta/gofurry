@@ -41,7 +41,6 @@ type Card struct {
 	PrimaryCategory     *string    `json:"primary_category"`
 	SecondaryCategories []string   `json:"secondary_categories"`
 	Tags                []string   `json:"tags"`
-	Languages           []string   `json:"languages"`
 	FirstPublishedAt    *time.Time `json:"first_published_at"`
 	HeatQualified       bool       `json:"heat_qualified,omitempty"`
 	LogoURL             string     `json:"logo_url,omitempty"`
@@ -104,9 +103,9 @@ type Home struct {
 }
 
 type Filters struct {
-	Keyword, Sort, Locale       string
-	Categories, Tags, Languages []string
-	PageSize                    int32
+	Keyword, Sort, Locale string
+	Categories, Tags      []string
+	PageSize              int32
 }
 
 type Directory struct {
@@ -118,7 +117,6 @@ type Directory struct {
 	EffectiveSort string                   `json:"effective_sort"`
 	Heat          Heat                     `json:"heat"`
 	Tags          []catalog.NavigationTerm `json:"tag_registry"`
-	Languages     []string                 `json:"language_registry"`
 	Interactions  bool                     `json:"interactions"`
 }
 
@@ -170,9 +168,6 @@ func normalize(f Filters) (Filters, error) {
 		return f, catalog.ErrInvalid
 	}
 	if f.Tags, valid = cleanCodes(f.Tags, 8, catalog.NavigationTag); !valid {
-		return f, catalog.ErrInvalid
-	}
-	if f.Languages, valid = cleanCodes(f.Languages, 8, catalog.NavigationLanguage); !valid {
 		return f, catalog.ErrInvalid
 	}
 	return f, nil
@@ -256,7 +251,7 @@ func (s *Service) Directory(ctx context.Context, filters Filters, cursor string)
 	return read(ctx, s.pool, func(ctx context.Context, q *dbgen.Queries) (Directory, error) {
 		h, err := heatState(ctx, q, s.now().UTC())
 		result := Directory{Version: catalog.NavigationVersion, Sort: f.Sort, EffectiveSort: f.Sort, Heat: h,
-			Tags: catalog.NavigationTags(), Items: []Card{}, Languages: []string{}, Interactions: s.interactions}
+			Tags: catalog.NavigationTags(), Items: []Card{}, Interactions: s.interactions}
 		if err != nil {
 			return result, err
 		}
@@ -272,7 +267,7 @@ func (s *Service) Directory(ctx context.Context, filters Filters, cursor string)
 			return result, catalog.ErrInvalid
 		}
 		row, err := q.NavigationDirectory(ctx, dbgen.NavigationDirectoryParams{Keyword: f.Keyword, OrderBy: result.EffectiveSort,
-			SearchTags: keywordTags(f.Keyword), Locale: f.Locale, UseHeat: generation != 0, Categories: f.Categories, Tags: f.Tags, Languages: f.Languages,
+			SearchTags: keywordTags(f.Keyword), Locale: f.Locale, UseHeat: generation != 0, Categories: f.Categories, Tags: f.Tags,
 			AfterID: after.ID, PageSize: f.PageSize + 1})
 		if err != nil {
 			return result, err
@@ -293,17 +288,6 @@ func (s *Service) Directory(ctx context.Context, filters Filters, cursor string)
 		}
 		for _, item := range items {
 			result.Items = append(result.Items, s.project(item))
-		}
-		if cursor == "" {
-			languages, err := q.NavigationLanguages(ctx)
-			if err != nil {
-				return result, err
-			}
-			for _, code := range languages {
-				if catalog.NavigationLanguage(code) {
-					result.Languages = append(result.Languages, code)
-				}
-			}
 		}
 		return result, nil
 	})

@@ -3,7 +3,7 @@ import type { Locale, Region } from '../preferences'
 import { apiQuery, decodeDirectory, decodeHome, normalizeCriteria, type Criteria } from './data'
 
 const unavailable = () => new Response(null, { status: 503, headers: { 'Cache-Control': 'no-store' } })
-const queryKeys = ['q', 'category', 'tags', 'language', 'sort', 'locale', 'cursor']
+const queryKeys = ['q', 'category', 'tags', 'sort', 'locale', 'cursor']
 
 export function navigationRegion(): Region {
   const region = webConfig().region

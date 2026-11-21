@@ -34,26 +34,13 @@ func (q *Queries) AddSiteLocalization(ctx context.Context, arg AddSiteLocalizati
 	return err
 }
 
-const canPublishSite = `-- name: CanPublishSite :one
-SELECT (EXISTS(SELECT 1 FROM sites s WHERE s.id=$1 AND s.content_rating='sfw')
- AND EXISTS(SELECT 1 FROM site_localizations l WHERE l.site_id=$1)
- AND EXISTS(SELECT 1 FROM site_addresses a WHERE a.site_id=$1 AND active AND kind='primary'))::boolean
-`
-
-func (q *Queries) CanPublishSite(ctx context.Context, id uuid.UUID) (bool, error) {
-	row := q.db.QueryRow(ctx, canPublishSite, id)
-	var column_1 bool
-	err := row.Scan(&column_1)
-	return column_1, err
-}
-
 const changeSiteStatus = `-- name: ChangeSiteStatus :one
 UPDATE sites SET status=$1,revision=revision+1,updated_at=transaction_timestamp(),
  published_at=CASE WHEN $1::text='published' THEN transaction_timestamp() ELSE published_at END,
  first_published_at=CASE WHEN $1::text='published' AND published_at IS NULL
   THEN coalesce(first_published_at,transaction_timestamp()) ELSE first_published_at END,
  archived_at=CASE WHEN $1::text='archived' THEN transaction_timestamp() ELSE NULL END
-WHERE id=$2 RETURNING id, public_id, slug, status, revision, created_at, updated_at, published_at, archived_at, first_published_at, content_rating, legacy_detail, primary_category, secondary_categories, navigation_tags, supported_languages, logo_asset_key, featured_cover_asset_key
+WHERE id=$2 RETURNING id, public_id, slug, status, revision, created_at, updated_at, published_at, archived_at, first_published_at, content_rating, legacy_detail, primary_category, secondary_categories, navigation_tags, logo_asset_key, featured_cover_asset_key
 `
 
 type ChangeSiteStatusParams struct {
@@ -80,7 +67,6 @@ func (q *Queries) ChangeSiteStatus(ctx context.Context, arg ChangeSiteStatusPara
 		&i.PrimaryCategory,
 		&i.SecondaryCategories,
 		&i.NavigationTags,
-		&i.SupportedLanguages,
 		&i.LogoAssetKey,
 		&i.FeaturedCoverAssetKey,
 	)
@@ -89,7 +75,7 @@ func (q *Queries) ChangeSiteStatus(ctx context.Context, arg ChangeSiteStatusPara
 
 const createSite = `-- name: CreateSite :one
 INSERT INTO sites (id,public_id,slug) VALUES ($1,$2,$3)
-ON CONFLICT (public_id) DO NOTHING RETURNING id, public_id, slug, status, revision, created_at, updated_at, published_at, archived_at, first_published_at, content_rating, legacy_detail, primary_category, secondary_categories, navigation_tags, supported_languages, logo_asset_key, featured_cover_asset_key
+ON CONFLICT (public_id) DO NOTHING RETURNING id, public_id, slug, status, revision, created_at, updated_at, published_at, archived_at, first_published_at, content_rating, legacy_detail, primary_category, secondary_categories, navigation_tags, logo_asset_key, featured_cover_asset_key
 `
 
 type CreateSiteParams struct {
@@ -117,7 +103,6 @@ func (q *Queries) CreateSite(ctx context.Context, arg CreateSiteParams) (Site, e
 		&i.PrimaryCategory,
 		&i.SecondaryCategories,
 		&i.NavigationTags,
-		&i.SupportedLanguages,
 		&i.LogoAssetKey,
 		&i.FeaturedCoverAssetKey,
 	)
@@ -133,20 +118,21 @@ func (q *Queries) DisableSiteAddresses(ctx context.Context, siteID uuid.UUID) er
 	return err
 }
 
-const hasSitePresentation = `-- name: HasSitePresentation :one
-SELECT (EXISTS(SELECT 1 FROM site_localizations l WHERE l.site_id=$1::uuid)
- AND EXISTS(SELECT 1 FROM site_addresses a WHERE a.site_id=$1::uuid AND active AND kind='primary'))::boolean
+const findSiteByActiveAddress = `-- name: FindSiteByActiveAddress :one
+SELECT s.public_id FROM site_addresses a JOIN sites s ON s.id=a.site_id
+WHERE a.active AND a.url=ANY($1::text[])
+ORDER BY (s.status='archived'),(a.kind<>'primary'),s.public_id LIMIT 1
 `
 
-func (q *Queries) HasSitePresentation(ctx context.Context, id uuid.UUID) (bool, error) {
-	row := q.db.QueryRow(ctx, hasSitePresentation, id)
-	var column_1 bool
-	err := row.Scan(&column_1)
-	return column_1, err
+func (q *Queries) FindSiteByActiveAddress(ctx context.Context, urls []string) (string, error) {
+	row := q.db.QueryRow(ctx, findSiteByActiveAddress, urls)
+	var public_id string
+	err := row.Scan(&public_id)
+	return public_id, err
 }
 
 const lockSite = `-- name: LockSite :one
-SELECT id, public_id, slug, status, revision, created_at, updated_at, published_at, archived_at, first_published_at, content_rating, legacy_detail, primary_category, secondary_categories, navigation_tags, supported_languages, logo_asset_key, featured_cover_asset_key FROM sites WHERE id=$1 FOR UPDATE
+SELECT id, public_id, slug, status, revision, created_at, updated_at, published_at, archived_at, first_published_at, content_rating, legacy_detail, primary_category, secondary_categories, navigation_tags, logo_asset_key, featured_cover_asset_key FROM sites WHERE id=$1 FOR UPDATE
 `
 
 func (q *Queries) LockSite(ctx context.Context, id uuid.UUID) (Site, error) {
@@ -168,11 +154,19 @@ func (q *Queries) LockSite(ctx context.Context, id uuid.UUID) (Site, error) {
 		&i.PrimaryCategory,
 		&i.SecondaryCategories,
 		&i.NavigationTags,
-		&i.SupportedLanguages,
 		&i.LogoAssetKey,
 		&i.FeaturedCoverAssetKey,
 	)
 	return i, err
+}
+
+const lockSiteIntakeAddress = `-- name: LockSiteIntakeAddress :exec
+SELECT pg_advisory_xact_lock(hashtextextended('gofurry/site-intake/' || $1::text,0))
+`
+
+func (q *Queries) LockSiteIntakeAddress(ctx context.Context, addressKey string) error {
+	_, err := q.db.Exec(ctx, lockSiteIntakeAddress, addressKey)
+	return err
 }
 
 const publishedSite = `-- name: PublishedSite :one
@@ -180,7 +174,7 @@ SELECT e.public_id,e.slug,COALESCE((SELECT jsonb_agg(jsonb_build_object('locale'
  'body',CASE WHEN n.id IS NOT NULL THEN l.body ELSE '' END) ORDER BY l.locale)
  FROM site_localizations l WHERE l.site_id=e.id),'[]'::jsonb)::jsonb AS localizations,
  (n.id IS NOT NULL)::boolean AS interaction_eligible,
- n.primary_category,n.secondary_categories,n.navigation_tags,n.supported_languages,s.logo_asset_key,
+ n.primary_category,n.secondary_categories,n.navigation_tags,s.logo_asset_key,
  COALESCE((SELECT jsonb_agg(jsonb_build_object('kind',x.kind,'url',x.url) ORDER BY x.kind DESC,x.url COLLATE "C")
  FROM site_addresses x WHERE x.site_id=n.id AND x.active),'[]'::jsonb)::jsonb AS addresses
 FROM site_public_history e JOIN sites s ON s.id=e.id LEFT JOIN site_public_navigation n ON n.id=e.id
@@ -195,7 +189,6 @@ type PublishedSiteRow struct {
 	PrimaryCategory     pgtype.Text `json:"primary_category"`
 	SecondaryCategories []string    `json:"secondary_categories"`
 	NavigationTags      []string    `json:"navigation_tags"`
-	SupportedLanguages  []string    `json:"supported_languages"`
 	LogoAssetKey        pgtype.Text `json:"logo_asset_key"`
 	Addresses           []byte      `json:"addresses"`
 }
@@ -211,7 +204,6 @@ func (q *Queries) PublishedSite(ctx context.Context, publicID string) (Published
 		&i.PrimaryCategory,
 		&i.SecondaryCategories,
 		&i.NavigationTags,
-		&i.SupportedLanguages,
 		&i.LogoAssetKey,
 		&i.Addresses,
 	)
@@ -292,9 +284,26 @@ func (q *Queries) SaveSiteAddress(ctx context.Context, arg SaveSiteAddressParams
 	return err
 }
 
+const sitePublicationFields = `-- name: SitePublicationFields :one
+SELECT EXISTS(SELECT 1 FROM site_localizations l WHERE l.site_id=$1::uuid AND btrim(l.name)<>'') AS has_name,
+ EXISTS(SELECT 1 FROM site_addresses a WHERE a.site_id=$1::uuid AND active AND kind='primary') AS has_address
+`
+
+type SitePublicationFieldsRow struct {
+	HasName    bool `json:"has_name"`
+	HasAddress bool `json:"has_address"`
+}
+
+func (q *Queries) SitePublicationFields(ctx context.Context, id uuid.UUID) (SitePublicationFieldsRow, error) {
+	row := q.db.QueryRow(ctx, sitePublicationFields, id)
+	var i SitePublicationFieldsRow
+	err := row.Scan(&i.HasName, &i.HasAddress)
+	return i, err
+}
+
 const updateSite = `-- name: UpdateSite :one
 UPDATE sites SET slug=$2,revision=revision+1,updated_at=transaction_timestamp()
-WHERE id=$1 RETURNING id, public_id, slug, status, revision, created_at, updated_at, published_at, archived_at, first_published_at, content_rating, legacy_detail, primary_category, secondary_categories, navigation_tags, supported_languages, logo_asset_key, featured_cover_asset_key
+WHERE id=$1 RETURNING id, public_id, slug, status, revision, created_at, updated_at, published_at, archived_at, first_published_at, content_rating, legacy_detail, primary_category, secondary_categories, navigation_tags, logo_asset_key, featured_cover_asset_key
 `
 
 type UpdateSiteParams struct {
@@ -321,7 +330,6 @@ func (q *Queries) UpdateSite(ctx context.Context, arg UpdateSiteParams) (Site, e
 		&i.PrimaryCategory,
 		&i.SecondaryCategories,
 		&i.NavigationTags,
-		&i.SupportedLanguages,
 		&i.LogoAssetKey,
 		&i.FeaturedCoverAssetKey,
 	)

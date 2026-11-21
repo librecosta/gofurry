@@ -62,7 +62,6 @@ type SiteDetail struct {
 	PrimaryCategory     string             `json:"primary_category,omitempty"`
 	SecondaryCategories []string           `json:"secondary_categories,omitempty"`
 	Tags                []NavigationTerm   `json:"tags,omitempty"`
-	SupportedLanguages  []string           `json:"supported_languages,omitempty"`
 	LogoURL             string             `json:"logo_url,omitempty"`
 	Technology          []SiteTechnology   `json:"technology,omitempty"`
 }
@@ -95,11 +94,6 @@ func (s *Service) PublishedSite(ctx context.Context, publicID string) (out SiteD
 		for _, tag := range NavigationTags() {
 			if slices.Contains(row.NavigationTags, tag.Code) {
 				out.Tags = append(out.Tags, tag)
-			}
-		}
-		for _, language := range row.SupportedLanguages {
-			if NavigationLanguage(language) {
-				out.SupportedLanguages = append(out.SupportedLanguages, language)
 			}
 		}
 		out.LogoURL = s.assets.SiteAssetURL(storage.SiteLogo, row.LogoAssetKey.String)

@@ -12,7 +12,6 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/librecosta/gofurry/services/api/internal/database/dbgen"
-	"golang.org/x/text/language"
 )
 
 const NavigationVersion = 1
@@ -45,16 +44,7 @@ func termExists(terms []NavigationTerm, code string) bool {
 	return slices.ContainsFunc(terms, func(t NavigationTerm) bool { return t.Code == code })
 }
 
-var langCode = regexp.MustCompile(`^[a-z]{2,3}$`)
 var actorCode = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.:@-]{0,79}$`)
-
-func NavigationLanguage(code string) bool {
-	if !langCode.MatchString(code) || code == "und" || code == "mul" || code == "zxx" || code >= "qaa" && code <= "qtz" {
-		return false
-	}
-	tag, err := language.Parse(code)
-	return err == nil && tag.String() == code
-}
 
 func navigationCodes(values []string, max int, valid func(string) bool) ([]string, bool) {
 	if len(values) > max {
@@ -77,7 +67,7 @@ func reviewText(actor, reason string) bool {
 
 type NavigationEdit struct {
 	Rating, Primary, Actor, Reason string
-	Secondary, Tags, Languages     []string
+	Secondary, Tags                []string
 	KeepTaxonomy                   bool
 }
 
@@ -88,11 +78,10 @@ type NavigationProfile struct {
 	Primary   string   `json:"primary_category"`
 	Secondary []string `json:"secondary_categories"`
 	Tags      []string `json:"tags"`
-	Languages []string `json:"languages"`
 }
 
 func profile(s dbgen.Site) NavigationProfile {
-	return NavigationProfile{s.PublicID, s.Revision, s.ContentRating, s.PrimaryCategory.String, s.SecondaryCategories, s.NavigationTags, s.SupportedLanguages}
+	return NavigationProfile{s.PublicID, s.Revision, s.ContentRating, s.PrimaryCategory.String, s.SecondaryCategories, s.NavigationTags}
 }
 
 func (s *Service) InspectSiteNavigation(ctx context.Context, id string) (NavigationProfile, error) {
@@ -124,10 +113,6 @@ func (s *Service) ReviewSiteNavigation(ctx context.Context, region, id string, r
 	if !ok {
 		return invalid, ErrInvalid
 	}
-	languages, ok := navigationCodes(in.Languages, 8, NavigationLanguage)
-	if !ok {
-		return invalid, ErrInvalid
-	}
 	return write(ctx, s, func(ctx context.Context, q *dbgen.Queries) (NavigationProfile, error) {
 		before, err := q.LockNavigationSite(ctx, id)
 		if err != nil {
@@ -141,11 +126,14 @@ func (s *Service) ReviewSiteNavigation(ctx context.Context, region, id string, r
 		}
 		primary := pgtype.Text{String: in.Primary, Valid: in.Primary != ""}
 		if in.KeepTaxonomy {
-			primary, secondary, tags, languages = before.PrimaryCategory, before.SecondaryCategories, before.NavigationTags, before.SupportedLanguages
+			primary, secondary, tags = before.PrimaryCategory, before.SecondaryCategories, before.NavigationTags
+		}
+		if before.Status == Published && before.PrimaryCategory.Valid && !primary.Valid {
+			return invalid, ErrSiteCategoryRequired
 		}
 		after, err := q.UpdateNavigationSite(ctx, dbgen.UpdateNavigationSiteParams{ID: before.ID, ContentRating: in.Rating,
 			PrimaryCategory: primary, SecondaryCategories: secondary,
-			NavigationTags: tags, SupportedLanguages: languages})
+			NavigationTags: tags})
 		if err != nil {
 			return invalid, err
 		}

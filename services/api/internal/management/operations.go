@@ -53,6 +53,7 @@ func receipt(c fiber.Ctx, action string) dbgen.RecordManagementOperationParams {
 
 func failure(err error) error {
 	var pe *pgconn.PgError
+	var duplicate catalog.SiteAddressConflict
 	switch {
 	case err == nil:
 		return nil
@@ -62,6 +63,12 @@ func failure(err error) error {
 		return fiber.NewError(fiber.StatusBadRequest, err.Error())
 	case errors.Is(err, catalog.ErrGamePreviewChanged):
 		return fiber.NewError(fiber.StatusConflict, err.Error())
+	case errors.As(err, &duplicate):
+		return fiber.NewError(fiber.StatusConflict, duplicate.Error())
+	case errors.Is(err, catalog.ErrSiteNameRequired), errors.Is(err, catalog.ErrSiteChineseRequired),
+		errors.Is(err, catalog.ErrSiteAddressRequired), errors.Is(err, catalog.ErrSiteAddressInvalid),
+		errors.Is(err, catalog.ErrSiteCategoryRequired), errors.Is(err, catalog.ErrSiteReviewRequired):
+		return fiber.NewError(fiber.StatusUnprocessableEntity, err.Error())
 	case errors.Is(err, catalog.ErrInvalid), errors.Is(err, collection.ErrIntakeInput):
 		return fiber.ErrBadRequest
 	case catalog.ManagementMissing(err):

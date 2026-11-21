@@ -2,10 +2,113 @@ package catalog
 
 import (
 	"context"
+	"errors"
+	"net/url"
+	"regexp"
+	"slices"
+	"strings"
 	"uuid"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/librecosta/gofurry/services/api/internal/database/dbgen"
 )
+
+type siteInputError string
+
+func (e siteInputError) Error() string { return string(e) }
+func (e siteInputError) Unwrap() error { return ErrInvalid }
+
+const (
+	ErrSiteNameRequired     = siteInputError("site needs a name")
+	ErrSiteChineseRequired  = siteInputError("site needs a Chinese name")
+	ErrSiteAddressRequired  = siteInputError("site needs a primary URL")
+	ErrSiteAddressInvalid   = siteInputError("site primary URL is invalid")
+	ErrSiteCategoryRequired = siteInputError("site needs a primary category")
+	ErrSiteReviewRequired   = siteInputError("site needs SFW review")
+)
+
+type SiteAddressConflict struct{ PublicID string }
+
+func (e SiteAddressConflict) Error() string { return "site address already exists: " + e.PublicID }
+func (e SiteAddressConflict) Unwrap() error { return ErrConflict }
+
+var explicitURLScheme = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9+.-]*://`)
+
+func normalizeSiteIntakeAddress(addresses []Address) ([]Address, *url.URL, error) {
+	for i, address := range addresses {
+		if address.Kind != "primary" {
+			continue
+		}
+		raw := strings.TrimSpace(address.URL)
+		if raw == "" {
+			break
+		}
+		if !explicitURLScheme.MatchString(raw) {
+			raw = "https://" + raw
+		}
+		normalized, err := normalizeURL(raw)
+		if err != nil {
+			return nil, nil, ErrSiteAddressInvalid
+		}
+		parsed, err := url.Parse(normalized)
+		if err != nil {
+			return nil, nil, ErrSiteAddressInvalid
+		}
+		addresses = slices.Clone(addresses)
+		addresses[i].URL = normalized
+		return addresses, parsed, nil
+	}
+	return nil, nil, ErrSiteAddressRequired
+}
+
+func siteIntakeSlug(u *url.URL) string {
+	host := u.Hostname()
+	if first, rest, ok := strings.Cut(host, "."); ok &&
+		(first == "www" || strings.HasPrefix(first, "www") && decimal.MatchString(first[3:])) {
+		host = rest
+	}
+	slug := strings.Join(strings.FieldsFunc(host, func(r rune) bool {
+		return !(r >= 'a' && r <= 'z' || r >= '0' && r <= '9')
+	}), "-")
+	if len(slug) > 80 {
+		slug = strings.TrimRight(slug[:80], "-")
+	}
+	if slug == "" {
+		return "site"
+	}
+	return slug
+}
+
+func checkSiteIntakeAddress(ctx context.Context, q *dbgen.Queries, u *url.URL) error {
+	// Root URLs with and without a slash identify the same page. Keep paths,
+	// queries and explicit ports so separate sites on one domain can coexist.
+	root := u.Path == "" || u.Path == "/"
+	if root {
+		u.Path = ""
+	}
+	key := strings.TrimPrefix(u.String(), u.Scheme+":")
+	if err := q.LockSiteIntakeAddress(ctx, key); err != nil {
+		return err
+	}
+	var candidates []string
+	for _, scheme := range []string{"http", "https"} {
+		candidate := *u
+		candidate.Scheme = scheme
+		candidates = append(candidates, candidate.String())
+		if root {
+			candidate.Path = "/"
+			candidates = append(candidates, candidate.String())
+		}
+	}
+	id, err := q.FindSiteByActiveAddress(ctx, candidates)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	return SiteAddressConflict{PublicID: id}
+}
 
 func (s *Service) CreateSite(ctx context.Context, in SiteInput) (dbgen.Site, error) {
 	var err error
@@ -51,12 +154,8 @@ func (s *Service) EditSite(ctx context.Context, id uuid.UUID, revision int64, in
 			return row, err
 		}
 		if row.Status == Published {
-			ready, err := q.HasSitePresentation(ctx, id)
-			if err != nil {
+			if err := requireSitePresentation(ctx, q, id); err != nil {
 				return row, err
-			}
-			if !ready {
-				return row, ErrInvalid
 			}
 		}
 		if err = q.CloseRemovedSiteBindings(ctx, &id); err != nil {
@@ -92,13 +191,29 @@ func (s *Service) SetSiteStatus(ctx context.Context, id uuid.UUID, revision int6
 	})
 }
 
-func requireSitePublication(ctx context.Context, q *dbgen.Queries, id uuid.UUID) error {
-	ready, err := q.CanPublishSite(ctx, id)
+func requireSitePublication(ctx context.Context, q *dbgen.Queries, site dbgen.Site) error {
+	if err := requireSitePresentation(ctx, q, site.ID); err != nil {
+		return err
+	}
+	if !site.PrimaryCategory.Valid {
+		return ErrSiteCategoryRequired
+	}
+	if site.ContentRating != "sfw" {
+		return ErrSiteReviewRequired
+	}
+	return nil
+}
+
+func requireSitePresentation(ctx context.Context, q *dbgen.Queries, id uuid.UUID) error {
+	fields, err := q.SitePublicationFields(ctx, id)
 	if err != nil {
 		return err
 	}
-	if !ready {
-		return ErrInvalid
+	switch {
+	case !fields.HasName:
+		return ErrSiteNameRequired
+	case !fields.HasAddress:
+		return ErrSiteAddressRequired
 	}
 	return nil
 }

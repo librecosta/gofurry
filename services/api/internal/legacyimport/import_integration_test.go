@@ -284,7 +284,12 @@ func TestLegacyImportPostgreSQL18(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	site, err = s.ChangeSitePublication(ctx, site.PublicID, site.Revision, "publish", true, catalog.PublicationDecision{Actor: "fixture", Reason: "Test existing publication"})
+	taxonomy, err := s.ReviewSiteNavigation(ctx, "CN", site.PublicID, site.Revision,
+		catalog.NavigationEdit{Rating: "unreviewed", Primary: "community", Actor: "fixture", Reason: "Classify existing site fixture"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	site, err = s.ChangeSitePublication(ctx, site.PublicID, taxonomy.Revision, "publish", true, catalog.PublicationDecision{Actor: "fixture", Reason: "Test existing publication"})
 	if err != nil {
 		t.Fatal(err)
 	}

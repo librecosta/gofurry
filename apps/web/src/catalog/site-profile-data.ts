@@ -1,6 +1,6 @@
 import type { Card, CategoryCode, Term } from '../navigation/data'
 import { categoryCodes } from '../navigation/contracts'
-import { safeBusinessURL, safeImageURL, tagCodes, validLanguage } from '../navigation/data'
+import { safeBusinessURL, safeImageURL, tagCodes } from '../navigation/data'
 
 export type Technology = {
   kind: 'http' | 'tls' | 'fingerprint'; source: string; ruleset: string
@@ -14,7 +14,6 @@ export type SiteProfileData = {
   primaryCategory?: CategoryCode
   secondaryCategories: CategoryCode[]
   tags: Term[]
-  languages: string[]
   logo?: string
   technology: Technology[]
   yearbooks: number[]
@@ -65,7 +64,6 @@ export function decodeSiteProfile(item: Record<string, unknown>): SiteProfileDat
   return {
     reviewed, addresses, primaryCategory: reviewed ? primaryCategory : undefined, tags,
     secondaryCategories: reviewed && Array.isArray(item.secondary_categories) ? item.secondary_categories.filter(category).slice(0, 2) : [],
-    languages: reviewed && Array.isArray(item.supported_languages) ? item.supported_languages.filter(code => typeof code === 'string' && validLanguage(code)).slice(0, 8) : [],
     logo: reviewed ? safeImageURL(typeof item.logo_url === 'string' ? item.logo_url : undefined, 'logo') : undefined,
     technology: reviewed ? decodeTechnology(item.technology) : [], yearbooks: [], related: [], interactions: false,
   }

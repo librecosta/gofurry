@@ -3,7 +3,7 @@ SELECT * FROM sites WHERE public_id=$1 FOR UPDATE;
 
 -- name: UpdateNavigationSite :one
 UPDATE sites SET content_rating=$2,legacy_detail=false,primary_category=$3,secondary_categories=$4,
- navigation_tags=$5,supported_languages=$6,revision=revision+1,updated_at=transaction_timestamp()
+ navigation_tags=$5,revision=revision+1,updated_at=transaction_timestamp()
 WHERE id=$1 RETURNING *;
 
 -- name: AddNavigationReview :exec
@@ -89,7 +89,6 @@ WITH scored AS MATERIALIZED (
  WHERE (cardinality(sqlc.arg(categories)::text[])=0 OR s.primary_category=ANY(sqlc.arg(categories)::text[])
   OR s.secondary_categories && sqlc.arg(categories)::text[])
  AND (cardinality(sqlc.arg(tags)::text[])=0 OR s.navigation_tags && sqlc.arg(tags)::text[])
- AND (cardinality(sqlc.arg(languages)::text[])=0 OR s.supported_languages && sqlc.arg(languages)::text[])
  AND (sqlc.arg(keyword)::text='' OR f.in_name OR f.in_summary OR s.navigation_tags && sqlc.arg(search_tags)::text[])
 ), anchor AS MATERIALIZED (
  SELECT * FROM scored WHERE public_id=sqlc.arg(after_id)::text
@@ -102,7 +101,7 @@ SELECT (SELECT count(*) FROM scored)::bigint AS total, (sqlc.arg(after_id)::text
  coalesce(jsonb_agg(jsonb_build_object(
   'public_id',s.public_id,'slug',s.slug,'primary_category',s.primary_category,'secondary_categories',s.secondary_categories,
    'heat_qualified',sqlc.arg(use_heat)::boolean AND p.metric>0,
-   'tags',s.navigation_tags,'languages',s.supported_languages,'first_published_at',s.first_published_at,
+   'tags',s.navigation_tags,'first_published_at',s.first_published_at,
    'logo_asset_key',s.logo_asset_key,'visit_url',a.url,
    'localizations',coalesce((SELECT jsonb_agg(jsonb_build_object('locale',l.locale,'name',l.name,'summary',l.summary) ORDER BY l.locale)
     FROM site_localizations l WHERE l.site_id=s.id),'[]'::jsonb)) ORDER BY p.metric DESC,p.name_key,p.public_id),'[]'::jsonb)::jsonb AS items
@@ -135,7 +134,7 @@ WITH featured AS MATERIALIZED (
  UNION ALL SELECT 'random','',0,id FROM random_site
 )
 SELECT x.section,x.key,jsonb_build_object('public_id',s.public_id,'slug',s.slug,'primary_category',s.primary_category,
- 'secondary_categories',s.secondary_categories,'tags',s.navigation_tags,'languages',s.supported_languages,'first_published_at',s.first_published_at,
+ 'secondary_categories',s.secondary_categories,'tags',s.navigation_tags,'first_published_at',s.first_published_at,
  'logo_asset_key',s.logo_asset_key,'visit_url',a.url,
  'cover_asset_key',CASE WHEN x.section='featured' THEN s.featured_cover_asset_key END,
  'rank',CASE WHEN x.section='trending' THEN x.rank END,
@@ -149,14 +148,9 @@ ORDER BY x.section,x.rank,x.key;
 SELECT c.code::text AS code,count(*)::bigint AS count FROM site_public_navigation s
 CROSS JOIN LATERAL unnest(ARRAY[s.primary_category]||s.secondary_categories) AS c(code) WHERE c.code IS NOT NULL GROUP BY c.code;
 
--- name: NavigationLanguages :many
-SELECT DISTINCT c.code::text AS code FROM site_public_navigation s
-CROSS JOIN LATERAL unnest(s.supported_languages) AS c(code)
-ORDER BY code;
-
 -- name: NavigationRelated :one
 WITH subject AS MATERIALIZED (
- SELECT origin.id,origin.primary_category,origin.secondary_categories,origin.navigation_tags,origin.supported_languages
+ SELECT origin.id,origin.primary_category,origin.secondary_categories,origin.navigation_tags
  FROM site_public_navigation origin WHERE origin.public_id=$1
 ), scored AS (
  SELECT n.id,n.public_id,
@@ -164,7 +158,6 @@ WITH subject AS MATERIALIZED (
    WHEN n.primary_category=ANY(s.secondary_categories) OR s.primary_category=ANY(n.secondary_categories) THEN 2
    WHEN n.secondary_categories&&s.secondary_categories THEN 1 ELSE 0 END AS category_score,
   (SELECT count(*) FROM unnest(n.navigation_tags) t(code) WHERE t.code=ANY(s.navigation_tags)) AS tags_score,
-  (SELECT count(*) FROM unnest(n.supported_languages) l(code) WHERE l.code=ANY(s.supported_languages)) AS languages_score,
   coalesce(h.score,0) AS heat_score
  FROM subject s JOIN site_public_navigation n ON n.id<>s.id
  LEFT JOIN site_navigation_heat h ON sqlc.arg(use_heat)::boolean AND h.site_id=n.id
@@ -172,13 +165,13 @@ WITH subject AS MATERIALIZED (
   OR n.secondary_categories&&(ARRAY[s.primary_category]||s.secondary_categories)
   OR n.navigation_tags&&s.navigation_tags
 ), picks AS MATERIALIZED (
- SELECT id,row_number() OVER (ORDER BY category_score DESC,tags_score DESC,languages_score DESC,heat_score DESC,public_id COLLATE "C") AS ordinal
+ SELECT id,row_number() OVER (ORDER BY category_score DESC,tags_score DESC,heat_score DESC,public_id COLLATE "C") AS ordinal
  FROM scored WHERE category_score>0 OR tags_score>=2
  ORDER BY ordinal LIMIT 6
 )
 SELECT coalesce((SELECT jsonb_agg(jsonb_build_object(
  'public_id',s.public_id,'slug',s.slug,'primary_category',s.primary_category,'secondary_categories',s.secondary_categories,
- 'tags',s.navigation_tags,'languages',s.supported_languages,'first_published_at',s.first_published_at,
+ 'tags',s.navigation_tags,'first_published_at',s.first_published_at,
  'logo_asset_key',s.logo_asset_key,
  'localizations',coalesce((SELECT jsonb_agg(jsonb_build_object('locale',l.locale,'name',l.name) ORDER BY l.locale)
   FROM site_localizations l WHERE l.site_id=s.id),'[]'::jsonb)) ORDER BY p.ordinal)

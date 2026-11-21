@@ -48,15 +48,10 @@ function addedDate(value: string | null, locale: Locale) {
   return new Intl.DateTimeFormat(locale === 'zh' ? 'zh-CN' : 'en-GB', { dateStyle: 'medium', timeZone: 'UTC' }).format(new Date(value))
 }
 
-export function languageLabel(code: string, locale: Locale) {
-  return new Intl.DisplayNames([locale], { type: 'language' }).of(code) ?? code
-}
-
 export function SiteCard({ site, ctx, recent, compact }: { site: Card; ctx: CardContext; recent?: boolean; compact?: boolean }) {
   const label = localization(site, ctx.locale)
   const date = recent ? addedDate(site.first_published_at, ctx.locale) : null
-  const facets = [...site.tags.slice(0, 2).map(tag => ctx.tags?.find(term => term.code === tag)?.[ctx.locale] ?? tag),
-    ...site.languages.slice(0, 2).map(code => languageLabel(code, ctx.locale))]
+  const facets = [...site.tags.slice(0, 2).map(tag => ctx.tags?.find(term => term.code === tag)?.[ctx.locale] ?? tag)]
   return <article className={compact ? styles.compactCard : styles.card} data-site-id={site.public_id}>
     <div className={styles.identity}><SiteLogo name={label.name} locale={label.locale} src={site.logo_url} />
       <div><h3><SiteName site={site} ctx={ctx} /></h3><div className={styles.muted}>{categoryLabel(site, ctx.locale)}</div></div>

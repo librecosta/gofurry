@@ -10,7 +10,7 @@ export type Sort = typeof sorts[number]
 export type Term = { code: string; zh: string; en: string }
 export type Card = {
   public_id: string; slug: string; localizations: { locale: Locale; name: string; summary?: string }[]
-  primary_category: CategoryCode | null; tags: string[]; languages: string[]; first_published_at: string | null
+  primary_category: CategoryCode | null; tags: string[]; first_published_at: string | null
   logo_url?: string; cover_url?: string; visit_url?: string; rank?: number
 }
 type Heat = { status: 'ready' | 'cold' | 'stale' }
@@ -20,12 +20,11 @@ export type Home = {
 }
 export type Directory = {
   version: 1; items: Card[]; total: number; next?: string; sort: Sort; effective_sort: Sort
-  heat: Heat; tag_registry: Term[]; language_registry: string[]; interactions: boolean
+  heat: Heat; tag_registry: Term[]; interactions: boolean
 }
 
-export type Criteria = { q: string; category: string[]; tags: string[]; language: string[]; sort?: Sort }
-export const emptyCriteria: Criteria = { q: '', category: [], tags: [], language: [] }
-export const validLanguage = (code: string) => /^[a-z]{2,3}$/.test(code)
+export type Criteria = { q: string; category: string[]; tags: string[]; sort?: Sort }
+export const emptyCriteria: Criteria = { q: '', category: [], tags: [] }
 export const normalizeKeyword = (text: string) => Array.from(text.replace(/\p{Cc}/gu, '').trim()).slice(0, 80).join('')
 const oneOf = (allowed: readonly string[]) => (value: string) => allowed.includes(value)
 
@@ -39,14 +38,14 @@ export function normalizeCriteria(raw: Record<string, unknown>): Criteria {
   const sort = sorts.find(sort => raw.sort === sort)
   return {
     q, category: codes(raw.category, oneOf(categoryCodes)), tags: codes(raw.tags, oneOf(tagCodes)),
-    language: codes(raw.language, validLanguage), sort: sort && sort !== (q ? 'relevance' : 'published_desc') && sort !== 'relevance' ? sort : undefined,
+    sort: sort && sort !== (q ? 'relevance' : 'published_desc') && sort !== 'relevance' ? sort : undefined,
   }
 }
 
 export function criteriaParams(c: Criteria) {
   return {
     q: c.q || undefined, category: c.category.slice().sort().join(',') || undefined,
-    tags: c.tags.slice().sort().join(',') || undefined, language: c.language.slice().sort().join(',') || undefined,
+    tags: c.tags.slice().sort().join(',') || undefined,
     sort: c.sort,
   }
 }
@@ -92,7 +91,7 @@ function card(value: unknown): Card {
   assert(typeof c.public_id === 'string' && /^[0123456789abcdefghjkmnpqrstvwxyz]{16}$/.test(c.public_id) &&
     typeof c.slug === 'string' && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(c.slug) && c.slug.length <= 80 &&
     (c.primary_category == null || typeof c.primary_category === 'string' && oneOf(categoryCodes)(c.primary_category)) && strings(c.tags, 8) &&
-    strings(c.languages, 8) && Array.isArray(c.localizations) && c.localizations.length >= 1 && c.localizations.length <= 2 &&
+    Array.isArray(c.localizations) && c.localizations.length >= 1 && c.localizations.length <= 2 &&
     (c.first_published_at === null || typeof c.first_published_at === 'string') &&
     c.localizations.every(value => {
       const l = object(value)
@@ -100,7 +99,7 @@ function card(value: unknown): Card {
     }))
   return {
     public_id: c.public_id, slug: c.slug, primary_category: (c.primary_category ?? null) as CategoryCode | null, localizations: c.localizations,
-    tags: c.tags, languages: c.languages, first_published_at: c.first_published_at,
+    tags: c.tags, first_published_at: c.first_published_at,
     visit_url: safeBusinessURL(typeof c.visit_url === 'string' ? c.visit_url : undefined),
     logo_url: safeImageURL(typeof c.logo_url === 'string' ? c.logo_url : undefined, 'logo'),
     cover_url: safeImageURL(typeof c.cover_url === 'string' ? c.cover_url : undefined, 'cover'),
@@ -142,10 +141,10 @@ export function decodeDirectory(value: unknown): Directory {
   assert(d.version === 1 && typeof d.total === 'number' && Number.isSafeInteger(d.total) && d.total >= 0 &&
     (d.next === undefined || typeof d.next === 'string' && /^[A-Za-z0-9_-]{1,200}$/.test(d.next)) &&
     Array.isArray(d.tag_registry) && d.tag_registry.length <= 12 && d.tag_registry.every(term) &&
-    (d.language_registry === undefined || strings(d.language_registry, 1024)) && sort && effective)
+    sort && effective)
   return {
     version: 1, items: cards(d.items, 24), total: d.total, next: d.next, sort, effective_sort: effective,
-    heat: heat(d.heat), tag_registry: d.tag_registry, language_registry: (d.language_registry ?? []).filter(validLanguage), interactions: d.interactions === true,
+    heat: heat(d.heat), tag_registry: d.tag_registry, interactions: d.interactions === true,
   }
 }
 

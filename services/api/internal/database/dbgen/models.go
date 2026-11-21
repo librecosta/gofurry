@@ -478,7 +478,6 @@ type Site struct {
 	PrimaryCategory       pgtype.Text        `json:"primary_category"`
 	SecondaryCategories   []string           `json:"secondary_categories"`
 	NavigationTags        []string           `json:"navigation_tags"`
-	SupportedLanguages    []string           `json:"supported_languages"`
 	LogoAssetKey          pgtype.Text        `json:"logo_asset_key"`
 	FeaturedCoverAssetKey pgtype.Text        `json:"featured_cover_asset_key"`
 }
@@ -611,7 +610,6 @@ type SitePublicHistory struct {
 	PrimaryCategory     pgtype.Text        `json:"primary_category"`
 	SecondaryCategories []string           `json:"secondary_categories"`
 	NavigationTags      []string           `json:"navigation_tags"`
-	SupportedLanguages  []string           `json:"supported_languages"`
 }
 
 type SitePublicNavigation struct {
@@ -630,7 +628,6 @@ type SitePublicNavigation struct {
 	PrimaryCategory     pgtype.Text        `json:"primary_category"`
 	SecondaryCategories []string           `json:"secondary_categories"`
 	NavigationTags      []string           `json:"navigation_tags"`
-	SupportedLanguages  []string           `json:"supported_languages"`
 }
 
 type SiteTechnologySnapshot struct {

@@ -20,7 +20,8 @@ test('public Site API preserves identity and isolates facts, visibility and rank
   expect(response.headers()['x-gofurry-interactions']).toBe('enabled')
   const text = await response.text()
   const profile = JSON.parse(text)
-  expect(profile).toMatchObject({ reviewed: true, primary_category: 'community', secondary_categories: ['knowledge'], supported_languages: ['en', 'zh'] })
+  expect(profile).toMatchObject({ reviewed: true, primary_category: 'community', secondary_categories: ['knowledge'] })
+  expect(profile).not.toHaveProperty('supported_languages')
   expect(profile.addresses.map((address: { kind: string }) => address.kind)).toEqual(['primary', 'alternate'])
   expect(profile.logo_url).toMatch(/\/sites\/logos\/[a-f0-9]{64}\.webp$/)
   expect(profile.technology).toEqual(expect.arrayContaining([

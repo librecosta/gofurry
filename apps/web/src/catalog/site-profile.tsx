@@ -3,7 +3,7 @@ import { ArrowDownIcon } from '@phosphor-icons/react/dist/ssr/ArrowDown'
 import { ArrowUpRightIcon } from '@phosphor-icons/react/dist/ssr/ArrowUpRight'
 import { BookOpenIcon } from '@phosphor-icons/react/dist/ssr/BookOpen'
 import { CaretRightIcon } from '@phosphor-icons/react/dist/ssr/CaretRight'
-import { SiteCard, SiteLogo, languageLabel } from '../navigation/cards'
+import { SiteCard, SiteLogo } from '../navigation/cards'
 import { criteriaParams, directoryPath, emptyCriteria, type Criteria } from '../navigation/data'
 import { SitesFrame } from '../navigation/frame'
 import { categories, copy as navigationCopy } from '../navigation/messages'
@@ -100,7 +100,6 @@ export function SiteProfile({ data }: { data: DetailPageData }) {
             {detail.secondaryCategories.map(category => <li key={category}>
               <Link to={directory} search={to({ category: [category] })}>{categories[category][locale]}</Link></li>)}
             {detail.tags.slice(0, 3).map(tag => <li key={tag.code}><Link to={directory} search={to({ tags: [tag.code] })}>{tag[locale]}</Link></li>)}
-            {detail.languages.slice(0, 3).map(code => <li key={code}><Link to={directory} search={to({ language: [code] })}>{languageLabel(code, locale)}</Link></li>)}
           </ul>}
           {(primary || hasMain || hasAside) && <div className={styles.actions}>
             {primary && <a className={styles.visit} href={primary.url} target="_blank" rel="noopener noreferrer" aria-description={channel.newTab}
@@ -124,8 +123,6 @@ export function SiteProfile({ data }: { data: DetailPageData }) {
                 <Link key={category} to={directory} search={to({ category: [category] })}>{categories[category][locale]}</Link>)}</dd></div>}
               {detail.tags.length > 0 && <div><dt>{channel.tags}</dt><dd>{detail.tags.map(tag =>
                 <Link key={tag.code} to={directory} search={to({ tags: [tag.code] })}>{tag[locale]}</Link>)}</dd></div>}
-              {detail.languages.length > 0 && <div><dt>{channel.languages}</dt><dd>{detail.languages.map(code =>
-                <Link key={code} to={directory} search={to({ language: [code] })}>{languageLabel(code, locale)}</Link>)}</dd></div>}
               {primary && <div><dt>{m.primaryAddress}</dt><dd><a href={primary.url} target="_blank" rel="noopener noreferrer" onClick={visit} onAuxClick={visit}>
                 {host(primary.url)} <ArrowUpRightIcon size={13} aria-hidden="true" /></a></dd></div>}
             </dl>

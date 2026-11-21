@@ -5,6 +5,14 @@ ON CONFLICT (public_id) DO NOTHING RETURNING *;
 -- name: LockSite :one
 SELECT * FROM sites WHERE id=$1 FOR UPDATE;
 
+-- name: LockSiteIntakeAddress :exec
+SELECT pg_advisory_xact_lock(hashtextextended('gofurry/site-intake/' || sqlc.arg(address_key)::text,0));
+
+-- name: FindSiteByActiveAddress :one
+SELECT s.public_id FROM site_addresses a JOIN sites s ON s.id=a.site_id
+WHERE a.active AND a.url=ANY(sqlc.arg(urls)::text[])
+ORDER BY (s.status='archived'),(a.kind<>'primary'),s.public_id LIMIT 1;
+
 -- name: UpdateSite :one
 UPDATE sites SET slug=$2,revision=revision+1,updated_at=transaction_timestamp()
 WHERE id=$1 RETURNING *;
@@ -27,14 +35,9 @@ ON CONFLICT (site_id,locale) DO UPDATE SET name=excluded.name,summary=excluded.s
 -- name: DisableSiteAddresses :exec
 UPDATE site_addresses SET active=false WHERE site_id=$1 AND active;
 
--- name: CanPublishSite :one
-SELECT (EXISTS(SELECT 1 FROM sites s WHERE s.id=sqlc.arg(id) AND s.content_rating='sfw')
- AND EXISTS(SELECT 1 FROM site_localizations l WHERE l.site_id=sqlc.arg(id))
- AND EXISTS(SELECT 1 FROM site_addresses a WHERE a.site_id=sqlc.arg(id) AND active AND kind='primary'))::boolean;
-
--- name: HasSitePresentation :one
-SELECT (EXISTS(SELECT 1 FROM site_localizations l WHERE l.site_id=sqlc.arg(id)::uuid)
- AND EXISTS(SELECT 1 FROM site_addresses a WHERE a.site_id=sqlc.arg(id)::uuid AND active AND kind='primary'))::boolean;
+-- name: SitePublicationFields :one
+SELECT EXISTS(SELECT 1 FROM site_localizations l WHERE l.site_id=sqlc.arg(id)::uuid AND btrim(l.name)<>'') AS has_name,
+ EXISTS(SELECT 1 FROM site_addresses a WHERE a.site_id=sqlc.arg(id)::uuid AND active AND kind='primary') AS has_address;
 
 -- name: SaveSiteAddress :exec
 INSERT INTO site_addresses (id,site_id,url,kind) VALUES ($1,$2,$3,$4)
@@ -45,7 +48,7 @@ SELECT e.public_id,e.slug,COALESCE((SELECT jsonb_agg(jsonb_build_object('locale'
  'body',CASE WHEN n.id IS NOT NULL THEN l.body ELSE '' END) ORDER BY l.locale)
  FROM site_localizations l WHERE l.site_id=e.id),'[]'::jsonb)::jsonb AS localizations,
  (n.id IS NOT NULL)::boolean AS interaction_eligible,
- n.primary_category,n.secondary_categories,n.navigation_tags,n.supported_languages,s.logo_asset_key,
+ n.primary_category,n.secondary_categories,n.navigation_tags,s.logo_asset_key,
  COALESCE((SELECT jsonb_agg(jsonb_build_object('kind',x.kind,'url',x.url) ORDER BY x.kind DESC,x.url COLLATE "C")
  FROM site_addresses x WHERE x.site_id=n.id AND x.active),'[]'::jsonb)::jsonb AS addresses
 FROM site_public_history e JOIN sites s ON s.id=e.id LEFT JOIN site_public_navigation n ON n.id=e.id

@@ -59,7 +59,7 @@ func changeSiteVisibility(ctx context.Context, q *dbgen.Queries, site dbgen.Site
 		if site.Status != Draft || site.PublishedAt.Valid {
 			return site, ErrConflict
 		}
-		if err = requireSitePublication(ctx, q, site.ID); err == nil {
+		if err = requireSitePublication(ctx, q, site); err == nil {
 			next, err = q.ChangeSiteStatus(ctx, dbgen.ChangeSiteStatusParams{ID: site.ID, NewStatus: Published})
 		}
 	case "archive":
@@ -77,7 +77,7 @@ func changeSiteVisibility(ctx context.Context, q *dbgen.Queries, site dbgen.Site
 			return site, ErrConflict
 		}
 		if !site.LegacyDetail {
-			err = requireSitePublication(ctx, q, site.ID)
+			err = requireSitePublication(ctx, q, site)
 		}
 		if err == nil {
 			next, err = q.RestoreSitePublication(ctx, site.ID)

@@ -6,13 +6,13 @@ import { SlidersHorizontalIcon } from '@phosphor-icons/react/dist/ssr/SlidersHor
 import { XIcon } from '@phosphor-icons/react/dist/ssr/X'
 import { categoryCodes } from './contracts'
 import { apiQuery, criteriaParams, criteriaQuery, decodeDirectory, emptyCriteria, normalizeCriteria, normalizeKeyword, sorts, type Criteria, type Directory, type Sort, type Term } from './data'
-import { languageLabel, SiteCard } from './cards'
+import { SiteCard } from './cards'
 import { categories, copy } from './messages'
 import type { Page } from './load'
 import { SitesFrame } from './frame'
 import styles from './sites.module.scss'
 
-type Dimension = 'category' | 'tags' | 'language'
+type Dimension = 'category' | 'tags'
 type Option = { code: string; label: string }
 function toggle(criteria: Criteria, dimension: Dimension, code: string): Criteria {
   const values = criteria[dimension]
@@ -26,16 +26,16 @@ function FilterDialog({ criteria, options, locale, apply }: { criteria: Criteria
   const [draft, setDraft] = useState(criteria)
   const trigger = useRef<HTMLButtonElement>(null)
   const dimensions = [
-    ['category', m.categories], ['tags', m.tags], ['language', m.languages],
+    ['category', m.categories], ['tags', m.tags],
   ] as const
-  const active = criteria.category.length + criteria.tags.length + criteria.language.length
+  const active = criteria.category.length + criteria.tags.length
   return <Dialog.Root open={open} onOpenChange={value => { if (value) setDraft(criteria); setOpen(value) }}>
     <Dialog.Trigger ref={trigger} className={styles.outline}><SlidersHorizontalIcon size={17} aria-hidden="true" />{m.filters}{active ? ` (${active})` : ''}</Dialog.Trigger>
     <Dialog.Portal>
       <Dialog.Backdrop className={styles.backdrop} />
       <Dialog.Popup className={styles.dialog} finalFocus={trigger}>
         <Dialog.Title>{m.filters}</Dialog.Title>
-        <Dialog.Description>{m.languageHint}</Dialog.Description>
+        <Dialog.Description>{m.filterHint}</Dialog.Description>
         {dimensions.map(([key, label]) => options[key].length > 0 && <fieldset key={key} className={styles.filterGroup}>
           <legend>{label}</legend>
           <div>{options[key].map(option => <label key={option.code}><input type="checkbox" checked={draft[key].includes(option.code)}
@@ -215,11 +215,10 @@ export function DirectoryPage({ page, data }: { page: Page; data: Directory }) {
 
   const options = {
     category: categoryCodes.map(code => ({ code, label: categories[code][locale] })),
-    tags: data.tag_registry.map((tag: Term) => ({ code: tag.code, label: tag[locale] })),
-    language: [...new Set([...data.language_registry, ...criteria.language])].map(code => ({ code, label: languageLabel(code, locale) }))
+    tags: data.tag_registry.map((tag: Term) => ({ code: tag.code, label: tag[locale] }))
       .sort((a, b) => a.label.localeCompare(b.label, locale)),
   }
-  const chips = (['category', 'tags', 'language'] as const).flatMap(key => criteria[key].map(code => ({ key, code,
+  const chips = (['category', 'tags'] as const).flatMap(key => criteria[key].map(code => ({ key, code,
     label: options[key].find(option => option.code === code)?.label ?? code })))
   const ctx = { locale, region, interactions: data.interactions, tags: data.tag_registry }
   const active = Boolean(key)

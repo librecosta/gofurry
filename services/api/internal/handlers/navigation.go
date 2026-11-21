@@ -49,8 +49,6 @@ func NavigationDirectory(service *navigation.Service, region string) fiber.Handl
 				f.Categories = strings.Split(text, ",")
 			case "tags":
 				f.Tags = strings.Split(text, ",")
-			case "language":
-				f.Languages = strings.Split(text, ",")
 			case "sort":
 				f.Sort = text
 			case "locale":
