@@ -252,36 +252,7 @@ func (o *Operations) games(g fiber.Router) {
 		return c.JSON(rows)
 	})
 	o.features(g, "/games/features/:slot", "game.feature", false)
-	g.Get("/games/editorial-tags", func(c fiber.Ctx) error {
-		v, err := search(c, "q")
-		if err != nil {
-			return err
-		}
-		items, err := dbgen.New(o.Pool).SearchEditorialTags(c.Context(), v.Get("q"))
-		if err != nil {
-			return failure(err)
-		}
-		return c.JSON(items)
-	})
-	g.Get("/games/editorial-tag-categories", func(c fiber.Ctx) error {
-		if _, err := search(c); err != nil {
-			return err
-		}
-		items, err := dbgen.New(o.Pool).ListEditorialTagCategories(c.Context())
-		if err != nil {
-			return failure(err)
-		}
-		return c.JSON(items)
-	})
-	g.Post("/games/editorial-tags", editOnly, writeOperation(o, "game.tag.create", func(ctx context.Context, s *catalog.Service, _ *dbgen.Queries, _ string, in catalog.EditorialTagDefinition, _ catalog.PublicationDecision) (catalog.ManagementResult, error) {
-		return s.CreateManagementEditorialTag(ctx, in)
-	}))
-	type archiveTag struct {
-		Code string `json:"code"`
-	}
-	g.Post("/games/editorial-tags/archive", editOnly, writeOperation(o, "game.tag.archive", func(ctx context.Context, s *catalog.Service, _ *dbgen.Queries, _ string, in archiveTag, _ catalog.PublicationDecision) (catalog.ManagementResult, error) {
-		return s.ArchiveManagementEditorialTag(ctx, in.Code)
-	}))
+	o.editorialDefinitions(g)
 	g.Get("/games/:id/tags", readOperation(o.Catalog.ManagementGameTags))
 	g.Patch("/games/:id/tags", editOnly, writeOperation(o, "game.tags", func(ctx context.Context, s *catalog.Service, _ *dbgen.Queries, id string, in catalog.EditorialTagEdit, _ catalog.PublicationDecision) (catalog.ManagementResult, error) {
 		return s.EditManagementGameTags(ctx, id, in)

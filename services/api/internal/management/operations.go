@@ -63,6 +63,9 @@ func failure(err error) error {
 		return fiber.NewError(fiber.StatusBadRequest, err.Error())
 	case errors.Is(err, catalog.ErrGamePreviewChanged):
 		return fiber.NewError(fiber.StatusConflict, err.Error())
+	case errors.Is(err, catalog.ErrEditorialExists), errors.Is(err, catalog.ErrEditorialCategoryArchived),
+		errors.Is(err, catalog.ErrEditorialCategoryInUse), errors.Is(err, catalog.ErrEditorialTagInUse):
+		return fiber.NewError(fiber.StatusConflict, err.Error())
 	case errors.As(err, &duplicate):
 		return fiber.NewError(fiber.StatusConflict, duplicate.Error())
 	case errors.Is(err, catalog.ErrSiteNameRequired), errors.Is(err, catalog.ErrSiteChineseRequired),
@@ -91,6 +94,12 @@ func writeOperation[T any](o *Operations, action string, fn func(context.Context
 		id := c.Params("id")
 		if id != "" && !catalog.ValidPublicID(id) {
 			return fiber.ErrBadRequest
+		}
+		if code := c.Params("code"); code != "" {
+			if !catalog.ValidEditorialCode(code) {
+				return fiber.ErrBadRequest
+			}
+			id = code
 		}
 		actor := Current(c)
 		result, err := o.Catalog.Manage(c.Context(), receipt(c, action), func(ctx context.Context, s *catalog.Service, q *dbgen.Queries) (catalog.ManagementResult, error) {

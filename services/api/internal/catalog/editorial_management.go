@@ -2,9 +2,7 @@ package catalog
 
 import (
 	"context"
-	json "encoding/json/v2"
 	"errors"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -72,43 +70,6 @@ func (s *Service) BulkEditSites(ctx context.Context, in BulkSiteEdit, region, ac
 
 const maxEditorialRelations = 128
 
-var editorialCode = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
-
-type EditorialTagDefinition struct {
-	Code          string         `json:"code"`
-	Category      string         `json:"category"`
-	Localizations []Localization `json:"localizations"`
-}
-
-func (s *Service) CreateManagementEditorialTag(ctx context.Context, in EditorialTagDefinition) (ManagementResult, error) {
-	if len(in.Code) > 64 || !editorialCode.MatchString(in.Code) ||
-		len(in.Category) > 64 || !editorialCode.MatchString(in.Category) || len(in.Localizations) == 0 {
-		return ManagementResult{}, ErrInvalid
-	}
-	clean, err := normalizeEditorial(Editorial{Slug: in.Code, Localizations: in.Localizations}, "")
-	if err != nil {
-		return ManagementResult{}, err
-	}
-	names, err := json.Marshal(clean.Localizations)
-	if err != nil {
-		return ManagementResult{}, ErrInvalid
-	}
-	return write(ctx, s, func(ctx context.Context, q *dbgen.Queries) (ManagementResult, error) {
-		code, err := q.CreateEditorialTag(ctx, dbgen.CreateEditorialTagParams{TagID: uuid.NewV7(), TagCode: in.Code, CategoryCode: in.Category, Names: names})
-		return ManagementResult{Target: strings.ReplaceAll(code, "-", "_")}, editorialReference(err)
-	})
-}
-
-func (s *Service) ArchiveManagementEditorialTag(ctx context.Context, code string) (ManagementResult, error) {
-	if len(code) > 64 || !editorialCode.MatchString(code) {
-		return ManagementResult{}, ErrInvalid
-	}
-	return write(ctx, s, func(ctx context.Context, q *dbgen.Queries) (ManagementResult, error) {
-		code, err := q.ArchiveEditorialTag(ctx, code)
-		return ManagementResult{Target: strings.ReplaceAll(code, "-", "_")}, err
-	})
-}
-
 type EditorialTagAssignment struct {
 	Code string `json:"code"`
 	Role string `json:"role"`
@@ -149,7 +110,7 @@ func (s *Service) EditManagementGameTags(ctx context.Context, id string, in Edit
 	desired := make(map[string]string, len(in.Tags))
 	roles := map[string]bool{}
 	for _, tag := range in.Tags {
-		if len(tag.Code) > 64 || !editorialCode.MatchString(tag.Code) || desired[tag.Code] != "" ||
+		if !ValidEditorialCode(tag.Code) || desired[tag.Code] != "" ||
 			tag.Role != "normal" && tag.Role != "primary" && tag.Role != "secondary" ||
 			tag.Role != "normal" && roles[tag.Role] {
 			return ManagementResult{}, ErrInvalid
@@ -157,6 +118,9 @@ func (s *Service) EditManagementGameTags(ctx context.Context, id string, in Edit
 		desired[tag.Code], roles[tag.Role] = tag.Role, true
 	}
 	return write(ctx, s, func(ctx context.Context, q *dbgen.Queries) (ManagementResult, error) {
+		if err := q.LockEditorialDefinitions(ctx); err != nil {
+			return ManagementResult{}, err
+		}
 		row, err := q.LockGamePublicID(ctx, id)
 		if err != nil {
 			return ManagementResult{}, err
@@ -263,6 +227,9 @@ func (s *Service) EditManagementCollectionRules(ctx context.Context, id string, 
 		return ManagementResult{}, ErrInvalid
 	}
 	return write(ctx, s, func(ctx context.Context, q *dbgen.Queries) (ManagementResult, error) {
+		if err := q.LockEditorialDefinitions(ctx); err != nil {
+			return ManagementResult{}, err
+		}
 		row, err := q.LockGameCollection(ctx, id)
 		if err != nil {
 			return ManagementResult{}, err
@@ -294,7 +261,7 @@ func editCollectionTags(ctx context.Context, q *dbgen.Queries, id uuid.UUID, des
 	for _, row := range rows {
 		current = append(current, row.Code)
 	}
-	return changeEditorialKeys(current, desired, func(v string) bool { return len(v) <= 64 && editorialCode.MatchString(v) },
+	return changeEditorialKeys(current, desired, ValidEditorialCode,
 		func(code string) error {
 			return q.RemoveGameCollectionRule(ctx, dbgen.RemoveGameCollectionRuleParams{CollectionID: id, Code: code})
 		}, func(code string) error {

@@ -81,20 +81,29 @@ func NormalizeEditorial(input Editorial) (Editorial, error) { return normalizeEd
 
 func ValidPublicID(value string) bool { return publicPattern.MatchString(value) }
 
-func normalizeEditorial(in Editorial, previousSlug string) (Editorial, error) {
-	if len(in.Localizations) > 2 {
-		return Editorial{}, ErrInvalid
+func normalizeLocalizations(localizations []Localization) ([]Localization, error) {
+	if len(localizations) > 2 {
+		return nil, ErrInvalid
 	}
-	in.Localizations = slices.Clone(in.Localizations)
+	localizations = slices.Clone(localizations)
 	seen := map[string]bool{}
-	for i, l := range in.Localizations {
+	for i, l := range localizations {
 		l.Name, l.Summary = strings.TrimSpace(l.Name), strings.TrimSpace(l.Summary)
 		if (l.Locale != "en" && l.Locale != "zh") || seen[l.Locale] ||
 			!validText(l.Name, 1, 160, false) || !validText(l.Summary, 0, 2000, true) {
-			return Editorial{}, ErrInvalid
+			return nil, ErrInvalid
 		}
 		seen[l.Locale] = true
-		in.Localizations[i] = l
+		localizations[i] = l
+	}
+	return localizations, nil
+}
+
+func normalizeEditorial(in Editorial, previousSlug string) (Editorial, error) {
+	var err error
+	in.Localizations, err = normalizeLocalizations(in.Localizations)
+	if err != nil {
+		return Editorial{}, err
 	}
 
 	slug := strings.TrimSpace(in.Slug)

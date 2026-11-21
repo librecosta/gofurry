@@ -12,56 +12,123 @@ import (
 	"uuid"
 )
 
-const archiveEditorialTag = `-- name: ArchiveEditorialTag :one
-UPDATE game_editorial_tags SET archived_at=now() WHERE code=$1 AND archived_at IS NULL RETURNING code
+const createEditorialCategory = `-- name: CreateEditorialCategory :one
+INSERT INTO game_editorial_tag_categories (id,code,localizations,sort_order)
+SELECT $1::uuid,$2::text,$3::jsonb,$4::integer
+WHERE NOT $5::boolean OR NOT EXISTS (
+ SELECT 1 FROM game_editorial_tag_categories c
+ WHERE c.localizations @> $3 AND $3 @> c.localizations)
+ON CONFLICT (code) DO NOTHING RETURNING game_editorial_tag_categories.code
 `
 
-func (q *Queries) ArchiveEditorialTag(ctx context.Context, code string) (string, error) {
-	row := q.db.QueryRow(ctx, archiveEditorialTag, code)
-	var code_2 string
-	err := row.Scan(&code_2)
-	return code_2, err
+type CreateEditorialCategoryParams struct {
+	ID         uuid.UUID `json:"id"`
+	Code       string    `json:"code"`
+	Names      []byte    `json:"names"`
+	SortOrder  int32     `json:"sort_order"`
+	CheckNames bool      `json:"check_names"`
 }
 
-const createEditorialTag = `-- name: CreateEditorialTag :one
-INSERT INTO game_editorial_tags (id,category_id,code,localizations)
-SELECT $1::uuid,c.id,$2::text,$3::jsonb
-FROM game_editorial_tag_categories c WHERE c.code=$4 AND c.archived_at IS NULL
-RETURNING game_editorial_tags.code
-`
-
-type CreateEditorialTagParams struct {
-	TagID        uuid.UUID `json:"tag_id"`
-	TagCode      string    `json:"tag_code"`
-	Names        []byte    `json:"names"`
-	CategoryCode string    `json:"category_code"`
-}
-
-func (q *Queries) CreateEditorialTag(ctx context.Context, arg CreateEditorialTagParams) (string, error) {
-	row := q.db.QueryRow(ctx, createEditorialTag,
-		arg.TagID,
-		arg.TagCode,
+func (q *Queries) CreateEditorialCategory(ctx context.Context, arg CreateEditorialCategoryParams) (string, error) {
+	row := q.db.QueryRow(ctx, createEditorialCategory,
+		arg.ID,
+		arg.Code,
 		arg.Names,
-		arg.CategoryCode,
+		arg.SortOrder,
+		arg.CheckNames,
 	)
 	var code string
 	err := row.Scan(&code)
 	return code, err
 }
 
+const createEditorialTag = `-- name: CreateEditorialTag :one
+INSERT INTO game_editorial_tags (id,category_id,code,localizations)
+SELECT $1::uuid,$2::uuid,$3::text,$4::jsonb
+WHERE NOT $5::boolean OR NOT EXISTS (
+ SELECT 1 FROM game_editorial_tags t WHERE t.category_id=$2
+ AND t.localizations @> $4 AND $4 @> t.localizations)
+ON CONFLICT (code) DO NOTHING RETURNING game_editorial_tags.code
+`
+
+type CreateEditorialTagParams struct {
+	TagID      uuid.UUID `json:"tag_id"`
+	CategoryID uuid.UUID `json:"category_id"`
+	TagCode    string    `json:"tag_code"`
+	Names      []byte    `json:"names"`
+	CheckNames bool      `json:"check_names"`
+}
+
+func (q *Queries) CreateEditorialTag(ctx context.Context, arg CreateEditorialTagParams) (string, error) {
+	row := q.db.QueryRow(ctx, createEditorialTag,
+		arg.TagID,
+		arg.CategoryID,
+		arg.TagCode,
+		arg.Names,
+		arg.CheckNames,
+	)
+	var code string
+	err := row.Scan(&code)
+	return code, err
+}
+
+const editorialCategoryHasTags = `-- name: EditorialCategoryHasTags :one
+SELECT EXISTS (SELECT 1 FROM game_editorial_tags WHERE category_id=$1 AND archived_at IS NULL)::boolean
+`
+
+func (q *Queries) EditorialCategoryHasTags(ctx context.Context, categoryID uuid.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, editorialCategoryHasTags, categoryID)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const editorialTagCategoryArchived = `-- name: EditorialTagCategoryArchived :one
+SELECT (archived_at IS NOT NULL)::boolean FROM game_editorial_tag_categories WHERE id=$1
+`
+
+func (q *Queries) EditorialTagCategoryArchived(ctx context.Context, id uuid.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, editorialTagCategoryArchived, id)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const editorialTagIsReferenced = `-- name: EditorialTagIsReferenced :one
+SELECT (EXISTS (SELECT 1 FROM game_editorial_tag_members WHERE tag_id=$1::uuid)
+ OR EXISTS (SELECT 1 FROM game_collection_tag_rules WHERE tag_id=$1::uuid))::boolean
+`
+
+func (q *Queries) EditorialTagIsReferenced(ctx context.Context, tagID uuid.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, editorialTagIsReferenced, tagID)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const listEditorialTagCategories = `-- name: ListEditorialTagCategories :many
 SELECT code,coalesce((SELECT l->>'name' FROM jsonb_array_elements(localizations) l
  ORDER BY (l->>'locale'='zh') DESC LIMIT 1),code)::text AS name
-FROM game_editorial_tag_categories WHERE archived_at IS NULL ORDER BY sort_order,code LIMIT 128
+FROM game_editorial_tag_categories
+WHERE ($1::boolean OR archived_at IS NULL)
+ AND (strpos(code,lower($2::text))>0 OR EXISTS (
+  SELECT 1 FROM jsonb_array_elements(localizations) l WHERE strpos(lower(l->>'name'),lower($2))>0)
+  OR $2='')
+ORDER BY sort_order,code LIMIT 128
 `
+
+type ListEditorialTagCategoriesParams struct {
+	IncludeArchived bool   `json:"include_archived"`
+	Keyword         string `json:"keyword"`
+}
 
 type ListEditorialTagCategoriesRow struct {
 	Code string `json:"code"`
 	Name string `json:"name"`
 }
 
-func (q *Queries) ListEditorialTagCategories(ctx context.Context) ([]ListEditorialTagCategoriesRow, error) {
-	rows, err := q.db.Query(ctx, listEditorialTagCategories)
+func (q *Queries) ListEditorialTagCategories(ctx context.Context, arg ListEditorialTagCategoriesParams) ([]ListEditorialTagCategoriesRow, error) {
+	rows, err := q.db.Query(ctx, listEditorialTagCategories, arg.IncludeArchived, arg.Keyword)
 	if err != nil {
 		return nil, err
 	}
@@ -78,6 +145,162 @@ func (q *Queries) ListEditorialTagCategories(ctx context.Context) ([]ListEditori
 		return nil, err
 	}
 	return items, nil
+}
+
+const listManagedEditorialCategories = `-- name: ListManagedEditorialCategories :many
+SELECT c.code,c.localizations,c.sort_order,(c.archived_at IS NOT NULL)::boolean AS archived
+FROM game_editorial_tag_categories c
+WHERE ($1::text='' OR (c.sort_order,c.code) >
+ (SELECT sort_order,code FROM game_editorial_tag_categories WHERE code=$1))
+ AND ($2::text='' OR (c.archived_at IS NOT NULL)=($2='archived'))
+ AND (strpos(c.code,lower($3::text))>0 OR EXISTS (
+  SELECT 1 FROM jsonb_array_elements(c.localizations) l WHERE strpos(lower(l->>'name'),lower($3))>0)
+  OR $3='')
+ORDER BY c.sort_order,c.code LIMIT 31
+`
+
+type ListManagedEditorialCategoriesParams struct {
+	CursorCode string `json:"cursor_code"`
+	State      string `json:"state"`
+	Keyword    string `json:"keyword"`
+}
+
+type ListManagedEditorialCategoriesRow struct {
+	Code          string `json:"code"`
+	Localizations []byte `json:"localizations"`
+	SortOrder     int32  `json:"sort_order"`
+	Archived      bool   `json:"archived"`
+}
+
+func (q *Queries) ListManagedEditorialCategories(ctx context.Context, arg ListManagedEditorialCategoriesParams) ([]ListManagedEditorialCategoriesRow, error) {
+	rows, err := q.db.Query(ctx, listManagedEditorialCategories, arg.CursorCode, arg.State, arg.Keyword)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListManagedEditorialCategoriesRow{}
+	for rows.Next() {
+		var i ListManagedEditorialCategoriesRow
+		if err := rows.Scan(
+			&i.Code,
+			&i.Localizations,
+			&i.SortOrder,
+			&i.Archived,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listManagedEditorialTags = `-- name: ListManagedEditorialTags :many
+SELECT t.code,c.code AS category,t.localizations,(t.archived_at IS NOT NULL)::boolean AS archived,
+ (c.archived_at IS NOT NULL)::boolean AS category_archived,
+ coalesce((SELECT l->>'name' FROM jsonb_array_elements(c.localizations) l
+  ORDER BY (l->>'locale'='zh') DESC LIMIT 1),c.code)::text AS category_name
+FROM game_editorial_tags t JOIN game_editorial_tag_categories c ON c.id=t.category_id
+WHERE t.code>$1::text
+ AND ($2::text='' OR c.code=$2)
+ AND ($3::text='' OR (t.archived_at IS NOT NULL)=($3='archived'))
+ AND (strpos(t.code,lower($4::text))>0 OR EXISTS (
+  SELECT 1 FROM jsonb_array_elements(t.localizations) l WHERE strpos(lower(l->>'name'),lower($4))>0)
+  OR $4='')
+ORDER BY t.code LIMIT 31
+`
+
+type ListManagedEditorialTagsParams struct {
+	CursorCode string `json:"cursor_code"`
+	Category   string `json:"category"`
+	State      string `json:"state"`
+	Keyword    string `json:"keyword"`
+}
+
+type ListManagedEditorialTagsRow struct {
+	Code             string `json:"code"`
+	Category         string `json:"category"`
+	Localizations    []byte `json:"localizations"`
+	Archived         bool   `json:"archived"`
+	CategoryArchived bool   `json:"category_archived"`
+	CategoryName     string `json:"category_name"`
+}
+
+func (q *Queries) ListManagedEditorialTags(ctx context.Context, arg ListManagedEditorialTagsParams) ([]ListManagedEditorialTagsRow, error) {
+	rows, err := q.db.Query(ctx, listManagedEditorialTags,
+		arg.CursorCode,
+		arg.Category,
+		arg.State,
+		arg.Keyword,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListManagedEditorialTagsRow{}
+	for rows.Next() {
+		var i ListManagedEditorialTagsRow
+		if err := rows.Scan(
+			&i.Code,
+			&i.Category,
+			&i.Localizations,
+			&i.Archived,
+			&i.CategoryArchived,
+			&i.CategoryName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const lockEditorialCategory = `-- name: LockEditorialCategory :one
+SELECT id, code, localizations, sort_order, archived_at FROM game_editorial_tag_categories WHERE code=$1 FOR UPDATE
+`
+
+func (q *Queries) LockEditorialCategory(ctx context.Context, code string) (GameEditorialTagCategory, error) {
+	row := q.db.QueryRow(ctx, lockEditorialCategory, code)
+	var i GameEditorialTagCategory
+	err := row.Scan(
+		&i.ID,
+		&i.Code,
+		&i.Localizations,
+		&i.SortOrder,
+		&i.ArchivedAt,
+	)
+	return i, err
+}
+
+const lockEditorialDefinitions = `-- name: LockEditorialDefinitions :exec
+SELECT pg_advisory_xact_lock(hashtextextended('gofurry/editorial-tags',0))
+`
+
+func (q *Queries) LockEditorialDefinitions(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, lockEditorialDefinitions)
+	return err
+}
+
+const lockEditorialTag = `-- name: LockEditorialTag :one
+SELECT id, category_id, code, localizations, archived_at FROM game_editorial_tags WHERE code=$1 FOR UPDATE
+`
+
+func (q *Queries) LockEditorialTag(ctx context.Context, code string) (GameEditorialTag, error) {
+	row := q.db.QueryRow(ctx, lockEditorialTag, code)
+	var i GameEditorialTag
+	err := row.Scan(
+		&i.ID,
+		&i.CategoryID,
+		&i.Code,
+		&i.Localizations,
+		&i.ArchivedAt,
+	)
+	return i, err
 }
 
 const managementCollectionExclusions = `-- name: ManagementCollectionExclusions :many
@@ -292,4 +515,64 @@ func (q *Queries) SearchEditorialTags(ctx context.Context, keyword string) ([]Se
 		return nil, err
 	}
 	return items, nil
+}
+
+const setEditorialCategoryArchived = `-- name: SetEditorialCategoryArchived :exec
+UPDATE game_editorial_tag_categories
+SET archived_at=CASE WHEN $2::boolean THEN now() ELSE NULL END WHERE id=$1
+`
+
+type SetEditorialCategoryArchivedParams struct {
+	ID       uuid.UUID `json:"id"`
+	Archived bool      `json:"archived"`
+}
+
+func (q *Queries) SetEditorialCategoryArchived(ctx context.Context, arg SetEditorialCategoryArchivedParams) error {
+	_, err := q.db.Exec(ctx, setEditorialCategoryArchived, arg.ID, arg.Archived)
+	return err
+}
+
+const setEditorialTagArchived = `-- name: SetEditorialTagArchived :exec
+UPDATE game_editorial_tags
+SET archived_at=CASE WHEN $2::boolean THEN now() ELSE NULL END WHERE id=$1
+`
+
+type SetEditorialTagArchivedParams struct {
+	ID       uuid.UUID `json:"id"`
+	Archived bool      `json:"archived"`
+}
+
+func (q *Queries) SetEditorialTagArchived(ctx context.Context, arg SetEditorialTagArchivedParams) error {
+	_, err := q.db.Exec(ctx, setEditorialTagArchived, arg.ID, arg.Archived)
+	return err
+}
+
+const updateEditorialCategory = `-- name: UpdateEditorialCategory :exec
+UPDATE game_editorial_tag_categories SET localizations=$2,sort_order=$3 WHERE id=$1
+`
+
+type UpdateEditorialCategoryParams struct {
+	ID            uuid.UUID `json:"id"`
+	Localizations []byte    `json:"localizations"`
+	SortOrder     int32     `json:"sort_order"`
+}
+
+func (q *Queries) UpdateEditorialCategory(ctx context.Context, arg UpdateEditorialCategoryParams) error {
+	_, err := q.db.Exec(ctx, updateEditorialCategory, arg.ID, arg.Localizations, arg.SortOrder)
+	return err
+}
+
+const updateEditorialTag = `-- name: UpdateEditorialTag :exec
+UPDATE game_editorial_tags SET category_id=$2,localizations=$3 WHERE id=$1
+`
+
+type UpdateEditorialTagParams struct {
+	ID            uuid.UUID `json:"id"`
+	CategoryID    uuid.UUID `json:"category_id"`
+	Localizations []byte    `json:"localizations"`
+}
+
+func (q *Queries) UpdateEditorialTag(ctx context.Context, arg UpdateEditorialTagParams) error {
+	_, err := q.db.Exec(ctx, updateEditorialTag, arg.ID, arg.CategoryID, arg.Localizations)
+	return err
 }
