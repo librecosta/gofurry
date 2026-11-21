@@ -206,15 +206,23 @@ func intakeSchedule(ctx context.Context, q *dbgen.Queries, c dbgen.GameIntakeCan
 	if err != nil {
 		return err
 	}
-	plan := intakePlan(c.EgressRegion)
-	params, scope, policy, err := plan.params("app", c.ExternalKey)
+	for _, plan := range intakePlans(c.EgressRegion) {
+		if err := attachIntakePlan(ctx, q, source.ID, binding.ID, c.ExternalKey, plan); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func attachIntakePlan(ctx context.Context, q *dbgen.Queries, sourceID, bindingID uuid.UUID, externalKey string, plan Plan) error {
+	params, scope, policy, err := plan.params("app", externalKey)
 	if err != nil {
 		return err
 	}
-	id, err := q.FindIntakePlan(ctx, dbgen.FindIntakePlanParams{SourceID: source.ID, Params: params, Scope: scope})
+	id, err := q.FindIntakePlan(ctx, dbgen.FindIntakePlanParams{SourceID: sourceID, Params: params, Scope: scope})
 	if errors.Is(err, pgx.ErrNoRows) {
 		row, saveErr := q.SaveCollectionPlan(ctx, dbgen.SaveCollectionPlanParams{
-			ID: uuid.NewV7(), SourceID: source.ID, Capability: plan.Capability, Params: params, Scope: scope,
+			ID: uuid.NewV7(), SourceID: sourceID, Capability: plan.Capability, Params: params, Scope: scope,
 			Policy: policy, AnchorAt: timestamp(plan.Anchor), IntervalSeconds: int32(plan.Interval / time.Second),
 		})
 		id, err = row.ID, saveErr
@@ -222,7 +230,7 @@ func intakeSchedule(ctx context.Context, q *dbgen.Queries, c dbgen.GameIntakeCan
 	if err != nil {
 		return err
 	}
-	ok, err := q.AttachCollectionPlan(ctx, dbgen.AttachCollectionPlanParams{PlanID: id, BindingID: binding.ID, SourceID: source.ID})
+	ok, err := q.AttachCollectionPlan(ctx, dbgen.AttachCollectionPlanParams{PlanID: id, BindingID: bindingID, SourceID: sourceID})
 	if err == nil && !ok {
 		err = ErrIntakeState
 	}

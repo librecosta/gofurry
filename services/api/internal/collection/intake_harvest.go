@@ -49,13 +49,20 @@ type intakeObservation struct {
 	confirmedAttempt uuid.UUID
 }
 
-func intakePlan(region string) Plan {
+func intakeProbePlan(region string) Plan {
 	return Plan{Capability: intakeCapability, Locale: "en", Region: "us", EgressRegion: region,
 		Interval: 24 * time.Hour, Anchor: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)}
 }
 
+func intakePlans(region string) [2]Plan {
+	english := intakeProbePlan(region)
+	chinese := english
+	chinese.Locale, chinese.Region = "zh-cn", "cn"
+	return [2]Plan{english, chinese}
+}
+
 func intakeRequest(c dbgen.GameIntakeCandidate) (request, segmentScope, string) {
-	plan := intakePlan(c.EgressRegion)
+	plan := intakeProbePlan(c.EgressRegion)
 	params, _, _, _ := plan.params("app", c.ExternalKey)
 	semantic := scope{Locale: plan.Locale, Region: plan.Region, EgressRegion: plan.EgressRegion}
 	output := segmentScope{Namespace: c.Namespace, scope: semantic, Dimensions: map[string]string{"section": "details"}}
