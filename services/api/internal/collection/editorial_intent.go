@@ -62,12 +62,11 @@ func (s *Service) CreateSteamGame(ctx context.Context, cat *catalog.Service, q *
 			if offer.TextObservationID == nil {
 				continue
 			}
-			for _, value := range text {
-				if editorialLocale(offer.Locale) == value.Locale && offer.Name == strings.TrimSpace(value.Name) && offer.Summary == strings.TrimSpace(value.Summary) {
-					if err := catalog.InitializeIntakeGameText(ctx, q, game, row.ID, *offer.TextObservationID, value); err != nil {
-						return catalog.ManagementResult{}, err
-					}
-				}
+			if err := q.AttributeNewGameDraftText(ctx, dbgen.AttributeNewGameDraftTextParams{
+				GameID: game.ID, Locale: editorialLocale(offer.Locale), Name: offer.Name, Summary: offer.Summary,
+				TextSourceID: &row.ID, TextObservationID: offer.TextObservationID,
+			}); err != nil {
+				return catalog.ManagementResult{}, err
 			}
 		}
 	}

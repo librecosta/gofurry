@@ -32,6 +32,33 @@ func (q *Queries) AddGameLocalization(ctx context.Context, arg AddGameLocalizati
 	return err
 }
 
+const attributeNewGameDraftText = `-- name: AttributeNewGameDraftText :exec
+UPDATE game_localizations SET text_source_id=$5,text_observation_id=$6
+WHERE game_id=$1 AND locale=$2 AND name=$3 AND summary=$4
+ AND text_source_id IS NULL AND text_observation_id IS NULL
+`
+
+type AttributeNewGameDraftTextParams struct {
+	GameID            uuid.UUID  `json:"game_id"`
+	Locale            string     `json:"locale"`
+	Name              string     `json:"name"`
+	Summary           string     `json:"summary"`
+	TextSourceID      *uuid.UUID `json:"text_source_id"`
+	TextObservationID *uuid.UUID `json:"text_observation_id"`
+}
+
+func (q *Queries) AttributeNewGameDraftText(ctx context.Context, arg AttributeNewGameDraftTextParams) error {
+	_, err := q.db.Exec(ctx, attributeNewGameDraftText,
+		arg.GameID,
+		arg.Locale,
+		arg.Name,
+		arg.Summary,
+		arg.TextSourceID,
+		arg.TextObservationID,
+	)
+	return err
+}
+
 const changeGameVisibility = `-- name: ChangeGameVisibility :one
 UPDATE games SET status=$1,content_rating=$2,
  slug=CASE WHEN $1::text='draft' THEN coalesce(draft_slug,slug) ELSE slug END,

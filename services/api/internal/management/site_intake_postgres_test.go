@@ -154,6 +154,14 @@ func TestSiteIntakePostgresHTTP(t *testing.T) {
 	if len(progress.Scopes) != 2 || progress.Scopes[0].Locale != "en" || progress.Scopes[1].Locale != "zh-cn" {
 		t.Fatalf("two independent store scopes required: %+v", progress)
 	}
+	// Reproduce an already successful prefill. The accepted English text matches
+	// exactly, while the operator has edited the Chinese draft.
+	_, err = pool.Exec(ctx, `UPDATE steam_editorial_prefills
+SET name=CASE locale WHEN 'en' THEN 'Editorial Test: Wolf' ELSE '隔离测试' END,
+ summary=CASE locale WHEN 'en' THEN 'Edited' ELSE '来源原文' END,
+ text_observation_id=uuidv7()
+WHERE app_id=$1 AND namespace='test_editorial'`, app)
+	siteMust(t, err)
 	var newGame catalog.ManagementResult
 	request("POST", adminURL, games, "operator", gameInput, 200, &newGame)
 	request("POST", adminURL, games, "owner", gameInput, 409, nil)
@@ -165,6 +173,17 @@ func TestSiteIntakePostgresHTTP(t *testing.T) {
 	siteMust(t, pool.QueryRow(ctx, "SELECT status,slug FROM games WHERE public_id=$1", newGame.Target).Scan(&gameStatus, &slug))
 	if gameStatus != "draft" || slug != "editorial-test-wolf" {
 		t.Fatalf("unexpected creation result: %s %s", gameStatus, slug)
+	}
+	var matching, edited bool
+	siteMust(t, pool.QueryRow(ctx, `SELECT
+ COALESCE(bool_and(l.text_source_id=s.id AND l.text_observation_id=p.text_observation_id) FILTER (WHERE l.locale='en'),false),
+ COALESCE(bool_and(l.summary='独立人工文案' AND l.text_source_id IS NULL AND l.text_observation_id IS NULL) FILTER (WHERE l.locale='zh'),false)
+FROM games g JOIN game_localizations l ON l.game_id=g.id
+JOIN game_sources s ON s.game_id=g.id
+JOIN steam_editorial_prefills p ON p.app_id=s.external_key AND p.locale=CASE WHEN l.locale='zh' THEN 'zh-cn' ELSE l.locale END
+WHERE g.public_id=$1`, newGame.Target).Scan(&matching, &edited))
+	if !matching || !edited {
+		t.Fatalf("draft provenance: source match=%t, manual edit preserved=%t", matching, edited)
 	}
 	gamePath := games + "/" + newGame.Target
 	var gamePlans collection.EntityCollection
@@ -421,6 +440,10 @@ INSERT INTO site_localizations(site_id,locale,name,summary) SELECT id,'zh','存�
 		}
 		if guarded == nil {
 			return fmt.Errorf("retired tag remains writable")
+		}
+		// The test reapplies the forward migration only to its temporary copy.
+		if _, err = tx.Exec(ctx, "ALTER TABLE pg_temp.collection_plan_bindings DROP COLUMN IF EXISTS enabled"); err != nil {
+			return err
 		}
 		_, err = tx.Exec(ctx, strings.Replace(collectionMigration, "CREATE TABLE ", "CREATE TEMP TABLE ", 1))
 		return err

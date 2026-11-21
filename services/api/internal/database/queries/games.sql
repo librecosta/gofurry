@@ -29,6 +29,11 @@ INSERT INTO game_localizations (game_id,locale,name,summary) VALUES ($1,$2,$3,$4
 INSERT INTO game_localizations (game_id,locale,name,summary,text_source_id,text_observation_id)
 VALUES ($1,$2,$3,$4,$5,$6);
 
+-- name: AttributeNewGameDraftText :exec
+UPDATE game_localizations SET text_source_id=$5,text_observation_id=$6
+WHERE game_id=$1 AND locale=$2 AND name=$3 AND summary=$4
+ AND text_source_id IS NULL AND text_observation_id IS NULL;
+
 -- name: DisableGameSources :exec
 UPDATE game_sources SET active=false WHERE game_id=$1 AND active;
 
