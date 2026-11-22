@@ -85,7 +85,16 @@ func (c *client) callWithKey(ctx context.Context, token, method, path string, qu
 	}
 	defer res.Body.Close()
 	if res.StatusCode != expected {
-		// Never propagate a remote body, URL or authorization value into logs.
+		if res.StatusCode == http.StatusBadRequest && strings.HasPrefix(path, "schedules/") {
+			var problem struct {
+				Code string `json:"code"`
+			}
+			data, _ := io.ReadAll(io.LimitReader(res.Body, 4097))
+			if len(data) <= 4096 && json.Unmarshal(data, &problem) == nil && validPlanRejection(problem.Code) {
+				return planRejection(problem.Code)
+			}
+		}
+		// Never propagate a raw remote body, URL or authorization value.
 		_, _ = io.Copy(io.Discard, io.LimitReader(res.Body, 4096))
 		return remoteStatus(res.StatusCode)
 	}
@@ -136,9 +145,10 @@ type recurrence struct {
 	Cron     string    `json:"cron,omitempty"`
 }
 type scheduleSpec struct {
-	Request    request    `json:"request"`
-	Recurrence recurrence `json:"recurrence"`
-	Enabled    bool       `json:"enabled"`
+	Request         request             `json:"request"`
+	Recurrence      recurrence          `json:"recurrence"`
+	Enabled         bool                `json:"enabled"`
+	ExecutionPolicy PlanExecutionPolicy `json:"execution_policy,omitzero"`
 }
 type scheduleView struct {
 	scheduleSpec
@@ -159,18 +169,19 @@ type identity struct {
 }
 type observation struct {
 	identity
-	ID         uuid.UUID      `json:"id"`
-	Scope      segmentScope   `json:"scope"`
-	State      string         `json:"state"`
-	ObservedAt time.Time      `json:"observed_at"`
-	ReceivedAt time.Time      `json:"received_at"`
-	Data       jsontext.Value `json:"data"`
-	Hash       string         `json:"content_hash"`
-	Source     string         `json:"source"`
-	Evidence   string         `json:"evidence"`
-	Sample     bool           `json:"sample"`
-	JobID      uuid.UUID      `json:"job_id"`
-	AttemptID  uuid.UUID      `json:"attempt_id"`
+	ExecutionEgressRegion string         `json:"execution_egress_region,omitempty"`
+	ID                    uuid.UUID      `json:"id"`
+	Scope                 segmentScope   `json:"scope"`
+	State                 string         `json:"state"`
+	ObservedAt            time.Time      `json:"observed_at"`
+	ReceivedAt            time.Time      `json:"received_at"`
+	Data                  jsontext.Value `json:"data"`
+	Hash                  string         `json:"content_hash"`
+	Source                string         `json:"source"`
+	Evidence              string         `json:"evidence"`
+	Sample                bool           `json:"sample"`
+	JobID                 uuid.UUID      `json:"job_id"`
+	AttemptID             uuid.UUID      `json:"attempt_id"`
 }
 type currentItem struct {
 	observation

@@ -77,20 +77,25 @@ type CollectionGap struct {
 }
 
 type CollectionPlan struct {
-	ID              uuid.UUID          `json:"id"`
-	SourceID        uuid.UUID          `json:"source_id"`
-	Capability      string             `json:"capability"`
-	RequestSchema   int32              `json:"request_schema"`
-	Params          []byte             `json:"params"`
-	Scope           []byte             `json:"scope"`
-	IntervalSeconds int32              `json:"interval_seconds"`
-	AnchorAt        pgtype.Timestamptz `json:"anchor_at"`
-	Policy          string             `json:"policy"`
-	ScheduleID      *uuid.UUID         `json:"schedule_id"`
-	RemoteRevision  pgtype.Int8        `json:"remote_revision"`
-	RemoteEnabled   pgtype.Bool        `json:"remote_enabled"`
-	PostStarted     bool               `json:"post_started"`
-	CheckedAt       pgtype.Timestamptz `json:"checked_at"`
+	ID                      uuid.UUID          `json:"id"`
+	SourceID                uuid.UUID          `json:"source_id"`
+	Capability              string             `json:"capability"`
+	RequestSchema           int32              `json:"request_schema"`
+	Params                  []byte             `json:"params"`
+	Scope                   []byte             `json:"scope"`
+	IntervalSeconds         int32              `json:"interval_seconds"`
+	AnchorAt                pgtype.Timestamptz `json:"anchor_at"`
+	Policy                  string             `json:"policy"`
+	ScheduleID              *uuid.UUID         `json:"schedule_id"`
+	RemoteRevision          pgtype.Int8        `json:"remote_revision"`
+	RemoteEnabled           pgtype.Bool        `json:"remote_enabled"`
+	PostStarted             bool               `json:"post_started"`
+	CheckedAt               pgtype.Timestamptz `json:"checked_at"`
+	IntervalOverrideSeconds int32              `json:"interval_override_seconds"`
+	ExecutionPolicy         []byte             `json:"execution_policy"`
+	ConfigRevision          int64              `json:"config_revision"`
+	SyncedConfigRevision    int64              `json:"synced_config_revision"`
+	ConfigSyncError         string             `json:"config_sync_error"`
 }
 
 type CollectionPlanBinding struct {

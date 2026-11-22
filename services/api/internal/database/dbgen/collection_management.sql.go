@@ -15,7 +15,8 @@ import (
 const listEntityCollectionPlans = `-- name: ListEntityCollectionPlans :many
 WITH bound AS MATERIALIZED (
  SELECT DISTINCT ON (p.id) p.id,p.source_id,p.capability,p.request_schema,p.params,p.scope,p.interval_seconds,p.anchor_at,
-  p.policy,p.schedule_id,p.remote_enabled,p.checked_at,src.namespace,src.provider,src.external_key,src.target_id,
+  p.policy,p.schedule_id,p.remote_enabled,p.remote_revision,p.checked_at,src.namespace,src.provider,src.external_key,src.target_id,
+  p.config_revision,p.synced_config_revision,p.interval_override_seconds,p.execution_policy,p.config_sync_error,
   b.id AS binding_id,b.site_id,b.game_source_id,m.enabled AS desired_enabled,EXISTS (SELECT FROM sites st WHERE st.id=b.site_id AND st.status<>'archived' UNION ALL SELECT FROM games g WHERE g.id=b.game_id AND g.status<>'archived')::boolean AS actionable,greatest(b.effective_from,m.attached_at)::timestamptz AS since
  FROM collection_bindings b JOIN collection_sources src ON src.id=b.source_id
  JOIN collection_plan_bindings m ON m.binding_id=b.id AND m.source_id=b.source_id
@@ -27,7 +28,7 @@ WITH bound AS MATERIALIZED (
    OR ($3='games' AND b.game_id=$4 AND EXISTS (SELECT 1 FROM game_sources gs WHERE gs.id=b.game_source_id AND gs.active)))
  ORDER BY p.id,since,b.id LIMIT 9
 )
-SELECT b.id, b.source_id, b.capability, b.request_schema, b.params, b.scope, b.interval_seconds, b.anchor_at, b.policy, b.schedule_id, b.remote_enabled, b.checked_at, b.namespace, b.provider, b.external_key, b.target_id, b.binding_id, b.site_id, b.game_source_id, b.desired_enabled, b.actionable, b.since,coalesce(last.state,'')::text AS observation_state,last.observation_id,
+SELECT b.id, b.source_id, b.capability, b.request_schema, b.params, b.scope, b.interval_seconds, b.anchor_at, b.policy, b.schedule_id, b.remote_enabled, b.remote_revision, b.checked_at, b.namespace, b.provider, b.external_key, b.target_id, b.config_revision, b.synced_config_revision, b.interval_override_seconds, b.execution_policy, b.config_sync_error, b.binding_id, b.site_id, b.game_source_id, b.desired_enabled, b.actionable, b.since,coalesce(last.state,'')::text AS observation_state,last.observation_id,
  coalesce(last.scope_key,'')::text AS scope_key,last.observed_at,
  greatest(last.success_at, CASE WHEN b.capability='steam.details' THEN (
    SELECT max(md.confirmed_at) FROM game_source_metadata md
@@ -57,33 +58,39 @@ type ListEntityCollectionPlansParams struct {
 }
 
 type ListEntityCollectionPlansRow struct {
-	ID               uuid.UUID          `json:"id"`
-	SourceID         uuid.UUID          `json:"source_id"`
-	Capability       string             `json:"capability"`
-	RequestSchema    int32              `json:"request_schema"`
-	Params           []byte             `json:"params"`
-	Scope            []byte             `json:"scope"`
-	IntervalSeconds  int32              `json:"interval_seconds"`
-	AnchorAt         pgtype.Timestamptz `json:"anchor_at"`
-	Policy           string             `json:"policy"`
-	ScheduleID       *uuid.UUID         `json:"schedule_id"`
-	RemoteEnabled    pgtype.Bool        `json:"remote_enabled"`
-	CheckedAt        pgtype.Timestamptz `json:"checked_at"`
-	Namespace        string             `json:"namespace"`
-	Provider         string             `json:"provider"`
-	ExternalKey      string             `json:"external_key"`
-	TargetID         *uuid.UUID         `json:"target_id"`
-	BindingID        uuid.UUID          `json:"binding_id"`
-	SiteID           *uuid.UUID         `json:"site_id"`
-	GameSourceID     *uuid.UUID         `json:"game_source_id"`
-	DesiredEnabled   bool               `json:"desired_enabled"`
-	Actionable       bool               `json:"actionable"`
-	Since            pgtype.Timestamptz `json:"since"`
-	ObservationState string             `json:"observation_state"`
-	ObservationID    *uuid.UUID         `json:"observation_id"`
-	ScopeKey         string             `json:"scope_key"`
-	ObservedAt       pgtype.Timestamptz `json:"observed_at"`
-	LastSuccessAt    pgtype.Timestamptz `json:"last_success_at"`
+	ID                      uuid.UUID          `json:"id"`
+	SourceID                uuid.UUID          `json:"source_id"`
+	Capability              string             `json:"capability"`
+	RequestSchema           int32              `json:"request_schema"`
+	Params                  []byte             `json:"params"`
+	Scope                   []byte             `json:"scope"`
+	IntervalSeconds         int32              `json:"interval_seconds"`
+	AnchorAt                pgtype.Timestamptz `json:"anchor_at"`
+	Policy                  string             `json:"policy"`
+	ScheduleID              *uuid.UUID         `json:"schedule_id"`
+	RemoteEnabled           pgtype.Bool        `json:"remote_enabled"`
+	RemoteRevision          pgtype.Int8        `json:"remote_revision"`
+	CheckedAt               pgtype.Timestamptz `json:"checked_at"`
+	Namespace               string             `json:"namespace"`
+	Provider                string             `json:"provider"`
+	ExternalKey             string             `json:"external_key"`
+	TargetID                *uuid.UUID         `json:"target_id"`
+	ConfigRevision          int64              `json:"config_revision"`
+	SyncedConfigRevision    int64              `json:"synced_config_revision"`
+	IntervalOverrideSeconds int32              `json:"interval_override_seconds"`
+	ExecutionPolicy         []byte             `json:"execution_policy"`
+	ConfigSyncError         string             `json:"config_sync_error"`
+	BindingID               uuid.UUID          `json:"binding_id"`
+	SiteID                  *uuid.UUID         `json:"site_id"`
+	GameSourceID            *uuid.UUID         `json:"game_source_id"`
+	DesiredEnabled          bool               `json:"desired_enabled"`
+	Actionable              bool               `json:"actionable"`
+	Since                   pgtype.Timestamptz `json:"since"`
+	ObservationState        string             `json:"observation_state"`
+	ObservationID           *uuid.UUID         `json:"observation_id"`
+	ScopeKey                string             `json:"scope_key"`
+	ObservedAt              pgtype.Timestamptz `json:"observed_at"`
+	LastSuccessAt           pgtype.Timestamptz `json:"last_success_at"`
 }
 
 func (q *Queries) ListEntityCollectionPlans(ctx context.Context, arg ListEntityCollectionPlansParams) ([]ListEntityCollectionPlansRow, error) {
@@ -112,11 +119,17 @@ func (q *Queries) ListEntityCollectionPlans(ctx context.Context, arg ListEntityC
 			&i.Policy,
 			&i.ScheduleID,
 			&i.RemoteEnabled,
+			&i.RemoteRevision,
 			&i.CheckedAt,
 			&i.Namespace,
 			&i.Provider,
 			&i.ExternalKey,
 			&i.TargetID,
+			&i.ConfigRevision,
+			&i.SyncedConfigRevision,
+			&i.IntervalOverrideSeconds,
+			&i.ExecutionPolicy,
+			&i.ConfigSyncError,
 			&i.BindingID,
 			&i.SiteID,
 			&i.GameSourceID,

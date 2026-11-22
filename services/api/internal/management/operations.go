@@ -66,6 +66,10 @@ func failure(err error) error {
 		return fiber.NewError(fiber.StatusUnprocessableEntity, err.Error())
 	case errors.Is(err, collection.ErrEgressPolicyConflict):
 		return fiber.NewError(fiber.StatusConflict, err.Error())
+	case collection.IsPlanRejection(err):
+		return fiber.NewError(fiber.StatusUnprocessableEntity, err.Error())
+	case errors.Is(err, collection.ErrPlanChanged), errors.Is(err, collection.ErrSharedPlan), errors.Is(err, collection.ErrPlanSync):
+		return fiber.NewError(fiber.StatusConflict, err.Error())
 	case errors.Is(err, catalog.ErrGamePublicationText), errors.Is(err, catalog.ErrGamePublicationReview), errors.Is(err, catalog.ErrGamePublicationPolicy):
 		return fiber.NewError(fiber.StatusBadRequest, err.Error())
 	case errors.Is(err, catalog.ErrGamePreviewChanged):

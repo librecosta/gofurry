@@ -98,7 +98,7 @@ SELECT p.*,s.target_id,s.namespace,s.provider,s.resource_type,s.external_key,
  WHERE m.plan_id=p.id AND m.source_id=p.source_id AND b.source_id=m.source_id AND b.effective_until IS NULL AND m.enabled AND EXISTS (SELECT FROM sites st WHERE st.id=b.site_id AND st.status<>'archived' UNION ALL SELECT FROM games g WHERE g.id=b.game_id AND g.status<>'archived')) AS desired
 FROM collection_plans p JOIN collection_sources s ON s.id=p.source_id
 WHERE s.namespace=$1 AND s.target_id IS NOT NULL AND
- (p.checked_at IS NULL OR p.checked_at < transaction_timestamp() - CASE WHEN p.schedule_id IS NULL THEN interval '30 seconds' ELSE interval '30 minutes' END OR
+ (p.checked_at IS NULL OR p.checked_at < transaction_timestamp() - CASE WHEN p.schedule_id IS NULL OR p.config_revision<>p.synced_config_revision THEN interval '30 seconds' ELSE interval '30 minutes' END OR
   (p.schedule_id IS NOT NULL AND p.remote_enabled IS DISTINCT FROM (EXISTS (SELECT 1 FROM collection_plan_bindings m JOIN collection_bindings b ON b.id=m.binding_id
          WHERE m.plan_id=p.id AND m.source_id=p.source_id AND b.source_id=m.source_id AND b.effective_until IS NULL AND m.enabled AND EXISTS (SELECT FROM sites st WHERE st.id=b.site_id AND st.status<>'archived' UNION ALL SELECT FROM games g WHERE g.id=b.game_id AND g.status<>'archived')))))
 ORDER BY p.checked_at NULLS FIRST,p.id LIMIT 8;
@@ -113,8 +113,13 @@ UPDATE collection_plans SET post_started=true WHERE id=$1 AND NOT post_started A
 UPDATE collection_plans SET post_started=false WHERE id=$1 AND schedule_id IS NULL;
 
 -- name: SaveCollectionSchedule :exec
-UPDATE collection_plans SET schedule_id=$2,remote_revision=$3,remote_enabled=$4,checked_at=transaction_timestamp()
+UPDATE collection_plans SET schedule_id=$2,remote_revision=$3,remote_enabled=$4,checked_at=transaction_timestamp(),
+ synced_config_revision=sqlc.arg(synced_config_revision),config_sync_error=''
 WHERE id=$1 AND (schedule_id IS NULL OR schedule_id=$2);
+
+-- name: RecordCollectionConfigSyncError :exec
+UPDATE collection_plans SET config_sync_error=sqlc.arg(reason)
+WHERE id=$1 AND config_revision=sqlc.arg(revision) AND config_revision<>synced_config_revision;
 
 -- name: InitCollectionConsumer :exec
 INSERT INTO collection_consumer (namespace,consumer_id) VALUES ($1,$2) ON CONFLICT DO NOTHING;

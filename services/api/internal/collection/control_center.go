@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -178,7 +179,14 @@ func (s *Service) RunManagedPlan(ctx context.Context, q *dbgen.Queries, kind, id
 	if row.ScheduleID == nil {
 		return ErrIntakeState
 	}
-	spec, err := planSpec(row.TargetID, row.Capability, row.RequestSchema, row.Params, row.Scope, row.IntervalSeconds, row.AnchorAt.Time, row.Policy)
+	revision, err := q.LockCollectionPlanConfig(ctx, plan)
+	if err != nil {
+		return err
+	}
+	if revision != row.ConfigRevision || row.ConfigRevision != row.SyncedConfigRevision {
+		return ErrPlanSync
+	}
+	spec, err := planSchedule(row)
 	if err != nil {
 		return err
 	}
@@ -187,13 +195,14 @@ func (s *Service) RunManagedPlan(ctx context.Context, q *dbgen.Queries, kind, id
 		return collectionControlError(err)
 	}
 	if schedule.ID != *row.ScheduleID || !samePlan(schedule, spec, s.namespace) {
-		return errRemoteConflict
+		return ErrPlanChanged
 	}
 	var out intakeJob
 	input := struct {
 		ScheduleID uuid.UUID `json:"schedule_id"`
-	}{schedule.ID}
-	key := "gofurry-run-" + schedule.ID.String() + "-" + time.Now().UTC().Format("20060102T1504")
+		Revision   int64     `json:"expected_schedule_revision"`
+	}{schedule.ID, schedule.Revision}
+	key := "gofurry-run-" + schedule.ID.String() + "-" + strconv.FormatInt(schedule.Revision, 10) + "-" + time.Now().UTC().Format("20060102T1504")
 	if err := s.remote.callWithKey(ctx, s.remote.writer, http.MethodPost, "jobs", nil, input, &out, 202, key); err != nil {
 		return collectionControlError(err)
 	}
@@ -319,22 +328,23 @@ func matchesJobOwner(j intakeJob, owner dbgen.ManagementJobOwnersRow) bool {
 
 func (s *Service) projectManagedJob(j intakeJob, o dbgen.ManagementJobOwnersRow) ManagedJob {
 	return ManagedJob{
-		CollectionJob: CollectionJob{j.ID, j.AcceptedAttempt, j.AttemptCount, j.State, safeJobCode(j.Code), j.Cause, j.Created, j.Updated},
+		CollectionJob: CollectionJob{j.ID, j.AcceptedAttempt, j.AttemptCount, j.State, safeJobCode(j.Code), j.Cause, j.Created, j.Updated, retryBlocked(j)},
 		Entity:        EntityRef{o.EntityKind, o.PublicID, o.Name}, PlanID: o.ID, Capability: o.Capability, Provider: o.Provider, External: o.ExternalKey,
 		Locale: j.Request.Scope.Locale, Region: j.Request.Scope.Region,
 		CanCancel: o.Actionable && s.tokenForOperator() != "" && slices.Contains([]string{"queued", "running", "retry_wait"}, j.State),
-		CanRetry:  o.Actionable && s.tokenForOperator() != "" && slices.Contains([]string{"failed", "partial", "cancelled"}, j.State),
+		CanRetry:  o.Actionable && s.tokenForOperator() != "" && !retryBlocked(j) && slices.Contains([]string{"failed", "partial", "cancelled"}, j.State),
 	}
 }
 
 type ManagedObservation struct {
-	ID          *uuid.UUID     `json:"id,omitempty"`
-	State       string         `json:"state"`
-	ObservedAt  *time.Time     `json:"observed_at,omitempty"`
-	Dimension   string         `json:"dimension,omitempty"`
-	Evidence    string         `json:"evidence,omitempty"`
-	Description string         `json:"description,omitempty"`
-	Data        jsontext.Value `json:"data"`
+	ID           *uuid.UUID     `json:"id,omitempty"`
+	State        string         `json:"state"`
+	ObservedAt   *time.Time     `json:"observed_at,omitempty"`
+	Dimension    string         `json:"dimension,omitempty"`
+	Evidence     string         `json:"evidence,omitempty"`
+	Description  string         `json:"description,omitempty"`
+	EgressRegion string         `json:"execution_egress_region,omitempty"`
+	Data         jsontext.Value `json:"data"`
 }
 
 type ManagedJobDetail struct {
@@ -378,6 +388,7 @@ func (s *Service) ManagedJob(ctx context.Context, q *dbgen.Queries, jobID uuid.U
 		Attempts: detail.Attempts, Results: []ManagedObservation{}}
 	for i := range out.Attempts {
 		out.Attempts[i].Code = safeJobCode(out.Attempts[i].Code)
+		out.Attempts[i].EgressRegion = safeJobCode(out.Attempts[i].EgressRegion)
 	}
 	items := detail.Results
 	if owner.Provider == "web" && slices.Contains([]string{"succeeded", "partial", "failed"}, detail.Job.State) {
@@ -394,7 +405,7 @@ func (s *Service) ManagedJob(ctx context.Context, q *dbgen.Queries, jobID uuid.U
 			continue
 		}
 		itemResult := ManagedObservation{ID: &item.ID, State: item.State, ObservedAt: &item.ObservedAt,
-			Evidence: safeJobCode(item.Evidence), Data: jsontext.Value("{}")}
+			Evidence: safeJobCode(item.Evidence), EgressRegion: safeJobCode(item.ExecutionEgressRegion), Data: jsontext.Value("{}")}
 		if owner.Provider == "steam" {
 			itemResult.Dimension = item.Scope.Dimensions["section"]
 		} else {

@@ -721,7 +721,7 @@ func (q *Queries) GetCollectionConsumer(ctx context.Context, namespace string) (
 }
 
 const getUnknownCollectionPlan = `-- name: GetUnknownCollectionPlan :one
-SELECT p.id, p.source_id, p.capability, p.request_schema, p.params, p.scope, p.interval_seconds, p.anchor_at, p.policy, p.schedule_id, p.remote_revision, p.remote_enabled, p.post_started, p.checked_at,s.target_id FROM collection_plans p JOIN collection_sources s ON s.id=p.source_id
+SELECT p.id, p.source_id, p.capability, p.request_schema, p.params, p.scope, p.interval_seconds, p.anchor_at, p.policy, p.schedule_id, p.remote_revision, p.remote_enabled, p.post_started, p.checked_at, p.interval_override_seconds, p.execution_policy, p.config_revision, p.synced_config_revision, p.config_sync_error,s.target_id FROM collection_plans p JOIN collection_sources s ON s.id=p.source_id
 WHERE p.id=$1 AND s.namespace=$2 AND p.post_started AND p.schedule_id IS NULL AND s.target_id IS NOT NULL
 `
 
@@ -731,21 +731,26 @@ type GetUnknownCollectionPlanParams struct {
 }
 
 type GetUnknownCollectionPlanRow struct {
-	ID              uuid.UUID          `json:"id"`
-	SourceID        uuid.UUID          `json:"source_id"`
-	Capability      string             `json:"capability"`
-	RequestSchema   int32              `json:"request_schema"`
-	Params          []byte             `json:"params"`
-	Scope           []byte             `json:"scope"`
-	IntervalSeconds int32              `json:"interval_seconds"`
-	AnchorAt        pgtype.Timestamptz `json:"anchor_at"`
-	Policy          string             `json:"policy"`
-	ScheduleID      *uuid.UUID         `json:"schedule_id"`
-	RemoteRevision  pgtype.Int8        `json:"remote_revision"`
-	RemoteEnabled   pgtype.Bool        `json:"remote_enabled"`
-	PostStarted     bool               `json:"post_started"`
-	CheckedAt       pgtype.Timestamptz `json:"checked_at"`
-	TargetID        *uuid.UUID         `json:"target_id"`
+	ID                      uuid.UUID          `json:"id"`
+	SourceID                uuid.UUID          `json:"source_id"`
+	Capability              string             `json:"capability"`
+	RequestSchema           int32              `json:"request_schema"`
+	Params                  []byte             `json:"params"`
+	Scope                   []byte             `json:"scope"`
+	IntervalSeconds         int32              `json:"interval_seconds"`
+	AnchorAt                pgtype.Timestamptz `json:"anchor_at"`
+	Policy                  string             `json:"policy"`
+	ScheduleID              *uuid.UUID         `json:"schedule_id"`
+	RemoteRevision          pgtype.Int8        `json:"remote_revision"`
+	RemoteEnabled           pgtype.Bool        `json:"remote_enabled"`
+	PostStarted             bool               `json:"post_started"`
+	CheckedAt               pgtype.Timestamptz `json:"checked_at"`
+	IntervalOverrideSeconds int32              `json:"interval_override_seconds"`
+	ExecutionPolicy         []byte             `json:"execution_policy"`
+	ConfigRevision          int64              `json:"config_revision"`
+	SyncedConfigRevision    int64              `json:"synced_config_revision"`
+	ConfigSyncError         string             `json:"config_sync_error"`
+	TargetID                *uuid.UUID         `json:"target_id"`
 }
 
 func (q *Queries) GetUnknownCollectionPlan(ctx context.Context, arg GetUnknownCollectionPlanParams) (GetUnknownCollectionPlanRow, error) {
@@ -766,6 +771,11 @@ func (q *Queries) GetUnknownCollectionPlan(ctx context.Context, arg GetUnknownCo
 		&i.RemoteEnabled,
 		&i.PostStarted,
 		&i.CheckedAt,
+		&i.IntervalOverrideSeconds,
+		&i.ExecutionPolicy,
+		&i.ConfigRevision,
+		&i.SyncedConfigRevision,
+		&i.ConfigSyncError,
 		&i.TargetID,
 	)
 	return i, err
@@ -842,38 +852,43 @@ func (q *Queries) OpenCollectionBinding(ctx context.Context, arg OpenCollectionB
 }
 
 const pendingCollectionPlans = `-- name: PendingCollectionPlans :many
-SELECT p.id, p.source_id, p.capability, p.request_schema, p.params, p.scope, p.interval_seconds, p.anchor_at, p.policy, p.schedule_id, p.remote_revision, p.remote_enabled, p.post_started, p.checked_at,s.target_id,s.namespace,s.provider,s.resource_type,s.external_key,
+SELECT p.id, p.source_id, p.capability, p.request_schema, p.params, p.scope, p.interval_seconds, p.anchor_at, p.policy, p.schedule_id, p.remote_revision, p.remote_enabled, p.post_started, p.checked_at, p.interval_override_seconds, p.execution_policy, p.config_revision, p.synced_config_revision, p.config_sync_error,s.target_id,s.namespace,s.provider,s.resource_type,s.external_key,
  EXISTS (SELECT 1 FROM collection_plan_bindings m JOIN collection_bindings b ON b.id=m.binding_id
  WHERE m.plan_id=p.id AND m.source_id=p.source_id AND b.source_id=m.source_id AND b.effective_until IS NULL AND m.enabled AND EXISTS (SELECT FROM sites st WHERE st.id=b.site_id AND st.status<>'archived' UNION ALL SELECT FROM games g WHERE g.id=b.game_id AND g.status<>'archived')) AS desired
 FROM collection_plans p JOIN collection_sources s ON s.id=p.source_id
 WHERE s.namespace=$1 AND s.target_id IS NOT NULL AND
- (p.checked_at IS NULL OR p.checked_at < transaction_timestamp() - CASE WHEN p.schedule_id IS NULL THEN interval '30 seconds' ELSE interval '30 minutes' END OR
+ (p.checked_at IS NULL OR p.checked_at < transaction_timestamp() - CASE WHEN p.schedule_id IS NULL OR p.config_revision<>p.synced_config_revision THEN interval '30 seconds' ELSE interval '30 minutes' END OR
   (p.schedule_id IS NOT NULL AND p.remote_enabled IS DISTINCT FROM (EXISTS (SELECT 1 FROM collection_plan_bindings m JOIN collection_bindings b ON b.id=m.binding_id
          WHERE m.plan_id=p.id AND m.source_id=p.source_id AND b.source_id=m.source_id AND b.effective_until IS NULL AND m.enabled AND EXISTS (SELECT FROM sites st WHERE st.id=b.site_id AND st.status<>'archived' UNION ALL SELECT FROM games g WHERE g.id=b.game_id AND g.status<>'archived')))))
 ORDER BY p.checked_at NULLS FIRST,p.id LIMIT 8
 `
 
 type PendingCollectionPlansRow struct {
-	ID              uuid.UUID          `json:"id"`
-	SourceID        uuid.UUID          `json:"source_id"`
-	Capability      string             `json:"capability"`
-	RequestSchema   int32              `json:"request_schema"`
-	Params          []byte             `json:"params"`
-	Scope           []byte             `json:"scope"`
-	IntervalSeconds int32              `json:"interval_seconds"`
-	AnchorAt        pgtype.Timestamptz `json:"anchor_at"`
-	Policy          string             `json:"policy"`
-	ScheduleID      *uuid.UUID         `json:"schedule_id"`
-	RemoteRevision  pgtype.Int8        `json:"remote_revision"`
-	RemoteEnabled   pgtype.Bool        `json:"remote_enabled"`
-	PostStarted     bool               `json:"post_started"`
-	CheckedAt       pgtype.Timestamptz `json:"checked_at"`
-	TargetID        *uuid.UUID         `json:"target_id"`
-	Namespace       string             `json:"namespace"`
-	Provider        string             `json:"provider"`
-	ResourceType    string             `json:"resource_type"`
-	ExternalKey     string             `json:"external_key"`
-	Desired         bool               `json:"desired"`
+	ID                      uuid.UUID          `json:"id"`
+	SourceID                uuid.UUID          `json:"source_id"`
+	Capability              string             `json:"capability"`
+	RequestSchema           int32              `json:"request_schema"`
+	Params                  []byte             `json:"params"`
+	Scope                   []byte             `json:"scope"`
+	IntervalSeconds         int32              `json:"interval_seconds"`
+	AnchorAt                pgtype.Timestamptz `json:"anchor_at"`
+	Policy                  string             `json:"policy"`
+	ScheduleID              *uuid.UUID         `json:"schedule_id"`
+	RemoteRevision          pgtype.Int8        `json:"remote_revision"`
+	RemoteEnabled           pgtype.Bool        `json:"remote_enabled"`
+	PostStarted             bool               `json:"post_started"`
+	CheckedAt               pgtype.Timestamptz `json:"checked_at"`
+	IntervalOverrideSeconds int32              `json:"interval_override_seconds"`
+	ExecutionPolicy         []byte             `json:"execution_policy"`
+	ConfigRevision          int64              `json:"config_revision"`
+	SyncedConfigRevision    int64              `json:"synced_config_revision"`
+	ConfigSyncError         string             `json:"config_sync_error"`
+	TargetID                *uuid.UUID         `json:"target_id"`
+	Namespace               string             `json:"namespace"`
+	Provider                string             `json:"provider"`
+	ResourceType            string             `json:"resource_type"`
+	ExternalKey             string             `json:"external_key"`
+	Desired                 bool               `json:"desired"`
 }
 
 func (q *Queries) PendingCollectionPlans(ctx context.Context, namespace string) ([]PendingCollectionPlansRow, error) {
@@ -900,6 +915,11 @@ func (q *Queries) PendingCollectionPlans(ctx context.Context, namespace string) 
 			&i.RemoteEnabled,
 			&i.PostStarted,
 			&i.CheckedAt,
+			&i.IntervalOverrideSeconds,
+			&i.ExecutionPolicy,
+			&i.ConfigRevision,
+			&i.SyncedConfigRevision,
+			&i.ConfigSyncError,
 			&i.TargetID,
 			&i.Namespace,
 			&i.Provider,
@@ -1239,6 +1259,22 @@ func (q *Queries) ReadSiteEvidence(ctx context.Context, arg ReadSiteEvidencePara
 	return items, nil
 }
 
+const recordCollectionConfigSyncError = `-- name: RecordCollectionConfigSyncError :exec
+UPDATE collection_plans SET config_sync_error=$2
+WHERE id=$1 AND config_revision=$3 AND config_revision<>synced_config_revision
+`
+
+type RecordCollectionConfigSyncErrorParams struct {
+	ID       uuid.UUID `json:"id"`
+	Reason   string    `json:"reason"`
+	Revision int64     `json:"revision"`
+}
+
+func (q *Queries) RecordCollectionConfigSyncError(ctx context.Context, arg RecordCollectionConfigSyncErrorParams) error {
+	_, err := q.db.Exec(ctx, recordCollectionConfigSyncError, arg.ID, arg.Reason, arg.Revision)
+	return err
+}
+
 const releaseCollectionLock = `-- name: ReleaseCollectionLock :one
 SELECT pg_advisory_unlock(hashtextextended('gofurry/harvest/'||$1::text,0))
 `
@@ -1268,7 +1304,7 @@ const saveCollectionPlan = `-- name: SaveCollectionPlan :one
 INSERT INTO collection_plans (id,source_id,capability,request_schema,params,scope,interval_seconds,anchor_at,policy)
 VALUES ($1,$2,$3,1,$4,$5,$6,$7,$8)
 ON CONFLICT (source_id,capability,request_schema,params,scope,interval_seconds,anchor_at,policy)
-DO UPDATE SET checked_at=NULL RETURNING id, source_id, capability, request_schema, params, scope, interval_seconds, anchor_at, policy, schedule_id, remote_revision, remote_enabled, post_started, checked_at
+DO UPDATE SET checked_at=NULL RETURNING id, source_id, capability, request_schema, params, scope, interval_seconds, anchor_at, policy, schedule_id, remote_revision, remote_enabled, post_started, checked_at, interval_override_seconds, execution_policy, config_revision, synced_config_revision, config_sync_error
 `
 
 type SaveCollectionPlanParams struct {
@@ -1309,20 +1345,27 @@ func (q *Queries) SaveCollectionPlan(ctx context.Context, arg SaveCollectionPlan
 		&i.RemoteEnabled,
 		&i.PostStarted,
 		&i.CheckedAt,
+		&i.IntervalOverrideSeconds,
+		&i.ExecutionPolicy,
+		&i.ConfigRevision,
+		&i.SyncedConfigRevision,
+		&i.ConfigSyncError,
 	)
 	return i, err
 }
 
 const saveCollectionSchedule = `-- name: SaveCollectionSchedule :exec
-UPDATE collection_plans SET schedule_id=$2,remote_revision=$3,remote_enabled=$4,checked_at=transaction_timestamp()
+UPDATE collection_plans SET schedule_id=$2,remote_revision=$3,remote_enabled=$4,checked_at=transaction_timestamp(),
+ synced_config_revision=$5,config_sync_error=''
 WHERE id=$1 AND (schedule_id IS NULL OR schedule_id=$2)
 `
 
 type SaveCollectionScheduleParams struct {
-	ID             uuid.UUID   `json:"id"`
-	ScheduleID     *uuid.UUID  `json:"schedule_id"`
-	RemoteRevision pgtype.Int8 `json:"remote_revision"`
-	RemoteEnabled  pgtype.Bool `json:"remote_enabled"`
+	ID                   uuid.UUID   `json:"id"`
+	ScheduleID           *uuid.UUID  `json:"schedule_id"`
+	RemoteRevision       pgtype.Int8 `json:"remote_revision"`
+	RemoteEnabled        pgtype.Bool `json:"remote_enabled"`
+	SyncedConfigRevision int64       `json:"synced_config_revision"`
 }
 
 func (q *Queries) SaveCollectionSchedule(ctx context.Context, arg SaveCollectionScheduleParams) error {
@@ -1331,6 +1374,7 @@ func (q *Queries) SaveCollectionSchedule(ctx context.Context, arg SaveCollection
 		arg.ScheduleID,
 		arg.RemoteRevision,
 		arg.RemoteEnabled,
+		arg.SyncedConfigRevision,
 	)
 	return err
 }

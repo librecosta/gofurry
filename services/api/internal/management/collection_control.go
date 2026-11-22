@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"slices"
 	"time"
+	"uuid"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/librecosta/gofurry/services/api/internal/catalog"
@@ -128,6 +129,32 @@ func (o *Operations) collectionMutation(c fiber.Ctx, action, id string, run func
 
 func (o *Operations) entityCollectionControls(g fiber.Router, kind string) {
 	base := "/" + kind + "/:id/collection"
+	g.Get(base+"/:plan/config", func(c fiber.Ctx) error {
+		id, plan, err := planConfigTarget(c)
+		if err != nil {
+			return err
+		}
+		out, err := o.Collector.ManagedPlanConfig(c.Context(), dbgen.New(o.Pool), kind, id, plan)
+		if err != nil {
+			return failure(err)
+		}
+		return c.JSON(out)
+	})
+	g.Patch(base+"/:plan/config", editOnly, func(c fiber.Ctx) error {
+		id, plan, err := planConfigTarget(c)
+		var input collection.PlanConfigInput
+		if err != nil || body(c, &input) != nil {
+			return fiber.ErrBadRequest
+		}
+		out, err := o.Catalog.Manage(c.Context(), receipt(c, "collection.plan.configure"), func(ctx context.Context, _ *catalog.Service, q *dbgen.Queries) (catalog.ManagementResult, error) {
+			revision, err := o.Collector.SetManagedPlanConfig(ctx, q, kind, id, plan, input)
+			return catalog.ManagementResult{Target: plan.String(), Revision: revision}, err
+		})
+		if err != nil {
+			return failure(err)
+		}
+		return c.JSON(out)
+	})
 	g.Post(base+"/register", editOnly, func(c fiber.Ctx) error {
 		if o.Collector == nil {
 			return fiber.ErrServiceUnavailable
@@ -193,4 +220,13 @@ func (o *Operations) entityCollectionControls(g fiber.Router, kind string) {
 			})
 		})
 	}
+}
+
+func planConfigTarget(c fiber.Ctx) (string, uuid.UUID, error) {
+	id, plan := c.Params("id"), c.Params("plan")
+	parsed, err := collectionUUID(plan)
+	if !catalog.ValidPublicID(id) || err != nil || parsed == nil {
+		return "", uuid.Nil(), fiber.ErrBadRequest
+	}
+	return id, *parsed, nil
 }

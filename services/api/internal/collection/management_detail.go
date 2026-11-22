@@ -41,6 +41,8 @@ type CollectionPlan struct {
 	Region          string           `json:"region,omitempty"`
 	EgressRegion    string           `json:"egress_region,omitempty"`
 	IntervalSeconds int32            `json:"interval_seconds"`
+	ConfigPending   bool             `json:"config_pending,omitempty"`
+	ConfigSyncError string           `json:"config_sync_error,omitempty"`
 	DesiredEnabled  bool             `json:"desired_enabled"`
 	Actionable      bool             `json:"actionable"`
 	Connection      string           `json:"connection"`
@@ -70,6 +72,7 @@ type CollectionJob struct {
 	Cause        string     `json:"cause,omitempty"`
 	CreatedAt    time.Time  `json:"created_at"`
 	UpdatedAt    time.Time  `json:"updated_at"`
+	RetryBlocked bool       `json:"retry_blocked,omitempty"`
 }
 
 type CollectionHistory struct {
@@ -162,6 +165,10 @@ func (s *Service) planDetail(ctx context.Context, row dbgen.ListEntityCollection
 		Locale: semantic.Locale, Region: semantic.Region, EgressRegion: semantic.EgressRegion, IntervalSeconds: row.IntervalSeconds,
 		DesiredEnabled: row.DesiredEnabled, Actionable: row.Actionable,
 		State: "unknown", LastSuccessAt: knownTime(row.LastSuccessAt),
+		ConfigPending: row.ConfigRevision != row.SyncedConfigRevision, ConfigSyncError: row.ConfigSyncError,
+	}
+	if row.IntervalOverrideSeconds != 0 {
+		out.IntervalSeconds = row.IntervalOverrideSeconds
 	}
 	if row.ObservationState != "" {
 		out.Observation = &PlanObservation{row.ObservationState, knownTime(row.ObservedAt), row.ObservationID, row.ScopeKey}
@@ -211,6 +218,9 @@ func (s *Service) planDetail(ctx context.Context, row dbgen.ListEntityCollection
 			out.State = "recent_success"
 		}
 	}
+	if out.ConfigPending && row.Actionable {
+		out.State = "pending_sync"
+	}
 	return out
 }
 
@@ -225,11 +235,13 @@ func (s *Service) planJobs(ctx context.Context, row dbgen.ListEntityCollectionPl
 	if row.Namespace != s.namespace {
 		return page, "unavailable"
 	}
-	spec, err := planSpec(row.TargetID, row.Capability, row.RequestSchema, row.Params, row.Scope, row.IntervalSeconds, row.AnchorAt.Time, row.Policy)
+	spec, err := planSchedule(row)
 	if err != nil || !v7(*row.ScheduleID) || !row.Since.Valid {
 		return page, "unavailable"
 	}
-	validSchedule := func(v scheduleView) bool { return v.ID == *row.ScheduleID && samePlan(v, spec, row.Namespace) }
+	validSchedule := func(v scheduleView) bool {
+		return v.ID == *row.ScheduleID && sameScheduleIdentity(v, spec, row.Namespace)
+	}
 	path := "schedules/" + row.ScheduleID.String()
 	query := url.Values{"limit": {strconv.Itoa(limit)}, "since": {row.Since.Time.UTC().Format(time.RFC3339Nano)}}
 	if before != nil {
@@ -276,7 +288,7 @@ func validScheduleJobs(page scheduleJobsPage, req request, row dbgen.ListEntityC
 var boundedJobCode = regexp.MustCompile(`^[a-z0-9][a-z0-9_.-]{0,63}$`)
 
 func projectJob(j scheduledJob) CollectionJob {
-	return CollectionJob{j.ID, j.AcceptedAttempt, j.AttemptCount, j.State, safeJobCode(j.Code), j.Cause, j.CreatedAt, j.Updated}
+	return CollectionJob{j.ID, j.AcceptedAttempt, j.AttemptCount, j.State, safeJobCode(j.Code), j.Cause, j.CreatedAt, j.Updated, retryBlocked(j.intakeJob)}
 }
 
 func safeJobCode(code string) string {

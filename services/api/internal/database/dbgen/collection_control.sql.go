@@ -12,6 +12,18 @@ import (
 	"uuid"
 )
 
+const countActivePlanBindings = `-- name: CountActivePlanBindings :one
+SELECT count(*) FROM collection_plan_bindings m JOIN collection_bindings b ON b.id=m.binding_id
+WHERE m.plan_id=$1 AND b.effective_until IS NULL
+`
+
+func (q *Queries) CountActivePlanBindings(ctx context.Context, planID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countActivePlanBindings, planID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countUnsynchronizedCollectionPlans = `-- name: CountUnsynchronizedCollectionPlans :one
 SELECT count(*)
 FROM collection_plans p JOIN collection_sources s ON s.id=p.source_id
@@ -22,7 +34,7 @@ CROSS JOIN LATERAL (SELECT EXISTS (
 ) AS enabled) desired
 WHERE s.namespace=$1 AND
  ((p.schedule_id IS NULL AND desired.enabled) OR
-  (p.schedule_id IS NOT NULL AND p.remote_enabled IS DISTINCT FROM desired.enabled))
+  (p.schedule_id IS NOT NULL AND (p.remote_enabled IS DISTINCT FROM desired.enabled OR p.config_revision<>p.synced_config_revision)))
 `
 
 func (q *Queries) CountUnsynchronizedCollectionPlans(ctx context.Context, namespace string) (int64, error) {
@@ -113,6 +125,17 @@ func (q *Queries) ListManagementPlanOwners(ctx context.Context, arg ListManageme
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockCollectionPlanConfig = `-- name: LockCollectionPlanConfig :one
+SELECT config_revision FROM collection_plans WHERE id=$1 FOR UPDATE
+`
+
+func (q *Queries) LockCollectionPlanConfig(ctx context.Context, id uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, lockCollectionPlanConfig, id)
+	var config_revision int64
+	err := row.Scan(&config_revision)
+	return config_revision, err
 }
 
 const managementEntityBinding = `-- name: ManagementEntityBinding :one
@@ -283,6 +306,32 @@ func (q *Queries) ManagementPlanResults(ctx context.Context, arg ManagementPlanR
 		return nil, err
 	}
 	return items, nil
+}
+
+const setCollectionPlanConfig = `-- name: SetCollectionPlanConfig :one
+UPDATE collection_plans SET interval_override_seconds=$2,
+ execution_policy=$3,config_revision=config_revision+1,config_sync_error='',checked_at=NULL
+WHERE id=$1 AND config_revision=$4
+RETURNING config_revision
+`
+
+type SetCollectionPlanConfigParams struct {
+	ID                      uuid.UUID `json:"id"`
+	IntervalOverrideSeconds int32     `json:"interval_override_seconds"`
+	ExecutionPolicy         []byte    `json:"execution_policy"`
+	ExpectedRevision        int64     `json:"expected_revision"`
+}
+
+func (q *Queries) SetCollectionPlanConfig(ctx context.Context, arg SetCollectionPlanConfigParams) (int64, error) {
+	row := q.db.QueryRow(ctx, setCollectionPlanConfig,
+		arg.ID,
+		arg.IntervalOverrideSeconds,
+		arg.ExecutionPolicy,
+		arg.ExpectedRevision,
+	)
+	var config_revision int64
+	err := row.Scan(&config_revision)
+	return config_revision, err
 }
 
 const setManagedPlanBinding = `-- name: SetManagedPlanBinding :execrows

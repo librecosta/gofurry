@@ -18,6 +18,19 @@ WHERE s.namespace=sqlc.arg(namespace) AND (sqlc.narg(after_plan)::uuid IS NULL O
    OR EXISTS (SELECT 1 FROM game_localizations l WHERE l.game_id=g.id AND strpos(lower(l.name),lower(sqlc.arg(keyword)))>0))
 ORDER BY p.id,(coalesce(st.status,g.status)<>'archived') DESC,m.enabled DESC,m.attached_at,b.id LIMIT 9;
 
+-- name: LockCollectionPlanConfig :one
+SELECT config_revision FROM collection_plans WHERE id=$1 FOR UPDATE;
+
+-- name: CountActivePlanBindings :one
+SELECT count(*) FROM collection_plan_bindings m JOIN collection_bindings b ON b.id=m.binding_id
+WHERE m.plan_id=$1 AND b.effective_until IS NULL;
+
+-- name: SetCollectionPlanConfig :one
+UPDATE collection_plans SET interval_override_seconds=sqlc.arg(interval_override_seconds),
+ execution_policy=sqlc.arg(execution_policy),config_revision=config_revision+1,config_sync_error='',checked_at=NULL
+WHERE id=$1 AND config_revision=sqlc.arg(expected_revision)
+RETURNING config_revision;
+
 -- name: ManagementJobOwners :many
 SELECT p.id,p.schedule_id,p.capability,p.params,p.scope,p.request_schema,s.target_id,
  CASE WHEN b.site_id IS NOT NULL THEN 'sites' ELSE 'games' END::text AS entity_kind,
@@ -58,7 +71,7 @@ CROSS JOIN LATERAL (SELECT EXISTS (
 ) AS enabled) desired
 WHERE s.namespace=sqlc.arg(namespace) AND
  ((p.schedule_id IS NULL AND desired.enabled) OR
-  (p.schedule_id IS NOT NULL AND p.remote_enabled IS DISTINCT FROM desired.enabled));
+  (p.schedule_id IS NOT NULL AND (p.remote_enabled IS DISTINCT FROM desired.enabled OR p.config_revision<>p.synced_config_revision)));
 
 -- name: LatestCollectionConfirmation :one
 SELECT max(coalesce(c.confirmed_at,c.observed_at))::timestamptz

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
+	"slices"
 	"time"
 	"uuid"
 
@@ -52,6 +53,11 @@ func (s *Service) reconcile(ctx context.Context, q *dbgen.Queries) error {
 		}
 		err = s.reconcilePlan(ctx, q, plan, remote)
 		if err != nil {
+			if plan.ConfigRevision != plan.SyncedConfigRevision && ctx.Err() == nil {
+				err = errors.Join(err, q.RecordCollectionConfigSyncError(ctx, dbgen.RecordCollectionConfigSyncErrorParams{
+					ID: plan.ID, Revision: plan.ConfigRevision, Reason: planSyncFailure(err),
+				}))
+			}
 			joined = errors.Join(joined, err)
 			if errors.Is(err, errNetwork) || ctx.Err() != nil {
 				return joined
@@ -124,11 +130,18 @@ func sameParams(a, b jsontext.Value) bool {
 }
 
 func samePlan(v scheduleView, plan scheduleSpec, namespace string) bool {
-	a, b := v.Request, plan.Request
+	return sameScheduleIdentity(v, plan, namespace) && v.Recurrence.Interval == plan.Recurrence.Interval &&
+		sameExecutionPolicy(v.ExecutionPolicy, plan.ExecutionPolicy)
+}
+
+func sameScheduleIdentity(v scheduleView, plan scheduleSpec, namespace string) bool {
 	x, y := v.Recurrence, plan.Recurrence
-	return v.Namespace == namespace && v7(v.ID) && v.Revision > 0 && a.TargetID == b.TargetID &&
-		a.Capability == b.Capability && a.Schema == b.Schema && a.Scope == b.Scope && sameParams(a.Params, b.Params) &&
-		x.Interval == y.Interval && x.Policy == y.Policy && x.Cron == y.Cron && x.Anchor.Equal(y.Anchor)
+	return v.Namespace == namespace && v7(v.ID) && v.Revision > 0 && sameJobRequest(v.Request, plan.Request) &&
+		x.Policy == y.Policy && x.Cron == y.Cron && x.Anchor.Equal(y.Anchor)
+}
+
+func sameExecutionPolicy(a, b PlanExecutionPolicy) bool {
+	return a.Mode == b.Mode && a.MaxAttempts == b.MaxAttempts && a.Backoff == b.Backoff && slices.Equal(a.Regions, b.Regions)
 }
 
 func planSpec(target *uuid.UUID, capability string, schema int32, params, scopeJSON []byte, interval int32, anchor time.Time, policy string) (scheduleSpec, error) {
@@ -148,6 +161,9 @@ func (s *Service) reconcilePlan(ctx context.Context, q *dbgen.Queries, p dbgen.P
 	if err != nil {
 		return err
 	}
+	if err := applyLocalPlanConfig(&spec, p.IntervalOverrideSeconds, p.ExecutionPolicy); err != nil {
+		return err
+	}
 	key := targetKey{p.Namespace, p.Provider, p.ResourceType, p.ExternalKey}
 	if err := s.verifyTarget(ctx, *p.TargetID, key); err != nil {
 		return err
@@ -158,7 +174,7 @@ func (s *Service) reconcilePlan(ctx context.Context, q *dbgen.Queries, p dbgen.P
 		if err != nil {
 			return err
 		}
-		if result.ID != *p.ScheduleID || !samePlan(result, spec, p.Namespace) {
+		if result.ID != *p.ScheduleID || !sameScheduleIdentity(result, spec, p.Namespace) {
 			return errRemoteConflict
 		}
 	} else {
@@ -196,15 +212,19 @@ func (s *Service) reconcilePlan(ctx context.Context, q *dbgen.Queries, p dbgen.P
 				return errRemoteConflict
 			}
 		}
-		if err := saveSchedule(ctx, q, p.ID, result); err != nil {
+		if err := saveSchedule(ctx, q, p.ID, p.ConfigRevision, result); err != nil {
 			return err
 		}
 	}
-	if result.Enabled != p.Desired {
-		patch := struct {
-			Revision int64 `json:"revision"`
-			Enabled  bool  `json:"enabled"`
-		}{result.Revision, p.Desired}
+	configChanged := !samePlan(result, spec, p.Namespace)
+	if configChanged && (p.ConfigRevision == p.SyncedConfigRevision || !p.RemoteRevision.Valid || result.Revision != p.RemoteRevision.Int64) {
+		return errRemoteConflict
+	}
+	if result.Enabled != p.Desired || configChanged {
+		patch := schedulePatch{Revision: result.Revision, Enabled: p.Desired}
+		if configChanged {
+			patch.Recurrence, patch.ExecutionPolicy = &spec.Recurrence, &spec.ExecutionPolicy
+		}
 		var updated scheduleView
 		if err := s.remote.call(ctx, s.remote.writer, http.MethodPatch, "schedules/"+result.ID.String(), nil, patch, &updated, 200); err != nil {
 			return err
@@ -214,12 +234,20 @@ func (s *Service) reconcilePlan(ctx context.Context, q *dbgen.Queries, p dbgen.P
 		}
 		result = updated
 	}
-	return saveSchedule(ctx, q, p.ID, result)
+	return saveSchedule(ctx, q, p.ID, p.ConfigRevision, result)
 }
 
-func saveSchedule(ctx context.Context, q *dbgen.Queries, id uuid.UUID, result scheduleView) error {
+type schedulePatch struct {
+	Revision        int64                `json:"revision"`
+	Enabled         bool                 `json:"enabled"`
+	Recurrence      *recurrence          `json:"recurrence,omitempty"`
+	ExecutionPolicy *PlanExecutionPolicy `json:"execution_policy,omitempty"`
+}
+
+func saveSchedule(ctx context.Context, q *dbgen.Queries, id uuid.UUID, configRevision int64, result scheduleView) error {
 	return q.SaveCollectionSchedule(ctx, dbgen.SaveCollectionScheduleParams{
 		ID: id, ScheduleID: &result.ID, RemoteRevision: pgtype.Int8{Int64: result.Revision, Valid: true}, RemoteEnabled: pgtype.Bool{Bool: result.Enabled, Valid: true},
+		SyncedConfigRevision: configRevision,
 	})
 }
 
@@ -250,6 +278,9 @@ func (s *Service) RetryAbsent(ctx context.Context, id uuid.UUID) error {
 		}
 		spec, err := planSpec(p.TargetID, p.Capability, p.RequestSchema, p.Params, p.Scope, p.IntervalSeconds, p.AnchorAt.Time, p.Policy)
 		if err != nil {
+			return err
+		}
+		if err := applyLocalPlanConfig(&spec, p.IntervalOverrideSeconds, p.ExecutionPolicy); err != nil {
 			return err
 		}
 		listed, err := s.listSchedules(ctx)

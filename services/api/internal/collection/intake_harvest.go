@@ -34,11 +34,12 @@ type intakeJob struct {
 }
 
 type intakeAttempt struct {
-	ID      uuid.UUID `json:"id"`
-	State   string    `json:"state"`
-	Claimed time.Time `json:"claimed_at"`
-	Ended   time.Time `json:"ended_at"`
-	Code    string    `json:"code,omitempty"`
+	ID           uuid.UUID `json:"id"`
+	State        string    `json:"state"`
+	Claimed      time.Time `json:"claimed_at"`
+	Ended        time.Time `json:"ended_at"`
+	Code         string    `json:"code,omitempty"`
+	EgressRegion string    `json:"egress_region,omitempty"`
 }
 
 type intakeJobDetail struct {
