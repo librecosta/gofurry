@@ -21,6 +21,7 @@ func entityFilter(v url.Values) bool {
 }
 
 func (o *Operations) collectionControl(g fiber.Router) {
+	o.collectionWorkers(g)
 	const base = "/operations/collection"
 	g.Get(base+"/summary", func(c fiber.Ctx) error {
 		summary, err := o.Collector.ControlSummary(c.Context(), dbgen.New(o.Pool))
