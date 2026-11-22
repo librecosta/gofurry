@@ -196,7 +196,7 @@ ON CONFLICT (public_id) DO NOTHING RETURNING *;
 SELECT * FROM game_collections WHERE public_id=$1 FOR UPDATE;
 
 -- name: EditGameCollection :one
-UPDATE game_collections SET slug=$2,localizations=$3,revision=revision+1,updated_at=statement_timestamp() WHERE id=$1 RETURNING *;
+UPDATE game_collections SET localizations=$2,revision=revision+1,updated_at=statement_timestamp() WHERE id=$1 RETURNING *;
 
 -- name: UpdateGameCollectionStatus :one
 UPDATE game_collections SET status=sqlc.arg(new_status),

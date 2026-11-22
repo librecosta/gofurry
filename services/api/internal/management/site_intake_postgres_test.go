@@ -328,9 +328,39 @@ WHERE d.reason LIKE 'System: Site%' AND m.target=$1 AND d.actor=m.actor_id::text
 	const collections = "/internal/v1/ops/games/collections"
 	var set catalog.ManagementResult
 	request("POST", adminURL, collections, "owner", collectionEdit{
-		Slug: "test-collection", Localizations: []catalog.Localization{{Locale: "en", Name: "Test collection"}},
+		Slug: "old-client-input", Localizations: []catalog.Localization{{Locale: "en", Name: "Test & Collection: 2026!"}},
 	}, 200, &set)
 	collectionPath := collections + "/" + set.Target
+	row, err := dbgen.New(pool).ReadGameCollection(ctx, set.Target)
+	siteMust(t, err)
+	if row.Slug != "test-collection-2026" {
+		t.Fatalf("unexpected generated collection slug: %q", row.Slug)
+	}
+	request("PATCH", adminURL, collectionPath, "operator", collectionEdit{
+		Revision: set.Revision, Slug: "old-client-rename", Members: []string{newGame.Target},
+		Localizations: []catalog.Localization{{Locale: "zh", Name: "叙事合集"}, {Locale: "en", Name: "Another collection", Summary: "Updated description"}},
+	}, 200, &set)
+	updated, err := dbgen.New(pool).ReadGameCollection(ctx, set.Target)
+	siteMust(t, err)
+	members, err := dbgen.New(pool).PrivateGameCollectionMembers(ctx, updated.ID)
+	siteMust(t, err)
+	if updated.ID != row.ID || updated.Slug != row.Slug || !slices.Equal(members, []string{newGame.Target}) {
+		t.Fatal("collection edit changed its identity, slug, or provided members")
+	}
+	var fallbackIDs []string
+	for _, localizations := range [][]catalog.Localization{
+		{{Locale: "zh", Name: "中文合集"}},
+		{{Locale: "zh", Name: "另一个合集"}, {Locale: "en", Name: "🦊"}},
+	} {
+		var fallback catalog.ManagementResult
+		request("POST", adminURL, collections, "owner", collectionEdit{Localizations: localizations}, 200, &fallback)
+		item, err := dbgen.New(pool).ReadGameCollection(ctx, fallback.Target)
+		siteMust(t, err)
+		if item.Slug != "collection" || slices.Contains(fallbackIDs, item.PublicID) {
+			t.Fatalf("invalid fallback or duplicate collection: %q %q", item.Slug, item.PublicID)
+		}
+		fallbackIDs = append(fallbackIDs, item.PublicID)
+	}
 	request("POST", adminURL, collectionPath+"/publish", "developer", publication{Revision: set.Revision}, 403, nil)
 	request("POST", adminURL, collectionPath+"/publish", "operator", publication{Revision: set.Revision}, 200, &set)
 	request("POST", adminURL, collectionPath+"/archive", "operator", publication{Revision: set.Revision}, 200, &set)

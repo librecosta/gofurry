@@ -65,17 +65,16 @@ func (q *Queries) DisableGameChannelJIT(ctx context.Context) error {
 }
 
 const editGameCollection = `-- name: EditGameCollection :one
-UPDATE game_collections SET slug=$2,localizations=$3,revision=revision+1,updated_at=statement_timestamp() WHERE id=$1 RETURNING id, public_id, slug, localizations, status, revision, first_published_at, updated_at, derived_membership_revision
+UPDATE game_collections SET localizations=$2,revision=revision+1,updated_at=statement_timestamp() WHERE id=$1 RETURNING id, public_id, slug, localizations, status, revision, first_published_at, updated_at, derived_membership_revision
 `
 
 type EditGameCollectionParams struct {
 	ID            uuid.UUID `json:"id"`
-	Slug          string    `json:"slug"`
 	Localizations []byte    `json:"localizations"`
 }
 
 func (q *Queries) EditGameCollection(ctx context.Context, arg EditGameCollectionParams) (GameCollection, error) {
-	row := q.db.QueryRow(ctx, editGameCollection, arg.ID, arg.Slug, arg.Localizations)
+	row := q.db.QueryRow(ctx, editGameCollection, arg.ID, arg.Localizations)
 	var i GameCollection
 	err := row.Scan(
 		&i.ID,

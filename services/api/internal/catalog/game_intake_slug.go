@@ -5,6 +5,10 @@ import "strings"
 // NewGameSlug derives a decorative path from the English title. Public ID
 // distinguishes identities even when titles produce the same path.
 func NewGameSlug(texts []Localization) string {
+	return englishTitleSlug(texts, "game")
+}
+
+func englishTitleSlug(texts []Localization, fallback string) string {
 	for _, text := range texts {
 		if text.Locale != "en" {
 			continue
@@ -17,5 +21,5 @@ func NewGameSlug(texts []Localization) string {
 			return strings.TrimRight(path[:min(len(path), 80)], "-")
 		}
 	}
-	return "game"
+	return fallback
 }

@@ -323,7 +323,7 @@ func (o *Operations) collections(g fiber.Router) {
 
 	g.Get(base+"/:id", readOperation(o.Catalog.InspectGameCollection))
 	save := func(ctx context.Context, s *catalog.Service, _ *dbgen.Queries, id string, in collectionEdit, _ catalog.PublicationDecision) (catalog.ManagementResult, error) {
-		editorial := catalog.Editorial{Slug: in.Slug, Localizations: in.Localizations}
+		editorial := catalog.Editorial{Localizations: in.Localizations}
 		var row catalog.CollectionRecord
 		var err error
 		if id == "" {

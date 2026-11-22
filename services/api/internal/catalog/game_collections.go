@@ -136,6 +136,9 @@ func (s *Service) InspectGameCollection(ctx context.Context, id string) (Collect
 }
 
 func (s *Service) CreateGameCollection(ctx context.Context, in Editorial) (CollectionRecord, error) {
+	if strings.TrimSpace(in.Slug) == "" {
+		in.Slug = englishTitleSlug(in.Localizations, "collection")
+	}
 	clean, err := normalizeEditorial(in, "")
 	if err != nil {
 		return CollectionRecord{}, err
@@ -177,15 +180,15 @@ func (s *Service) changeCollection(ctx context.Context, id string, revision int6
 
 func (s *Service) EditGameCollection(ctx context.Context, id string, rev int64, in Editorial) (CollectionRecord, error) {
 	return s.changeCollection(ctx, id, rev, func(ctx context.Context, q *dbgen.Queries, row dbgen.GameCollection) (dbgen.GameCollection, error) {
-		clean, err := normalizeEditorial(in, row.Slug)
-		if err != nil || (row.Status == Published && len(in.Localizations) == 0) {
+		localizations, err := normalizeLocalizations(in.Localizations)
+		if err != nil || (row.Status == Published && len(localizations) == 0) {
 			return row, ErrInvalid
 		}
-		text, err := json.Marshal(append([]Localization{}, clean.Localizations...))
+		text, err := json.Marshal(append([]Localization{}, localizations...))
 		if err != nil {
 			return row, ErrInvalid
 		}
-		return q.EditGameCollection(ctx, dbgen.EditGameCollectionParams{ID: row.ID, Slug: clean.Slug, Localizations: text})
+		return q.EditGameCollection(ctx, dbgen.EditGameCollectionParams{ID: row.ID, Localizations: text})
 	})
 }
 
