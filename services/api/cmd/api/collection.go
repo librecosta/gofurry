@@ -79,6 +79,7 @@ func collectionCommand(cfg *platform.Config) *cobra.Command {
 		})
 	planCommand.Flags().StringVar(&anchor, "anchor", "", "First eligible UTC slot (RFC3339)")
 	planCommand.Flags().DurationVar(&plan.Interval, "interval", 0, "Explicit recurrence interval")
+	planCommand.Flags().Int32Var(&plan.OutputSchema, "output-schema", 1, "Harvest output schema")
 	planCommand.Flags().StringVar(&plan.Locale, "locale", "", "Semantic locale, en or zh-cn for Steam")
 	planCommand.Flags().StringVar(&plan.Region, "region", "", "Semantic region or Steam store country")
 	planCommand.Flags().StringVar(&plan.EgressRegion, "egress-region", "", "Harvest policy's egress region")

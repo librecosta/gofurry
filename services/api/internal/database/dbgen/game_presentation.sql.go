@@ -20,7 +20,7 @@ WITH work AS MATERIALIZED (
 )
 SELECT g.public_id,g.slug,g.intake_display_source AS preferred_source,game_published_text(g.id)::jsonb AS localizations,
  coalesce((SELECT jsonb_agg(jsonb_build_object('locale',p.locale,'source_id',p.media_source_id,'media',p.media,
-  'observed_at',p.media_observed_at,'store_country',p.media_store_country,'cover_url',p.cover_url) ORDER BY p.locale)
+  'observed_at',p.media_observed_at,'store_country',p.media_store_country,'cover_url',p.cover_url,'media_v2',p.media_v2) ORDER BY p.locale)
   FROM game_published_localizations p WHERE p.game_id=g.id),'[]')::jsonb AS presentation,
  coalesce((SELECT jsonb_agg(jsonb_build_object(
   'id',s.id,'platform_code',s.platform_code,'external_key',s.external_key,'source_url',nullif(s.source_url,''),'active',s.active,
@@ -53,7 +53,7 @@ SELECT g.public_id,g.slug,g.intake_display_source AS preferred_source,game_publi
    JOIN collection_consumer cn ON cn.namespace=src.namespace
    JOIN collection_current c ON c.source_id=src.id AND c.generation=cn.generation
    WHERE s.active AND s.platform_code='steam' AND b.game_source_id=s.id AND b.game_id=g.id AND b.effective_until IS NULL AND b.purpose='steam'
-    AND c.capability='steam.details' AND c.output_schema=1 AND c.state='present' AND c.observation_id IS NOT NULL
+    AND c.capability='steam.details' AND c.state='present' AND c.observation_id IS NOT NULL
     AND c.scope#>>'{dimensions,section}'='price' AND c.scope->>'egress_region'=$1::text
     AND c.scope->>'locale' IN ('en','zh-cn') AND c.scope->>'region' IN ('cn','us','hk')
     AND c.scope->>'namespace'=src.namespace AND c.data->>'app_id'=s.external_key
@@ -61,9 +61,9 @@ SELECT g.public_id,g.slug,g.intake_display_source AS preferred_source,game_publi
     AND c.confirmed_at BETWEEN greatest(b.effective_from,statement_timestamp()-interval '48 hours') AND statement_timestamp()
     AND NOT EXISTS (SELECT 1 FROM collection_gaps gap WHERE gap.namespace=src.namespace AND gap.prior_generation=cn.generation)
     AND EXISTS (SELECT 1 FROM collection_plan_bindings m JOIN collection_plans p ON p.id=m.plan_id AND p.source_id=m.source_id
-     WHERE m.binding_id=b.id AND m.source_id=src.id AND p.capability=c.capability AND p.request_schema=c.output_schema
+     WHERE m.binding_id=b.id AND m.source_id=src.id AND p.capability=c.capability AND p.output_schema=c.output_schema
       AND p.scope=c.scope-'namespace'-'dimensions' AND m.attached_at<=c.confirmed_at)
-   ORDER BY c.scope->>'locale',c.scope->>'region',c.confirmed_at DESC,src.id LIMIT 6
+   ORDER BY c.scope->>'locale',c.scope->>'region',c.confirmed_at DESC,c.output_schema DESC,src.id,c.observation_id LIMIT 6
   ) p),
   'news',(SELECT coalesce(jsonb_agg(to_jsonb(n) ORDER BY n.published_at DESC,n.gid DESC),'[]') FROM (
    SELECT item.gid, item.published_at, item.observed_at, item.observation_id, item.scope_key, item.value FROM (
@@ -97,7 +97,7 @@ SELECT g.public_id,g.slug,g.intake_display_source AS preferred_source,game_publi
     AND c.observed_at BETWEEN greatest(b.effective_from,statement_timestamp()-interval '2 hours') AND statement_timestamp()
     AND NOT EXISTS (SELECT 1 FROM collection_gaps gap WHERE gap.namespace=src.namespace AND gap.prior_generation=cn.generation)
     AND EXISTS (SELECT 1 FROM collection_plan_bindings m JOIN collection_plans p ON p.id=m.plan_id AND p.source_id=m.source_id
-     WHERE m.binding_id=b.id AND m.source_id=src.id AND p.capability=c.capability AND p.request_schema=c.output_schema
+     WHERE m.binding_id=b.id AND m.source_id=src.id AND p.capability=c.capability AND p.output_schema=c.output_schema
       AND p.scope=c.scope-'namespace'-'dimensions' AND m.attached_at<=c.observed_at)
    ORDER BY e.observed_at DESC,src.id LIMIT 1
   ) p))

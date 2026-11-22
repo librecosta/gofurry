@@ -313,9 +313,18 @@ type players struct {
 }
 
 func normalizeSteam(o observation, key string) (compact, error) {
+	if highFidelityMedia(o) {
+		return normalizeSteamHighFidelity(o, key)
+	}
 	c := compact{Facts: map[string]jsontext.Value{}, Ruleset: steamProjectionRules}
 	var src steamProvenance
-	if !steamScopeOK(o) || json.Unmarshal(o.Data, &src) != nil || src.AppID == 0 || strconv.FormatUint(uint64(src.AppID), 10) != key {
+	if !steamScopeOK(o) || json.Unmarshal(o.Data, &src) != nil || src.AppID == 0 {
+		return c, errProtocol
+	}
+	if strconv.FormatUint(uint64(src.AppID), 10) != key {
+		if o.Schema == 2 {
+			return c, errMediaIdentity
+		}
 		return c, errProtocol
 	}
 	tier, address := "official_api", ""

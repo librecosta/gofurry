@@ -11,7 +11,7 @@ WITH eligible AS MATERIALIZED (
  JOIN game_sources gs ON gs.id=b.game_source_id AND gs.game_id=b.game_id AND gs.active AND gs.platform_code='steam' AND gs.external_key=src.external_key
  JOIN collection_plan_bindings m ON m.binding_id=b.id AND m.source_id=src.id
  JOIN collection_plans p ON p.id=m.plan_id AND p.source_id=src.id AND p.capability=c.capability AND p.scope=c.scope-'namespace'-'dimensions'
- WHERE c.generation=sqlc.arg(generation)::uuid AND c.capability='steam.details' AND p.request_schema=1 AND c.output_schema=1
+ WHERE c.generation=sqlc.arg(generation)::uuid AND c.capability='steam.details' AND p.output_schema=1 AND c.output_schema=1
   AND (sqlc.narg(source_id)::uuid IS NULL OR c.source_id=sqlc.narg(source_id))
   AND (sqlc.narg(scope_key)::text IS NULL OR c.scope_key=sqlc.narg(scope_key))
   AND c.scope->>'namespace'=src.namespace

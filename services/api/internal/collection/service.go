@@ -112,6 +112,8 @@ func Diagnostic(err error) string {
 		return "harvest_protocol"
 	case errors.Is(err, errSchema):
 		return "harvest_schema"
+	case errors.Is(err, errMediaIdentity):
+		return "harvest_source_identity"
 	case errors.Is(err, errAmbiguous):
 		return "schedule_outcome_unknown"
 	case errors.Is(err, errRemoteConflict):

@@ -297,6 +297,32 @@ func (q *Queries) AddSiteEvidenceChange(ctx context.Context, arg AddSiteEvidence
 	return err
 }
 
+const applyCollectionMediaWithdrawal = `-- name: ApplyCollectionMediaWithdrawal :exec
+DELETE FROM collection_current WHERE generation=$1 AND source_id=$2 AND capability=$3 AND output_schema=$4 AND scope_key=$5
+ AND execution_egress_region<>'' AND position<=$6
+`
+
+type ApplyCollectionMediaWithdrawalParams struct {
+	Generation         uuid.UUID `json:"generation"`
+	SourceID           uuid.UUID `json:"source_id"`
+	Capability         string    `json:"capability"`
+	OutputSchema       int32     `json:"output_schema"`
+	ScopeKey           string    `json:"scope_key"`
+	WithdrawalPosition int64     `json:"withdrawal_position"`
+}
+
+func (q *Queries) ApplyCollectionMediaWithdrawal(ctx context.Context, arg ApplyCollectionMediaWithdrawalParams) error {
+	_, err := q.db.Exec(ctx, applyCollectionMediaWithdrawal,
+		arg.Generation,
+		arg.SourceID,
+		arg.Capability,
+		arg.OutputSchema,
+		arg.ScopeKey,
+		arg.WithdrawalPosition,
+	)
+	return err
+}
+
 const attachCollectionPlan = `-- name: AttachCollectionPlan :one
 WITH owned AS MATERIALIZED (
  SELECT p.id AS plan_id,b.id AS binding_id,p.source_id
@@ -431,15 +457,17 @@ func (q *Queries) CloseRemovedSiteCoverage(ctx context.Context, siteID *uuid.UUI
 }
 
 const collectionCurrent = `-- name: CollectionCurrent :one
-SELECT source_id, generation, capability, output_schema, scope_key, scope, position, state, observation_id, observed_at, received_at, confirmed_at, content_hash, evidence, ruleset, data, facts FROM collection_current WHERE generation=$1 AND source_id=$2 AND capability=$3 AND output_schema=$4 AND scope_key=$5
+SELECT source_id, generation, capability, output_schema, scope_key, scope, position, state, observation_id, observed_at, received_at, confirmed_at, content_hash, evidence, ruleset, data, facts, execution_egress_region FROM collection_current WHERE generation=$1 AND source_id=$2 AND capability=$3 AND output_schema=$4 AND scope_key=$5
+ AND execution_egress_region=$6
 `
 
 type CollectionCurrentParams struct {
-	Generation   uuid.UUID `json:"generation"`
-	SourceID     uuid.UUID `json:"source_id"`
-	Capability   string    `json:"capability"`
-	OutputSchema int32     `json:"output_schema"`
-	ScopeKey     string    `json:"scope_key"`
+	Generation            uuid.UUID `json:"generation"`
+	SourceID              uuid.UUID `json:"source_id"`
+	Capability            string    `json:"capability"`
+	OutputSchema          int32     `json:"output_schema"`
+	ScopeKey              string    `json:"scope_key"`
+	ExecutionEgressRegion string    `json:"execution_egress_region"`
 }
 
 func (q *Queries) CollectionCurrent(ctx context.Context, arg CollectionCurrentParams) (CollectionCurrent, error) {
@@ -449,6 +477,7 @@ func (q *Queries) CollectionCurrent(ctx context.Context, arg CollectionCurrentPa
 		arg.Capability,
 		arg.OutputSchema,
 		arg.ScopeKey,
+		arg.ExecutionEgressRegion,
 	)
 	var i CollectionCurrent
 	err := row.Scan(
@@ -469,6 +498,7 @@ func (q *Queries) CollectionCurrent(ctx context.Context, arg CollectionCurrentPa
 		&i.Ruleset,
 		&i.Data,
 		&i.Facts,
+		&i.ExecutionEgressRegion,
 	)
 	return i, err
 }
@@ -503,20 +533,22 @@ SELECT s.id, s.namespace, s.provider, s.resource_type, s.external_key, s.target_
  SELECT 1 FROM collection_plans p JOIN collection_plan_bindings m ON m.plan_id=p.id AND m.source_id=p.source_id
  JOIN collection_bindings b ON b.id=m.binding_id AND b.source_id=m.source_id AND b.resource_type=s.resource_type
  WHERE p.source_id=s.id AND p.capability=$3 AND p.scope=$4
- AND m.attached_at<=$5::timestamptz
- AND (p.capability<>'web.dns' OR (p.params->'types') ? $6::text)
- AND b.effective_from<=$5::timestamptz
- AND (b.effective_until IS NULL OR b.effective_until>$5::timestamptz)
+ AND p.output_schema=$5
+ AND m.attached_at<=$6::timestamptz
+ AND (p.capability<>'web.dns' OR (p.params->'types') ? $7::text)
+ AND b.effective_from<=$6::timestamptz
+ AND (b.effective_until IS NULL OR b.effective_until>$6::timestamptz)
 )
 `
 
 type CollectionResultSourceParams struct {
-	TargetID   *uuid.UUID         `json:"target_id"`
-	Namespace  string             `json:"namespace"`
-	Capability string             `json:"capability"`
-	Scope      []byte             `json:"scope"`
-	EvidenceAt pgtype.Timestamptz `json:"evidence_at"`
-	Rrtype     string             `json:"rrtype"`
+	TargetID     *uuid.UUID         `json:"target_id"`
+	Namespace    string             `json:"namespace"`
+	Capability   string             `json:"capability"`
+	Scope        []byte             `json:"scope"`
+	OutputSchema int32              `json:"output_schema"`
+	EvidenceAt   pgtype.Timestamptz `json:"evidence_at"`
+	Rrtype       string             `json:"rrtype"`
 }
 
 func (q *Queries) CollectionResultSource(ctx context.Context, arg CollectionResultSourceParams) (CollectionSource, error) {
@@ -525,6 +557,7 @@ func (q *Queries) CollectionResultSource(ctx context.Context, arg CollectionResu
 		arg.Namespace,
 		arg.Capability,
 		arg.Scope,
+		arg.OutputSchema,
 		arg.EvidenceAt,
 		arg.Rrtype,
 	)
@@ -659,7 +692,7 @@ DELETE FROM collection_current WHERE ctid IN (
  AND NOT EXISTS (
   SELECT 1 FROM collection_plans p JOIN collection_plan_bindings m ON m.plan_id=p.id AND m.source_id=p.source_id
   JOIN collection_bindings b ON b.id=m.binding_id AND b.source_id=m.source_id
-  WHERE p.source_id=c.source_id AND p.capability=c.capability AND p.scope=c.scope-'namespace'-'dimensions'
+  WHERE p.source_id=c.source_id AND p.capability=c.capability AND p.output_schema=c.output_schema AND p.scope=c.scope-'namespace'-'dimensions'
    AND (c.capability<>'web.dns' OR (p.params->'types') ? (c.scope->'dimensions'->>'rrtype'))
    AND b.effective_until IS NULL
  )
@@ -675,15 +708,17 @@ func (q *Queries) DeleteRetiredCollectionCurrent(ctx context.Context, namespace 
 const findMatchingCollectionPlan = `-- name: FindMatchingCollectionPlan :one
 SELECT id FROM collection_plans
 WHERE source_id=$1 AND capability=$2 AND request_schema=1 AND params=$3 AND scope=$4 AND policy=$5
+ AND output_schema=$6
 ORDER BY (schedule_id IS NOT NULL) DESC,id LIMIT 1
 `
 
 type FindMatchingCollectionPlanParams struct {
-	SourceID   uuid.UUID `json:"source_id"`
-	Capability string    `json:"capability"`
-	Params     []byte    `json:"params"`
-	Scope      []byte    `json:"scope"`
-	Policy     string    `json:"policy"`
+	SourceID     uuid.UUID `json:"source_id"`
+	Capability   string    `json:"capability"`
+	Params       []byte    `json:"params"`
+	Scope        []byte    `json:"scope"`
+	Policy       string    `json:"policy"`
+	OutputSchema int32     `json:"output_schema"`
 }
 
 func (q *Queries) FindMatchingCollectionPlan(ctx context.Context, arg FindMatchingCollectionPlanParams) (uuid.UUID, error) {
@@ -693,6 +728,7 @@ func (q *Queries) FindMatchingCollectionPlan(ctx context.Context, arg FindMatchi
 		arg.Params,
 		arg.Scope,
 		arg.Policy,
+		arg.OutputSchema,
 	)
 	var id uuid.UUID
 	err := row.Scan(&id)
@@ -721,7 +757,7 @@ func (q *Queries) GetCollectionConsumer(ctx context.Context, namespace string) (
 }
 
 const getUnknownCollectionPlan = `-- name: GetUnknownCollectionPlan :one
-SELECT p.id, p.source_id, p.capability, p.request_schema, p.params, p.scope, p.interval_seconds, p.anchor_at, p.policy, p.schedule_id, p.remote_revision, p.remote_enabled, p.post_started, p.checked_at, p.interval_override_seconds, p.execution_policy, p.config_revision, p.synced_config_revision, p.config_sync_error,s.target_id FROM collection_plans p JOIN collection_sources s ON s.id=p.source_id
+SELECT p.id, p.source_id, p.capability, p.request_schema, p.params, p.scope, p.interval_seconds, p.anchor_at, p.policy, p.schedule_id, p.remote_revision, p.remote_enabled, p.post_started, p.checked_at, p.interval_override_seconds, p.execution_policy, p.config_revision, p.synced_config_revision, p.config_sync_error, p.output_schema,s.target_id FROM collection_plans p JOIN collection_sources s ON s.id=p.source_id
 WHERE p.id=$1 AND s.namespace=$2 AND p.post_started AND p.schedule_id IS NULL AND s.target_id IS NOT NULL
 `
 
@@ -750,6 +786,7 @@ type GetUnknownCollectionPlanRow struct {
 	ConfigRevision          int64              `json:"config_revision"`
 	SyncedConfigRevision    int64              `json:"synced_config_revision"`
 	ConfigSyncError         string             `json:"config_sync_error"`
+	OutputSchema            int32              `json:"output_schema"`
 	TargetID                *uuid.UUID         `json:"target_id"`
 }
 
@@ -776,6 +813,7 @@ func (q *Queries) GetUnknownCollectionPlan(ctx context.Context, arg GetUnknownCo
 		&i.ConfigRevision,
 		&i.SyncedConfigRevision,
 		&i.ConfigSyncError,
+		&i.OutputSchema,
 		&i.TargetID,
 	)
 	return i, err
@@ -852,7 +890,7 @@ func (q *Queries) OpenCollectionBinding(ctx context.Context, arg OpenCollectionB
 }
 
 const pendingCollectionPlans = `-- name: PendingCollectionPlans :many
-SELECT p.id, p.source_id, p.capability, p.request_schema, p.params, p.scope, p.interval_seconds, p.anchor_at, p.policy, p.schedule_id, p.remote_revision, p.remote_enabled, p.post_started, p.checked_at, p.interval_override_seconds, p.execution_policy, p.config_revision, p.synced_config_revision, p.config_sync_error,s.target_id,s.namespace,s.provider,s.resource_type,s.external_key,
+SELECT p.id, p.source_id, p.capability, p.request_schema, p.params, p.scope, p.interval_seconds, p.anchor_at, p.policy, p.schedule_id, p.remote_revision, p.remote_enabled, p.post_started, p.checked_at, p.interval_override_seconds, p.execution_policy, p.config_revision, p.synced_config_revision, p.config_sync_error, p.output_schema,s.target_id,s.namespace,s.provider,s.resource_type,s.external_key,
  EXISTS (SELECT 1 FROM collection_plan_bindings m JOIN collection_bindings b ON b.id=m.binding_id
  WHERE m.plan_id=p.id AND m.source_id=p.source_id AND b.source_id=m.source_id AND b.effective_until IS NULL AND m.enabled AND EXISTS (SELECT FROM sites st WHERE st.id=b.site_id AND st.status<>'archived' UNION ALL SELECT FROM games g WHERE g.id=b.game_id AND g.status<>'archived')) AS desired
 FROM collection_plans p JOIN collection_sources s ON s.id=p.source_id
@@ -883,6 +921,7 @@ type PendingCollectionPlansRow struct {
 	ConfigRevision          int64              `json:"config_revision"`
 	SyncedConfigRevision    int64              `json:"synced_config_revision"`
 	ConfigSyncError         string             `json:"config_sync_error"`
+	OutputSchema            int32              `json:"output_schema"`
 	TargetID                *uuid.UUID         `json:"target_id"`
 	Namespace               string             `json:"namespace"`
 	Provider                string             `json:"provider"`
@@ -920,6 +959,7 @@ func (q *Queries) PendingCollectionPlans(ctx context.Context, namespace string) 
 			&i.ConfigRevision,
 			&i.SyncedConfigRevision,
 			&i.ConfigSyncError,
+			&i.OutputSchema,
 			&i.TargetID,
 			&i.Namespace,
 			&i.Provider,
@@ -983,9 +1023,9 @@ func (q *Queries) PruneGameEvidencePlayers(ctx context.Context) error {
 
 const putCollectionCurrent = `-- name: PutCollectionCurrent :exec
 INSERT INTO collection_current (generation,source_id,capability,output_schema,scope_key,scope,position,state,
- observation_id,observed_at,received_at,confirmed_at,content_hash,evidence,ruleset,data,facts)
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
-ON CONFLICT (generation,source_id,capability,output_schema,scope_key) DO UPDATE SET
+ observation_id,observed_at,received_at,confirmed_at,content_hash,evidence,ruleset,data,facts,execution_egress_region)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+ON CONFLICT (generation,source_id,capability,output_schema,scope_key,execution_egress_region) DO UPDATE SET
  scope=excluded.scope,position=excluded.position,state=excluded.state,observation_id=excluded.observation_id,
  observed_at=excluded.observed_at,received_at=excluded.received_at,confirmed_at=excluded.confirmed_at,
  content_hash=excluded.content_hash,evidence=excluded.evidence,ruleset=excluded.ruleset,data=excluded.data,facts=excluded.facts
@@ -996,23 +1036,24 @@ WHERE collection_current.position<excluded.position OR (collection_current.posit
 `
 
 type PutCollectionCurrentParams struct {
-	Generation    uuid.UUID          `json:"generation"`
-	SourceID      uuid.UUID          `json:"source_id"`
-	Capability    string             `json:"capability"`
-	OutputSchema  int32              `json:"output_schema"`
-	ScopeKey      string             `json:"scope_key"`
-	Scope         []byte             `json:"scope"`
-	Position      int64              `json:"position"`
-	State         string             `json:"state"`
-	ObservationID *uuid.UUID         `json:"observation_id"`
-	ObservedAt    pgtype.Timestamptz `json:"observed_at"`
-	ReceivedAt    pgtype.Timestamptz `json:"received_at"`
-	ConfirmedAt   pgtype.Timestamptz `json:"confirmed_at"`
-	ContentHash   string             `json:"content_hash"`
-	Evidence      string             `json:"evidence"`
-	Ruleset       string             `json:"ruleset"`
-	Data          []byte             `json:"data"`
-	Facts         []byte             `json:"facts"`
+	Generation            uuid.UUID          `json:"generation"`
+	SourceID              uuid.UUID          `json:"source_id"`
+	Capability            string             `json:"capability"`
+	OutputSchema          int32              `json:"output_schema"`
+	ScopeKey              string             `json:"scope_key"`
+	Scope                 []byte             `json:"scope"`
+	Position              int64              `json:"position"`
+	State                 string             `json:"state"`
+	ObservationID         *uuid.UUID         `json:"observation_id"`
+	ObservedAt            pgtype.Timestamptz `json:"observed_at"`
+	ReceivedAt            pgtype.Timestamptz `json:"received_at"`
+	ConfirmedAt           pgtype.Timestamptz `json:"confirmed_at"`
+	ContentHash           string             `json:"content_hash"`
+	Evidence              string             `json:"evidence"`
+	Ruleset               string             `json:"ruleset"`
+	Data                  []byte             `json:"data"`
+	Facts                 []byte             `json:"facts"`
+	ExecutionEgressRegion string             `json:"execution_egress_region"`
 }
 
 func (q *Queries) PutCollectionCurrent(ctx context.Context, arg PutCollectionCurrentParams) error {
@@ -1034,6 +1075,7 @@ func (q *Queries) PutCollectionCurrent(ctx context.Context, arg PutCollectionCur
 		arg.Ruleset,
 		arg.Data,
 		arg.Facts,
+		arg.ExecutionEgressRegion,
 	)
 	return err
 }
@@ -1301,10 +1343,10 @@ func (q *Queries) SaveCollectionCursor(ctx context.Context, arg SaveCollectionCu
 }
 
 const saveCollectionPlan = `-- name: SaveCollectionPlan :one
-INSERT INTO collection_plans (id,source_id,capability,request_schema,params,scope,interval_seconds,anchor_at,policy)
-VALUES ($1,$2,$3,1,$4,$5,$6,$7,$8)
-ON CONFLICT (source_id,capability,request_schema,params,scope,interval_seconds,anchor_at,policy)
-DO UPDATE SET checked_at=NULL RETURNING id, source_id, capability, request_schema, params, scope, interval_seconds, anchor_at, policy, schedule_id, remote_revision, remote_enabled, post_started, checked_at, interval_override_seconds, execution_policy, config_revision, synced_config_revision, config_sync_error
+INSERT INTO collection_plans (id,source_id,capability,request_schema,params,scope,interval_seconds,anchor_at,policy,output_schema)
+VALUES ($1,$2,$3,1,$4,$5,$6,$7,$8,coalesce(nullif($9::integer,0),1))
+ON CONFLICT (source_id,capability,request_schema,output_schema,params,scope,interval_seconds,anchor_at,policy)
+DO UPDATE SET checked_at=NULL RETURNING id, source_id, capability, request_schema, params, scope, interval_seconds, anchor_at, policy, schedule_id, remote_revision, remote_enabled, post_started, checked_at, interval_override_seconds, execution_policy, config_revision, synced_config_revision, config_sync_error, output_schema
 `
 
 type SaveCollectionPlanParams struct {
@@ -1316,6 +1358,7 @@ type SaveCollectionPlanParams struct {
 	IntervalSeconds int32              `json:"interval_seconds"`
 	AnchorAt        pgtype.Timestamptz `json:"anchor_at"`
 	Policy          string             `json:"policy"`
+	OutputSchema    int32              `json:"output_schema"`
 }
 
 func (q *Queries) SaveCollectionPlan(ctx context.Context, arg SaveCollectionPlanParams) (CollectionPlan, error) {
@@ -1328,6 +1371,7 @@ func (q *Queries) SaveCollectionPlan(ctx context.Context, arg SaveCollectionPlan
 		arg.IntervalSeconds,
 		arg.AnchorAt,
 		arg.Policy,
+		arg.OutputSchema,
 	)
 	var i CollectionPlan
 	err := row.Scan(
@@ -1350,6 +1394,7 @@ func (q *Queries) SaveCollectionPlan(ctx context.Context, arg SaveCollectionPlan
 		&i.ConfigRevision,
 		&i.SyncedConfigRevision,
 		&i.ConfigSyncError,
+		&i.OutputSchema,
 	)
 	return i, err
 }

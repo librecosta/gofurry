@@ -120,6 +120,9 @@ func (s *Service) SetPlanEnabled(ctx context.Context, q *dbgen.Queries, kind, id
 type AddPlanInput struct {
 	SourceID        uuid.UUID `json:"source_id"`
 	Capability      string    `json:"capability"`
+	OutputSchema    int32     `json:"output_schema,omitempty"`
+	Locale          string    `json:"locale,omitempty"`
+	StoreCountry    string    `json:"store_country,omitempty"`
 	IntervalSeconds int32     `json:"interval_seconds,omitempty"`
 }
 
@@ -131,8 +134,10 @@ func (s *Service) CreateManagedPlan(ctx context.Context, q *dbgen.Queries, kind,
 	if err != nil {
 		return err
 	}
-	p := Plan{Capability: in.Capability, EgressRegion: s.editorialEgress(region), Anchor: planAnchor}
+	p := Plan{Capability: in.Capability, EgressRegion: s.editorialEgress(region), Anchor: planAnchor, OutputSchema: in.OutputSchema}
 	switch in.Capability {
+	case "steam.details", "steam.assets":
+		p.Interval, p.Locale, p.Region = 24*time.Hour, in.Locale, in.StoreCountry
 	case "steam.news", "web.http", "web.dns", "web.tls":
 		p.Interval = 24 * time.Hour
 	case "steam.players":
@@ -140,6 +145,9 @@ func (s *Service) CreateManagedPlan(ctx context.Context, q *dbgen.Queries, kind,
 	case "web.rdap":
 		p.Interval = 7 * 24 * time.Hour
 	default:
+		return ErrIntent
+	}
+	if p.Capability != "steam.details" && p.Capability != "steam.assets" && (in.Locale != "" || in.StoreCountry != "") {
 		return ErrIntent
 	}
 	if in.IntervalSeconds != 0 {
@@ -214,7 +222,7 @@ func (s *Service) RunManagedPlan(ctx context.Context, q *dbgen.Queries, kind, id
 
 func sameJobRequest(a, b request) bool {
 	return a.TargetID == b.TargetID && a.Capability == b.Capability && a.Schema == b.Schema &&
-		a.Scope == b.Scope && sameParams(a.Params, b.Params)
+		outputSchema(a.OutputSchema) == outputSchema(b.OutputSchema) && a.Scope == b.Scope && sameParams(a.Params, b.Params)
 }
 
 func collectionControlError(err error) error {
@@ -323,7 +331,7 @@ func matchesJobOwner(j intakeJob, owner dbgen.ManagementJobOwnersRow) bool {
 	}
 	var semantic scope
 	return json.Unmarshal(owner.Scope, &semantic) == nil &&
-		sameJobRequest(j.Request, request{*owner.TargetID, owner.Capability, owner.RequestSchema, owner.Params, semantic})
+		sameJobRequest(j.Request, request{*owner.TargetID, owner.Capability, owner.RequestSchema, owner.Params, semantic, owner.OutputSchema})
 }
 
 func (s *Service) projectManagedJob(j intakeJob, o dbgen.ManagementJobOwnersRow) ManagedJob {

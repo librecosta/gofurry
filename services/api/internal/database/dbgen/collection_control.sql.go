@@ -179,7 +179,7 @@ func (q *Queries) ManagementEntityBinding(ctx context.Context, arg ManagementEnt
 }
 
 const managementJobOwners = `-- name: ManagementJobOwners :many
-SELECT p.id,p.schedule_id,p.capability,p.params,p.scope,p.request_schema,s.target_id,
+SELECT p.id,p.schedule_id,p.capability,p.params,p.scope,p.request_schema,p.output_schema,s.target_id,
  CASE WHEN b.site_id IS NOT NULL THEN 'sites' ELSE 'games' END::text AS entity_kind,
  coalesce(st.public_id,g.public_id)::text AS public_id,
  coalesce((SELECT l.name FROM site_localizations l WHERE l.site_id=st.id ORDER BY (l.locale='zh') DESC,l.locale LIMIT 1),
@@ -210,6 +210,7 @@ type ManagementJobOwnersRow struct {
 	Params         []byte             `json:"params"`
 	Scope          []byte             `json:"scope"`
 	RequestSchema  int32              `json:"request_schema"`
+	OutputSchema   int32              `json:"output_schema"`
 	TargetID       *uuid.UUID         `json:"target_id"`
 	EntityKind     string             `json:"entity_kind"`
 	PublicID       string             `json:"public_id"`
@@ -237,6 +238,7 @@ func (q *Queries) ManagementJobOwners(ctx context.Context, arg ManagementJobOwne
 			&i.Params,
 			&i.Scope,
 			&i.RequestSchema,
+			&i.OutputSchema,
 			&i.TargetID,
 			&i.EntityKind,
 			&i.PublicID,
@@ -263,7 +265,7 @@ SELECT c.observation_id,c.state,c.observed_at,c.data,
  FROM collection_current c JOIN collection_sources s ON s.id=c.source_id
  JOIN collection_consumer g ON g.namespace=s.namespace AND g.generation=c.generation
  JOIN collection_plans p ON p.source_id=s.id AND p.capability=c.capability
- WHERE p.id=$1 AND c.output_schema=1 AND c.scope-'namespace'-'dimensions'=p.scope
+ WHERE p.id=$1 AND c.output_schema=p.output_schema AND c.scope-'namespace'-'dimensions'=p.scope
   AND (c.capability<>'web.dns' OR (p.params->'types') ? (c.scope->'dimensions'->>'rrtype'))
   AND coalesce(c.confirmed_at,c.received_at)>=$2::timestamptz
  ORDER BY dimension,c.scope_key LIMIT 12

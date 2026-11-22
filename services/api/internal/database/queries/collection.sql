@@ -11,6 +11,7 @@ FOR UPDATE OF s;
 -- name: FindMatchingCollectionPlan :one
 SELECT id FROM collection_plans
 WHERE source_id=$1 AND capability=$2 AND request_schema=1 AND params=$3 AND scope=$4 AND policy=$5
+ AND output_schema=sqlc.arg(output_schema)
 ORDER BY (schedule_id IS NOT NULL) DESC,id LIMIT 1;
 
 -- name: CollectionSteamSource :one
@@ -65,9 +66,9 @@ JOIN collection_sources s ON s.id=b.source_id AND s.resource_type=b.resource_typ
 WHERE b.id=$1 AND s.namespace=$2 AND b.effective_until IS NULL FOR UPDATE OF b;
 
 -- name: SaveCollectionPlan :one
-INSERT INTO collection_plans (id,source_id,capability,request_schema,params,scope,interval_seconds,anchor_at,policy)
-VALUES ($1,$2,$3,1,$4,$5,$6,$7,$8)
-ON CONFLICT (source_id,capability,request_schema,params,scope,interval_seconds,anchor_at,policy)
+INSERT INTO collection_plans (id,source_id,capability,request_schema,params,scope,interval_seconds,anchor_at,policy,output_schema)
+VALUES ($1,$2,$3,1,$4,$5,$6,$7,$8,coalesce(nullif(sqlc.arg(output_schema)::integer,0),1))
+ON CONFLICT (source_id,capability,request_schema,output_schema,params,scope,interval_seconds,anchor_at,policy)
 DO UPDATE SET checked_at=NULL RETURNING *;
 
 -- name: AttachCollectionPlan :one
@@ -150,6 +151,7 @@ SELECT s.* FROM collection_sources s WHERE s.target_id=$1 AND s.namespace=$2 AND
  SELECT 1 FROM collection_plans p JOIN collection_plan_bindings m ON m.plan_id=p.id AND m.source_id=p.source_id
  JOIN collection_bindings b ON b.id=m.binding_id AND b.source_id=m.source_id AND b.resource_type=s.resource_type
  WHERE p.source_id=s.id AND p.capability=$3 AND p.scope=$4
+ AND p.output_schema=sqlc.arg(output_schema)
  AND m.attached_at<=sqlc.arg(evidence_at)::timestamptz
  AND (p.capability<>'web.dns' OR (p.params->'types') ? sqlc.arg(rrtype)::text)
  AND b.effective_from<=sqlc.arg(evidence_at)::timestamptz
@@ -157,13 +159,14 @@ SELECT s.* FROM collection_sources s WHERE s.target_id=$1 AND s.namespace=$2 AND
 );
 
 -- name: CollectionCurrent :one
-SELECT * FROM collection_current WHERE generation=$1 AND source_id=$2 AND capability=$3 AND output_schema=$4 AND scope_key=$5;
+SELECT * FROM collection_current WHERE generation=$1 AND source_id=$2 AND capability=$3 AND output_schema=$4 AND scope_key=$5
+ AND execution_egress_region=$6;
 
 -- name: PutCollectionCurrent :exec
 INSERT INTO collection_current (generation,source_id,capability,output_schema,scope_key,scope,position,state,
- observation_id,observed_at,received_at,confirmed_at,content_hash,evidence,ruleset,data,facts)
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
-ON CONFLICT (generation,source_id,capability,output_schema,scope_key) DO UPDATE SET
+ observation_id,observed_at,received_at,confirmed_at,content_hash,evidence,ruleset,data,facts,execution_egress_region)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+ON CONFLICT (generation,source_id,capability,output_schema,scope_key,execution_egress_region) DO UPDATE SET
  scope=excluded.scope,position=excluded.position,state=excluded.state,observation_id=excluded.observation_id,
  observed_at=excluded.observed_at,received_at=excluded.received_at,confirmed_at=excluded.confirmed_at,
  content_hash=excluded.content_hash,evidence=excluded.evidence,ruleset=excluded.ruleset,data=excluded.data,facts=excluded.facts
@@ -171,6 +174,10 @@ WHERE collection_current.position<excluded.position OR (collection_current.posit
  AND collection_current.observation_id=excluded.observation_id
  AND (excluded.confirmed_at>COALESCE(collection_current.confirmed_at,'-infinity')
   OR (excluded.capability='steam.details' AND excluded.ruleset='gofurry-steam-1' AND collection_current.ruleset='gofurry-evidence-1')));
+
+-- name: ApplyCollectionMediaWithdrawal :exec
+DELETE FROM collection_current WHERE generation=$1 AND source_id=$2 AND capability=$3 AND output_schema=$4 AND scope_key=$5
+ AND execution_egress_region<>'' AND position<=sqlc.arg(withdrawal_position);
 
 -- name: DeleteOldCollectionRows :execrows
 DELETE FROM collection_current WHERE ctid IN (
@@ -324,7 +331,7 @@ DELETE FROM collection_current WHERE ctid IN (
  AND NOT EXISTS (
   SELECT 1 FROM collection_plans p JOIN collection_plan_bindings m ON m.plan_id=p.id AND m.source_id=p.source_id
   JOIN collection_bindings b ON b.id=m.binding_id AND b.source_id=m.source_id
-  WHERE p.source_id=c.source_id AND p.capability=c.capability AND p.scope=c.scope-'namespace'-'dimensions'
+  WHERE p.source_id=c.source_id AND p.capability=c.capability AND p.output_schema=c.output_schema AND p.scope=c.scope-'namespace'-'dimensions'
    AND (c.capability<>'web.dns' OR (p.params->'types') ? (c.scope->'dimensions'->>'rrtype'))
    AND b.effective_until IS NULL
  )

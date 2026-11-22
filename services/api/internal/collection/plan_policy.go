@@ -5,6 +5,7 @@ import (
 	json "encoding/json/v2"
 	"errors"
 	"net/http"
+	"time"
 	"uuid"
 
 	"github.com/librecosta/gofurry/services/api/internal/database/dbgen"
@@ -110,7 +111,7 @@ func applyLocalPlanConfig(spec *scheduleSpec, interval int32, settings []byte) e
 }
 
 func planSchedule(row dbgen.ListEntityCollectionPlansRow) (scheduleSpec, error) {
-	spec, err := planSpec(row.TargetID, row.Capability, row.RequestSchema, row.Params, row.Scope, row.IntervalSeconds, row.AnchorAt.Time, row.Policy)
+	spec, err := planSpec(row.TargetID, row.Capability, row.RequestSchema, row.OutputSchema, row.Params, row.Scope, row.IntervalSeconds, row.AnchorAt.Time, row.Policy)
 	if err != nil {
 		return spec, err
 	}
@@ -160,6 +161,9 @@ func (s *Service) SetManagedPlanConfig(ctx context.Context, q *dbgen.Queries, ki
 	row, err := s.managedPlan(ctx, q, kind, id, plan)
 	if err != nil {
 		return 0, err
+	}
+	if row.Capability == "steam.assets" && time.Duration(input.IntervalSeconds)*time.Second < capabilities[row.Capability].minimum {
+		return 0, ErrIntent
 	}
 	if s.remote.writer == "" {
 		return 0, ErrCollectionPermission

@@ -25,16 +25,18 @@ var (
 
 type GamePublicationLocale struct {
 	Localization
-	TextSourceID       *uuid.UUID `json:"text_source_id,omitempty"`
-	TextObservationID  *uuid.UUID `json:"text_observation_id,omitempty"`
-	TextSource         *Source    `json:"text_source,omitempty"`
-	MediaSourceID      *uuid.UUID `json:"media_source_id,omitempty"`
-	MediaObservationID *uuid.UUID `json:"media_observation_id,omitempty"`
-	MediaSource        *Source    `json:"media_source,omitempty"`
-	MediaObservedAt    *time.Time `json:"media_observed_at,omitempty"`
-	MediaStoreCountry  string     `json:"media_store_country,omitempty"`
-	Media              SteamMedia `json:"media"`
-	CoverURL           string     `json:"cover_url,omitempty"`
+	TextSourceID        *uuid.UUID            `json:"text_source_id,omitempty"`
+	TextObservationID   *uuid.UUID            `json:"text_observation_id,omitempty"`
+	TextSource          *Source               `json:"text_source,omitempty"`
+	MediaSourceID       *uuid.UUID            `json:"media_source_id,omitempty"`
+	MediaObservationID  *uuid.UUID            `json:"media_observation_id,omitempty"`
+	MediaSource         *Source               `json:"media_source,omitempty"`
+	MediaObservedAt     *time.Time            `json:"media_observed_at,omitempty"`
+	MediaStoreCountry   string                `json:"media_store_country,omitempty"`
+	Media               SteamMedia            `json:"media"`
+	CoverURL            string                `json:"cover_url,omitempty"`
+	MediaV2             *GameMediaSelectionV2 `json:"media_v2,omitempty"`
+	PublicationRevision int64                 `json:"publication_revision,omitzero"`
 }
 
 type GamePublicationReview struct {
@@ -76,6 +78,7 @@ func gamePublicationContent(locales []GamePublicationLocale) ([]byte, error) {
 	copy(content, locales)
 	for i := range content {
 		content[i].TextSource, content[i].MediaSource = nil, nil
+		content[i].PublicationRevision = 0
 	}
 	return json.Marshal(content, json.Deterministic(true))
 }
@@ -183,11 +186,18 @@ func (s *Service) publishManagementGame(ctx context.Context, id string, in GameP
 				if err != nil {
 					return g, err
 				}
+				var mediaV2 []byte
+				if locale.MediaV2 != nil {
+					mediaV2, err = json.Marshal(locale.MediaV2)
+					if err != nil {
+						return g, err
+					}
+				}
 				err = q.SaveGamePublicationLocale(ctx, dbgen.SaveGamePublicationLocaleParams{
 					GameID: g.ID, Locale: locale.Locale, Name: locale.Name, Summary: locale.Summary, TextSourceID: locale.TextSourceID,
 					TextObservationID: locale.TextObservationID, MediaSourceID: locale.MediaSourceID, Media: media,
 					MediaObservationID: locale.MediaObservationID, MediaObservedAt: publicationTimestamp(locale.MediaObservedAt),
-					MediaStoreCountry: locale.MediaStoreCountry, CoverUrl: locale.CoverURL, Revision: next.Revision,
+					MediaStoreCountry: locale.MediaStoreCountry, CoverUrl: locale.CoverURL, Revision: next.Revision, MediaV2: mediaV2,
 				})
 				if err != nil {
 					return g, err

@@ -144,12 +144,16 @@ func sameExecutionPolicy(a, b PlanExecutionPolicy) bool {
 	return a.Mode == b.Mode && a.MaxAttempts == b.MaxAttempts && a.Backoff == b.Backoff && slices.Equal(a.Regions, b.Regions)
 }
 
-func planSpec(target *uuid.UUID, capability string, schema int32, params, scopeJSON []byte, interval int32, anchor time.Time, policy string) (scheduleSpec, error) {
+func planSpec(target *uuid.UUID, capability string, schema, output int32, params, scopeJSON []byte, interval int32, anchor time.Time, policy string) (scheduleSpec, error) {
 	var semantic scope
-	if target == nil || json.Unmarshal(scopeJSON, &semantic) != nil {
+	if target == nil || json.Unmarshal(scopeJSON, &semantic) != nil || !supportedOutput(capability, outputSchema(output)) {
 		return scheduleSpec{}, errProtocol
 	}
-	return scheduleSpec{Request: request{*target, capability, schema, params, semantic},
+	// Preserve the legacy request representation when sending a v1 plan.
+	if output == 1 {
+		output = 0
+	}
+	return scheduleSpec{Request: request{*target, capability, schema, params, semantic, output},
 		Recurrence: recurrence{Interval: interval, Anchor: anchor.UTC(), Policy: policy}}, nil
 }
 
@@ -157,7 +161,7 @@ func (s *Service) reconcilePlan(ctx context.Context, q *dbgen.Queries, p dbgen.P
 	if p.ScheduleID == nil && !p.Desired && !p.PostStarted {
 		return nil
 	}
-	spec, err := planSpec(p.TargetID, p.Capability, p.RequestSchema, p.Params, p.Scope, p.IntervalSeconds, p.AnchorAt.Time, p.Policy)
+	spec, err := planSpec(p.TargetID, p.Capability, p.RequestSchema, p.OutputSchema, p.Params, p.Scope, p.IntervalSeconds, p.AnchorAt.Time, p.Policy)
 	if err != nil {
 		return err
 	}
@@ -276,7 +280,7 @@ func (s *Service) RetryAbsent(ctx context.Context, id uuid.UUID) error {
 		if err != nil {
 			return err
 		}
-		spec, err := planSpec(p.TargetID, p.Capability, p.RequestSchema, p.Params, p.Scope, p.IntervalSeconds, p.AnchorAt.Time, p.Policy)
+		spec, err := planSpec(p.TargetID, p.Capability, p.RequestSchema, p.OutputSchema, p.Params, p.Scope, p.IntervalSeconds, p.AnchorAt.Time, p.Policy)
 		if err != nil {
 			return err
 		}

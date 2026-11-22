@@ -13,7 +13,7 @@ import (
 	"github.com/librecosta/gofurry/services/api/internal/database/dbgen"
 )
 
-var collectionCapabilities = []string{"", "web.http", "web.dns", "web.tls", "web.rdap", "steam.details", "steam.news", "steam.players"}
+var collectionCapabilities = []string{"", "web.http", "web.dns", "web.tls", "web.rdap", "steam.details", "steam.assets", "steam.news", "steam.players"}
 var executionStates = []string{"", "queued", "running", "retry_wait", "cancel_requested", "succeeded", "partial", "failed", "cancelled"}
 
 func entityFilter(v url.Values) bool {

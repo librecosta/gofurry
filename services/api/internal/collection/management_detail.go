@@ -37,6 +37,7 @@ type CollectionPlan struct {
 	Provider        string           `json:"provider"`
 	ExternalKey     string           `json:"external_key"`
 	Capability      string           `json:"capability"`
+	OutputSchema    int32            `json:"output_schema"`
 	Locale          string           `json:"locale,omitempty"`
 	Region          string           `json:"region,omitempty"`
 	EgressRegion    string           `json:"egress_region,omitempty"`
@@ -161,7 +162,7 @@ func (s *Service) planDetail(ctx context.Context, row dbgen.ListEntityCollection
 	_ = json.Unmarshal(row.Scope, &semantic)
 	out := CollectionPlan{
 		ID: row.ID, SourceID: row.SourceID, TargetID: row.TargetID, BindingID: row.BindingID, GameSourceID: row.GameSourceID,
-		ScheduleID: row.ScheduleID, Provider: row.Provider, ExternalKey: row.ExternalKey, Capability: row.Capability,
+		ScheduleID: row.ScheduleID, Provider: row.Provider, ExternalKey: row.ExternalKey, Capability: row.Capability, OutputSchema: row.OutputSchema,
 		Locale: semantic.Locale, Region: semantic.Region, EgressRegion: semantic.EgressRegion, IntervalSeconds: row.IntervalSeconds,
 		DesiredEnabled: row.DesiredEnabled, Actionable: row.Actionable,
 		State: "unknown", LastSuccessAt: knownTime(row.LastSuccessAt),

@@ -24,7 +24,20 @@ type result struct {
 	Withdrawn bool
 }
 
+func observationSchema(o observation) error {
+	if _, ok := capabilities[o.Capability]; !ok {
+		return errProtocol
+	}
+	if !supportedOutput(o.Capability, o.Schema) {
+		return errSchema
+	}
+	return nil
+}
+
 func (s *Service) source(ctx context.Context, q *dbgen.Queries, r result, at time.Time) (dbgen.CollectionSource, []byte, []byte, error) {
+	if err := observationSchema(r.observation); err != nil {
+		return dbgen.CollectionSource{}, nil, nil, err
+	}
 	if r.Scope.Namespace != s.namespace || !v7(r.TargetID) || !digest.MatchString(r.ScopeKey) || r.Position < 1 || at.IsZero() ||
 		!scopePart.MatchString(r.Scope.EgressRegion) ||
 		(r.Scope.Locale != "" && !scopePart.MatchString(r.Scope.Locale)) || (r.Scope.Region != "" && !scopePart.MatchString(r.Scope.Region)) {
@@ -33,13 +46,10 @@ func (s *Service) source(ctx context.Context, q *dbgen.Queries, r result, at tim
 	semantic, _ := json.Marshal(r.Scope.scope)
 	rr := r.Scope.Dimensions["rrtype"]
 	src, err := q.CollectionResultSource(ctx, dbgen.CollectionResultSourceParams{
-		TargetID: &r.TargetID, Namespace: s.namespace, Capability: r.Capability, Scope: semantic, EvidenceAt: timestamp(at), Rrtype: rr,
+		TargetID: &r.TargetID, Namespace: s.namespace, Capability: r.Capability, OutputSchema: r.Schema, Scope: semantic, EvidenceAt: timestamp(at), Rrtype: rr,
 	})
 	if err != nil {
 		return src, nil, nil, err
-	}
-	if r.Schema != 1 {
-		return src, nil, nil, errSchema
 	}
 	spec, ok := capabilities[r.Capability]
 	if !ok || src.ResourceType != spec.resource || !strings.HasPrefix(r.Capability, src.Provider+".") ||
@@ -62,10 +72,13 @@ func validObservation(r result) bool {
 	return v7(r.ID) && !r.ObservedAt.IsZero() && !r.ReceivedAt.IsZero() &&
 		!r.ObservedAt.After(r.ReceivedAt.Add(2*time.Minute)) && digest.MatchString(r.Hash) &&
 		(r.Evidence == "" || evidenceCode.MatchString(r.Evidence)) && r.Sample == (r.Capability == "steam.players") &&
-		len(r.Data) <= 32<<10
+		(len(r.Data) <= 32<<10 || highFidelityMedia(r.observation))
 }
 
 func (s *Service) project(ctx context.Context, q *dbgen.Queries, generation, epoch uuid.UUID, r result, staging bool) error {
+	if err := observationSchema(r.observation); err != nil {
+		return err
+	}
 	if !r.Withdrawn && r.State != "present" && r.State != "confirmed_empty" {
 		return nil
 	}
@@ -93,15 +106,28 @@ func (s *Service) project(ctx context.Context, q *dbgen.Queries, generation, epo
 			c, err = normalizeSteam(r.observation, src.ExternalKey)
 		}
 		if err != nil {
-			if src.Provider == "steam" && r.Capability == intakeCapability {
-				return nil // An invalid Storefront payload cannot replace verified evidence.
+			if src.Provider == "steam" && (r.Capability == intakeCapability || r.Capability == "steam.assets") && !errors.Is(err, errMediaIdentity) {
+				return nil // A malformed known payload cannot replace verified evidence.
 			}
 			return err
 		}
 	}
-	prior, err := q.CollectionCurrent(ctx, dbgen.CollectionCurrentParams{
+	identity := dbgen.CollectionCurrentParams{
 		Generation: generation, SourceID: src.ID, Capability: r.Capability, OutputSchema: r.Schema, ScopeKey: r.ScopeKey,
-	})
+	}
+	isMedia := highFidelityMedia(r.observation)
+	if isMedia && !r.Withdrawn {
+		// A withdrawal covers all actual exits under Harvest's declared scope.
+		barrier, err := q.CollectionCurrent(ctx, identity)
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return err
+		}
+		if barrier.Position >= r.Position {
+			return nil
+		}
+		identity.ExecutionEgressRegion = r.ExecutionEgressRegion
+	}
+	prior, err := q.CollectionCurrent(ctx, identity)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return err
 	}
@@ -113,17 +139,28 @@ func (s *Service) project(ctx context.Context, q *dbgen.Queries, generation, epo
 	var id *uuid.UUID
 	if !r.Withdrawn {
 		id = &r.ID
+	} else if isMedia {
+		if err := q.ApplyCollectionMediaWithdrawal(ctx, dbgen.ApplyCollectionMediaWithdrawalParams{
+			Generation: generation, SourceID: src.ID, Capability: r.Capability, OutputSchema: r.Schema,
+			ScopeKey: r.ScopeKey, WithdrawalPosition: r.Position,
+		}); err != nil {
+			return err
+		}
 	}
 	facts, _ := json.Marshal(c.Facts, json.Deterministic(true))
 	err = q.PutCollectionCurrent(ctx, dbgen.PutCollectionCurrentParams{
 		Generation: generation, SourceID: src.ID, Capability: r.Capability, OutputSchema: r.Schema, ScopeKey: r.ScopeKey, Scope: scopeJSON,
 		Position: r.Position, State: r.State, ObservationID: id, ObservedAt: timestamp(r.ObservedAt), ReceivedAt: timestamp(r.ReceivedAt),
 		ConfirmedAt: timestamp(r.Confirmed), ContentHash: r.Hash, Evidence: r.Evidence, Ruleset: c.Ruleset, Data: c.Data, Facts: facts,
+		ExecutionEgressRegion: identity.ExecutionEgressRegion,
 	})
 	if err != nil || staging {
 		return err
 	}
 	if src.Provider == "steam" {
+		if isMedia {
+			return s.saveGameSourceMedia(ctx, q, generation, epoch, &src.ID, r.ScopeKey)
+		}
 		if r.Capability == intakeCapability && r.Scope.Dimensions["section"] == "details" {
 			if err := refreshIntakeProfiles(ctx, q, generation, &src.ID, r.ScopeKey); err != nil {
 				return err
@@ -155,6 +192,11 @@ func (s *Service) project(ctx context.Context, q *dbgen.Queries, generation, epo
 		}
 	}
 	return siteCoverage(ctx, q, src.ID, r, semantic)
+}
+
+func (s *Service) saveGameSourceMedia(ctx context.Context, q *dbgen.Queries, generation, epoch uuid.UUID, source *uuid.UUID, scopeKey string) error {
+	return q.SaveGameSourceMedia(ctx, dbgen.SaveGameSourceMediaParams{Generation: generation, Epoch: epoch, Namespace: s.namespace,
+		SourceID: source, ScopeKey: pgtype.Text{String: scopeKey, Valid: scopeKey != ""}})
 }
 
 func saveSiteTechnology(ctx context.Context, q *dbgen.Queries, generation uuid.UUID, source *uuid.UUID, scopeKey string) error {
@@ -309,13 +351,23 @@ func (s *Service) applyPage(ctx context.Context, q *dbgen.Queries, epoch, genera
 
 func (s *Service) sweepPage(ctx context.Context, q *dbgen.Queries, generation, epoch uuid.UUID, rows []currentItem) error {
 	for _, item := range rows {
-		if item.Source == "steam" && item.Capability == intakeCapability && item.State == "present" {
+		if err := observationSchema(item.observation); err != nil {
+			return err
+		}
+		if item.Source == "steam" && (item.Capability == intakeCapability || item.Capability == "steam.assets") &&
+			(item.State == "present" || item.State == "confirmed_empty") {
 			if item.Confirmed.IsZero() || item.Confirmed.Before(item.ReceivedAt) {
 				return errProtocol
 			}
 			r := result{observation: item.observation, Position: item.Position, Confirmed: item.Confirmed}
 			if err := s.project(ctx, q, generation, epoch, r, true); err != nil {
 				return err
+			}
+			if highFidelityMedia(r.observation) {
+				if err := s.saveGameSourceMedia(ctx, q, generation, epoch, nil, r.ScopeKey); err != nil {
+					return err
+				}
+				continue
 			}
 			if r.Scope.Dimensions["section"] == "details" {
 				if err := refreshIntakeProfiles(ctx, q, generation, nil, r.ScopeKey); err != nil {

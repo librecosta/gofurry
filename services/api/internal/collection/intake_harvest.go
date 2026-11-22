@@ -78,7 +78,7 @@ func intakeRequest(c dbgen.GameIntakeCandidate) (request, segmentScope, string) 
 	if c.TargetID != nil {
 		target = *c.TargetID
 	}
-	return request{target, plan.Capability, 1, params, semantic}, output, hex.EncodeToString(digest[:])
+	return request{target, plan.Capability, 1, params, semantic, 0}, output, hex.EncodeToString(digest[:])
 }
 
 func (s *Intake) target(ctx context.Context, c dbgen.GameIntakeCandidate) error {
@@ -99,8 +99,7 @@ func (s *Intake) target(ctx context.Context, c dbgen.GameIntakeCandidate) error 
 
 func sameIntakeJob(j intakeJob, req request, namespace string) bool {
 	return v7(j.ID) && j.Namespace == namespace && j.Cause == "manual" && j.ScheduleID == nil &&
-		j.Request.TargetID == req.TargetID && j.Request.Capability == req.Capability &&
-		j.Request.Schema == req.Schema && j.Request.Scope == req.Scope && sameParams(j.Request.Params, req.Params) &&
+		sameJobRequest(j.Request, req) &&
 		!j.Deadline.IsZero() && !j.Updated.IsZero()
 }
 

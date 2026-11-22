@@ -32,7 +32,7 @@ WHERE id=$1 AND config_revision=sqlc.arg(expected_revision)
 RETURNING config_revision;
 
 -- name: ManagementJobOwners :many
-SELECT p.id,p.schedule_id,p.capability,p.params,p.scope,p.request_schema,s.target_id,
+SELECT p.id,p.schedule_id,p.capability,p.params,p.scope,p.request_schema,p.output_schema,s.target_id,
  CASE WHEN b.site_id IS NOT NULL THEN 'sites' ELSE 'games' END::text AS entity_kind,
  coalesce(st.public_id,g.public_id)::text AS public_id,
  coalesce((SELECT l.name FROM site_localizations l WHERE l.site_id=st.id ORDER BY (l.locale='zh') DESC,l.locale LIMIT 1),
@@ -85,7 +85,7 @@ SELECT c.observation_id,c.state,c.observed_at,c.data,
  FROM collection_current c JOIN collection_sources s ON s.id=c.source_id
  JOIN collection_consumer g ON g.namespace=s.namespace AND g.generation=c.generation
  JOIN collection_plans p ON p.source_id=s.id AND p.capability=c.capability
- WHERE p.id=sqlc.arg(plan_id) AND c.output_schema=1 AND c.scope-'namespace'-'dimensions'=p.scope
+ WHERE p.id=sqlc.arg(plan_id) AND c.output_schema=p.output_schema AND c.scope-'namespace'-'dimensions'=p.scope
   AND (c.capability<>'web.dns' OR (p.params->'types') ? (c.scope->'dimensions'->>'rrtype'))
   AND coalesce(c.confirmed_at,c.received_at)>=sqlc.arg(bound_at)::timestamptz
  ORDER BY dimension,c.scope_key LIMIT 12;

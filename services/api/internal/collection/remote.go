@@ -98,8 +98,13 @@ func (c *client) callWithKey(ctx context.Context, token, method, path string, qu
 		_, _ = io.Copy(io.Discard, io.LimitReader(res.Body, 4096))
 		return remoteStatus(res.StatusCode)
 	}
-	const max = 2 << 20
-	data, err := io.ReadAll(io.LimitReader(res.Body, max+1))
+	max := 2 << 20
+	switch path {
+	case "changes", "snapshots/current", "observations/current":
+		// A 100-row page may contain 32 KiB observations and their envelopes.
+		max = 4 << 20
+	}
+	data, err := io.ReadAll(io.LimitReader(res.Body, int64(max)+1))
 	if err != nil {
 		return errNetwork
 	}
@@ -132,11 +137,12 @@ type segmentScope struct {
 	Dimensions map[string]string `json:"dimensions,omitempty"`
 }
 type request struct {
-	TargetID   uuid.UUID      `json:"target_id"`
-	Capability string         `json:"capability"`
-	Schema     int32          `json:"request_schema"`
-	Params     jsontext.Value `json:"params"`
-	Scope      scope          `json:"scope"`
+	TargetID     uuid.UUID      `json:"target_id"`
+	Capability   string         `json:"capability"`
+	Schema       int32          `json:"request_schema"`
+	Params       jsontext.Value `json:"params"`
+	Scope        scope          `json:"scope"`
+	OutputSchema int32          `json:"output_schema,omitzero"`
 }
 type recurrence struct {
 	Interval int32     `json:"interval_seconds"`

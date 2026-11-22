@@ -103,7 +103,7 @@ WHERE id=$1 AND state IN ('discovered','deferred');
 
 -- name: FindIntakePlan :one
 SELECT p.id FROM collection_plans p
-WHERE p.source_id=$1 AND p.capability='steam.details' AND p.request_schema=1 AND p.params=$2 AND p.scope=$3 AND p.policy='state_refresh'
+WHERE p.source_id=$1 AND p.capability='steam.details' AND p.output_schema=1 AND p.params=$2 AND p.scope=$3 AND p.policy='state_refresh'
 ORDER BY (p.schedule_id IS NOT NULL) DESC,p.id LIMIT 1;
 
 -- name: IntakeStatus :many
@@ -142,7 +142,7 @@ WITH newer AS (
       SELECT 1 FROM collection_bindings b JOIN collection_plan_bindings m ON m.binding_id=b.id AND m.source_id=b.source_id
       JOIN collection_plans p ON p.id=m.plan_id AND p.source_id=b.source_id
       WHERE b.source_id=s.id AND b.game_source_id=gs.id AND b.game_id=i.game_id AND b.effective_until IS NULL
-        AND p.capability=c.capability AND p.request_schema=c.output_schema AND p.scope=c.scope-'namespace'-'dimensions'
+        AND p.capability=c.capability AND p.output_schema=c.output_schema AND p.scope=c.scope-'namespace'-'dimensions'
         AND m.attached_at<=coalesce(c.confirmed_at,c.received_at) AND b.effective_from<=coalesce(c.confirmed_at,c.received_at)
     )
 )

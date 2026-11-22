@@ -27,8 +27,8 @@ type steamMedia struct {
 
 func steamScopeOK(o observation) bool {
 	switch o.Capability {
-	case "steam.details":
-		return slices.Contains([]string{"details", "price", "media"}, o.Scope.Dimensions["section"]) &&
+	case "steam.details", "steam.assets":
+		return slices.Contains(capabilities[o.Capability].sections, o.Scope.Dimensions["section"]) &&
 			(o.Scope.Locale == "en" || o.Scope.Locale == "zh-cn") &&
 			slices.Contains([]string{"cn", "us", "hk"}, o.Scope.Region)
 	case "steam.news", "steam.players":

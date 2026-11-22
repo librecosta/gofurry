@@ -69,6 +69,7 @@ func New(logger zerolog.Logger, cfg platform.Config, service *wallpaper.Service,
 	registerWallpapers(app, service)
 	if ops != nil {
 		ops.register(app)
+		ops.gameMedia(app.Group("/internal/v1/ops"))
 	}
 	app.Use(func(fiber.Ctx) error { return fiber.ErrNotFound })
 	return app

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"slices"
 	"strings"
+	"uuid"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -93,6 +94,10 @@ type GameManagement struct {
 	DraftPresentation     []GamePublicationLocale          `json:"draft_presentation"`
 	PublishedPresentation []GamePublicationLocale          `json:"published_presentation"`
 	SourceCandidates      []GameSourceCandidate            `json:"source_candidates"`
+	MediaCandidatesV2     []GameMediaCandidateV2           `json:"media_candidates_v2"`
+	MediaCandidatesV2Next *uuid.UUID                       `json:"media_candidates_v2_next,omitempty"`
+	DraftMediaV2          []GameMediaLocaleV2              `json:"draft_media_v2"`
+	PublishedMediaV2      []GameMediaLocaleV2              `json:"published_media_v2"`
 	HasUnpublishedChanges bool                             `json:"has_unpublished_changes"`
 	PreviewToken          string                           `json:"preview_token"`
 	Localizations         []dbgen.ManagementGameTextRow    `json:"localizations"`
@@ -119,7 +124,7 @@ func (s *Service) ManagementGame(ctx context.Context, id string) (out GameManage
 			return out, err
 		}
 		out = GameManagement{PublicID: row.PublicID, Slug: row.Slug, Revision: row.Revision, Status: row.Status,
-			ContentRating: row.ContentRating, PublishedPresentation: []GamePublicationLocale{}}
+			ContentRating: row.ContentRating, PublishedPresentation: []GamePublicationLocale{}, PublishedMediaV2: []GameMediaLocaleV2{}}
 		if row.DraftSlug.Valid {
 			out.DraftSlug = &row.DraftSlug.String
 		}
@@ -151,6 +156,15 @@ func (s *Service) ManagementGame(ctx context.Context, id string) (out GameManage
 		if err != nil {
 			return out, err
 		}
+		page, err := readGameMediaCandidates(ctx, q, row.ID, uuid.Nil())
+		if err != nil {
+			return out, err
+		}
+		out.MediaCandidatesV2, out.MediaCandidatesV2Next = page.Items, page.Next
+		out.DraftMediaV2, err = readGameDraftMediaV2(ctx, q, row.ID)
+		if err != nil {
+			return out, err
+		}
 		out.DraftPresentation, err = gamePresentation(ctx, q, row.ID, false)
 		if err != nil {
 			return out, err
@@ -166,6 +180,12 @@ func (s *Service) ManagementGame(ctx context.Context, id string) (out GameManage
 		out.PublishedPresentation, err = gamePresentation(ctx, q, row.ID, true)
 		if err != nil {
 			return out, err
+		}
+		for _, locale := range out.PublishedPresentation {
+			if locale.MediaV2 != nil {
+				out.PublishedMediaV2 = append(out.PublishedMediaV2, GameMediaLocaleV2{Locale: locale.Locale,
+					PublicationRevision: locale.PublicationRevision, Media: *locale.MediaV2})
+			}
 		}
 		public, err := gamePublicationContent(out.PublishedPresentation)
 		out.HasUnpublishedChanges = gameDraftDiffers(row, draft, public)

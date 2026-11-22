@@ -146,12 +146,12 @@ func (s *Service) attachEditorialPlan(ctx context.Context, q *dbgen.Queries, bin
 		return uuid.Nil(), err
 	}
 	id, err := q.FindMatchingCollectionPlan(ctx, dbgen.FindMatchingCollectionPlanParams{
-		SourceID: b.SourceID, Capability: p.Capability, Params: params, Scope: scope, Policy: policy,
+		SourceID: b.SourceID, Capability: p.Capability, Params: params, Scope: scope, Policy: policy, OutputSchema: outputSchema(p.OutputSchema),
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		row, saveErr := q.SaveCollectionPlan(ctx, dbgen.SaveCollectionPlanParams{
 			ID: uuid.NewV7(), SourceID: b.SourceID, Capability: p.Capability, Params: params, Scope: scope,
-			Policy: policy, AnchorAt: timestamp(p.Anchor), IntervalSeconds: int32(p.Interval / time.Second),
+			Policy: policy, AnchorAt: timestamp(p.Anchor), IntervalSeconds: int32(p.Interval / time.Second), OutputSchema: outputSchema(p.OutputSchema),
 		})
 		id, err = row.ID, saveErr
 	}

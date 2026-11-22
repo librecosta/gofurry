@@ -14,7 +14,7 @@ import (
 
 const listEntityCollectionPlans = `-- name: ListEntityCollectionPlans :many
 WITH bound AS MATERIALIZED (
- SELECT DISTINCT ON (p.id) p.id,p.source_id,p.capability,p.request_schema,p.params,p.scope,p.interval_seconds,p.anchor_at,
+ SELECT DISTINCT ON (p.id) p.id,p.source_id,p.capability,p.request_schema,p.output_schema,p.params,p.scope,p.interval_seconds,p.anchor_at,
   p.policy,p.schedule_id,p.remote_enabled,p.remote_revision,p.checked_at,src.namespace,src.provider,src.external_key,src.target_id,
   p.config_revision,p.synced_config_revision,p.interval_override_seconds,p.execution_policy,p.config_sync_error,
   b.id AS binding_id,b.site_id,b.game_source_id,m.enabled AS desired_enabled,EXISTS (SELECT FROM sites st WHERE st.id=b.site_id AND st.status<>'archived' UNION ALL SELECT FROM games g WHERE g.id=b.game_id AND g.status<>'archived')::boolean AS actionable,greatest(b.effective_from,m.attached_at)::timestamptz AS since
@@ -28,21 +28,25 @@ WITH bound AS MATERIALIZED (
    OR ($3='games' AND b.game_id=$4 AND EXISTS (SELECT 1 FROM game_sources gs WHERE gs.id=b.game_source_id AND gs.active)))
  ORDER BY p.id,since,b.id LIMIT 9
 )
-SELECT b.id, b.source_id, b.capability, b.request_schema, b.params, b.scope, b.interval_seconds, b.anchor_at, b.policy, b.schedule_id, b.remote_enabled, b.remote_revision, b.checked_at, b.namespace, b.provider, b.external_key, b.target_id, b.config_revision, b.synced_config_revision, b.interval_override_seconds, b.execution_policy, b.config_sync_error, b.binding_id, b.site_id, b.game_source_id, b.desired_enabled, b.actionable, b.since,coalesce(last.state,'')::text AS observation_state,last.observation_id,
+SELECT b.id, b.source_id, b.capability, b.request_schema, b.output_schema, b.params, b.scope, b.interval_seconds, b.anchor_at, b.policy, b.schedule_id, b.remote_enabled, b.remote_revision, b.checked_at, b.namespace, b.provider, b.external_key, b.target_id, b.config_revision, b.synced_config_revision, b.interval_override_seconds, b.execution_policy, b.config_sync_error, b.binding_id, b.site_id, b.game_source_id, b.desired_enabled, b.actionable, b.since,coalesce(last.state,'')::text AS observation_state,last.observation_id,
  coalesce(last.scope_key,'')::text AS scope_key,last.observed_at,
- greatest(last.success_at, CASE WHEN b.capability='steam.details' THEN (
+ greatest(last.success_at, CASE WHEN b.capability='steam.details' AND b.output_schema=1 THEN (
    SELECT max(md.confirmed_at) FROM game_source_metadata md
    WHERE md.binding_id=b.binding_id AND md.game_source_id=b.game_source_id AND md.payload IS NOT NULL
     AND md.confirmed_at>=b.since AND md.locale=b.scope->>'locale' AND md.store_country=b.scope->>'region'
     AND md.egress_region=b.scope->>'egress_region'
-  ) END, (SELECT max(d.confirmed_at) FROM site_daily_coverage d WHERE d.site_id=b.site_id AND d.binding_id=b.binding_id
+  ) END, (SELECT max(d.confirmed_at) FROM game_source_media d WHERE d.game_source_id=b.game_source_id
+   AND d.binding_id=b.binding_id AND d.capability=b.capability AND d.output_schema=b.output_schema AND d.state='present'
+   AND d.confirmed_at>=b.since AND d.locale=b.scope->>'locale' AND d.store_country=b.scope->>'region'
+   AND d.requested_egress_region=b.scope->>'egress_region'),
+  (SELECT max(d.confirmed_at) FROM site_daily_coverage d WHERE d.site_id=b.site_id AND d.binding_id=b.binding_id
    AND d.capability=b.capability AND d.scope_key=last.scope_key AND d.evidence_state='present' AND d.confirmed_at>=b.since))::timestamptz AS last_success_at
 FROM bound b LEFT JOIN collection_consumer cn ON cn.namespace=b.namespace
 LEFT JOIN LATERAL (
  SELECT c.state,c.observation_id,c.scope_key,c.observed_at,
   max(coalesce(c.confirmed_at,c.observed_at)) FILTER (WHERE c.state='present') OVER () AS success_at
  FROM collection_current c
- WHERE c.generation=cn.generation AND c.source_id=b.source_id AND c.capability=b.capability AND c.output_schema=1
+ WHERE c.generation=cn.generation AND c.source_id=b.source_id AND c.capability=b.capability AND c.output_schema=b.output_schema
   AND c.scope->>'namespace'=b.namespace AND c.scope-'namespace'-'dimensions'=b.scope
   AND (c.capability<>'web.dns' OR (b.params->'types') ? (c.scope->'dimensions'->>'rrtype'))
   AND coalesce(c.confirmed_at,c.received_at)>=b.since
@@ -62,6 +66,7 @@ type ListEntityCollectionPlansRow struct {
 	SourceID                uuid.UUID          `json:"source_id"`
 	Capability              string             `json:"capability"`
 	RequestSchema           int32              `json:"request_schema"`
+	OutputSchema            int32              `json:"output_schema"`
 	Params                  []byte             `json:"params"`
 	Scope                   []byte             `json:"scope"`
 	IntervalSeconds         int32              `json:"interval_seconds"`
@@ -112,6 +117,7 @@ func (q *Queries) ListEntityCollectionPlans(ctx context.Context, arg ListEntityC
 			&i.SourceID,
 			&i.Capability,
 			&i.RequestSchema,
+			&i.OutputSchema,
 			&i.Params,
 			&i.Scope,
 			&i.IntervalSeconds,

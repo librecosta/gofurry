@@ -231,7 +231,7 @@ func (s *Service) prefillRequest(row dbgen.SteamEditorialPrefill, region string,
 		plan = plans[1]
 	}
 	params, _, _, _ := plan.params("app", row.AppID)
-	return request{target, intakeCapability, 1, params, scope{Locale: plan.Locale, Region: plan.Region, EgressRegion: plan.EgressRegion}}
+	return request{target, intakeCapability, 1, params, scope{Locale: plan.Locale, Region: plan.Region, EgressRegion: plan.EgressRegion}, 0}
 }
 
 func (s *Service) SteamPrefill(ctx context.Context, q *dbgen.Queries, app, region string) (SteamPrefill, error) {

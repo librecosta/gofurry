@@ -113,6 +113,7 @@ func (s *Service) Unbind(ctx context.Context, id uuid.UUID) error {
 
 type Plan struct {
 	Capability   string
+	OutputSchema int32
 	Locale       string
 	Region       string
 	EgressRegion string
@@ -134,16 +135,29 @@ var capabilities = map[string]capabilitySpec{
 	"web.dns":       {"domain", time.Hour, []string{"dns"}},
 	"web.rdap":      {"domain", 7 * 24 * time.Hour, []string{"rdap"}},
 	"steam.details": {"app", time.Hour, []string{"details", "price", "media"}},
+	"steam.assets":  {"app", 6 * time.Hour, []string{"assets"}},
 	"steam.news":    {"app", time.Hour, []string{"news"}},
 	"steam.players": {"app", 30 * time.Minute, []string{"players"}},
 }
 
 var dnsTypes = []string{"a", "aaaa", "caa", "cname", "mx", "ns", "soa", "txt"}
 
+func outputSchema(schema int32) int32 {
+	if schema == 0 {
+		return 1
+	}
+	return schema
+}
+
+func supportedOutput(capability string, schema int32) bool {
+	return schema == 1 || capability == intakeCapability && schema == 2
+}
+
 func (p Plan) params(resource, key string) ([]byte, []byte, string, error) {
 	cap, ok := capabilities[p.Capability]
 	fields := scope{strings.ReplaceAll(strings.ToLower(p.Locale), "_", "-"), strings.ToLower(p.Region), strings.ToLower(p.EgressRegion)}
-	if !ok || resource != cap.resource || p.Interval < cap.minimum || p.Interval > 30*24*time.Hour || p.Interval%time.Second != 0 ||
+	if !ok || !supportedOutput(p.Capability, outputSchema(p.OutputSchema)) || resource != cap.resource ||
+		p.Interval < cap.minimum || p.Interval > 30*24*time.Hour || p.Interval%time.Second != 0 ||
 		p.Anchor.Year() < 2000 || p.Anchor.Year() > 2100 || !scopePart.MatchString(fields.EgressRegion) ||
 		(fields.Locale != "" && !scopePart.MatchString(fields.Locale)) || (fields.Region != "" && !scopePart.MatchString(fields.Region)) ||
 		(p.Capability != "web.dns" && len(p.RRTypes) != 0) || (p.Capability != "steam.news" && p.NewsCount != 0) ||
@@ -171,7 +185,7 @@ func (p Plan) params(resource, key string) ([]byte, []byte, string, error) {
 		params = struct {
 			Types []string `json:"types"`
 		}{slices.Compact(types)}
-	case "steam.details":
+	case "steam.details", "steam.assets":
 		lang := "english"
 		if fields.Locale == "zh-cn" {
 			lang = "schinese"
@@ -222,7 +236,7 @@ func (s *Service) AddPlan(ctx context.Context, binding uuid.UUID, p Plan) (uuid.
 				return err
 			}
 			plan, err := q.SaveCollectionPlan(ctx, dbgen.SaveCollectionPlanParams{
-				ID: uuid.NewV7(), SourceID: row.SourceID, Capability: p.Capability, Params: params, Scope: scope, Policy: policy,
+				ID: uuid.NewV7(), SourceID: row.SourceID, Capability: p.Capability, Params: params, Scope: scope, Policy: policy, OutputSchema: outputSchema(p.OutputSchema),
 				AnchorAt: timestamp(p.Anchor.Truncate(time.Microsecond)), IntervalSeconds: int32(p.Interval / time.Second),
 			})
 			if err != nil {

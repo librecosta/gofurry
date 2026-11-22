@@ -18,12 +18,13 @@ type GamePresentation struct {
 }
 
 type PublishedGameMedia struct {
-	Locale       string     `json:"locale"`
-	SourceID     *uuid.UUID `json:"source_id"`
-	Media        SteamMedia `json:"media"`
-	ObservedAt   *time.Time `json:"observed_at"`
-	StoreCountry string     `json:"store_country"`
-	CoverURL     string     `json:"cover_url"`
+	Locale       string                `json:"locale"`
+	SourceID     *uuid.UUID            `json:"source_id"`
+	Media        SteamMedia            `json:"media"`
+	MediaV2      *GameMediaSelectionV2 `json:"media_v2,omitempty"`
+	ObservedAt   *time.Time            `json:"observed_at"`
+	StoreCountry string                `json:"store_country"`
+	CoverURL     string                `json:"cover_url"`
 }
 
 // GameSourceSnapshot keeps scoped Steam observations on their source. Other

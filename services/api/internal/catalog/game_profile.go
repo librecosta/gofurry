@@ -272,17 +272,22 @@ func (s *Service) PublicGameProfile(ctx context.Context, market ChannelMarket, i
 	var chosen *PublishedGameMedia
 	for i := range p.Presentation {
 		media := &p.Presentation[i]
+		if media.MediaV2 != nil {
+			origin := media.MediaV2.displayOrigin()
+			media.SourceID, media.ObservedAt, media.StoreCountry = &origin.GameSourceID, &origin.ObservedAt, origin.StoreCountry
+			media.Media = media.MediaV2.legacyMedia(origin.GameSourceID)
+		}
 		if media.SourceID != nil && (chosen == nil || media.Locale == locale) {
 			chosen = media
 		}
-		if media.Locale == locale && media.CoverURL != "" {
-			out.CoverURL = profileMedia(media.CoverURL, false)
+		if media.Locale == locale {
+			out.CoverURL = media.displayCover()
 		}
 	}
 	if out.CoverURL == "" {
 		for _, media := range p.Presentation {
-			if media.CoverURL != "" {
-				out.CoverURL = media.CoverURL
+			if link := media.displayCover(); link != "" {
+				out.CoverURL = link
 				break
 			}
 		}
@@ -290,8 +295,12 @@ func (s *Service) PublicGameProfile(ctx context.Context, market ChannelMarket, i
 	for _, source := range p.Sources {
 		item := projectGameSource(source, p.PreferredSource != nil && source.ID == *p.PreferredSource, steamLocale(locale), country)
 		if chosen != nil && chosen.SourceID != nil && *chosen.SourceID == source.ID && chosen.ObservedAt != nil &&
-			(chosen.CoverURL != "" || len(chosen.Media.Screenshots)+len(chosen.Media.Movies) > 0) {
-			item.Media = &StoreMedia{StoreEvidence: StoreEvidence{Locale: steamLocale(chosen.Locale), StoreCountry: chosen.StoreCountry, ObservedAt: *chosen.ObservedAt, Status: "observed"}, SteamMedia: reviewedSteamMedia(chosen.Media)}
+			(chosen.displayCover() != "" || chosen.Media.Header != "" || chosen.Media.Capsule != "" || len(chosen.Media.Screenshots)+len(chosen.Media.Movies) > 0) {
+			media := chosen.Media
+			if chosen.MediaV2 == nil {
+				media = reviewedSteamMedia(media)
+			}
+			item.Media = &StoreMedia{StoreEvidence: StoreEvidence{Locale: steamLocale(chosen.Locale), StoreCountry: chosen.StoreCountry, ObservedAt: *chosen.ObservedAt, Status: "observed"}, SteamMedia: media}
 		}
 		out.Sources = append(out.Sources, item)
 	}

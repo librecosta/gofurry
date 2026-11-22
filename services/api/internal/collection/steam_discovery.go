@@ -209,7 +209,7 @@ func (d *Discovery) Tick(ctx context.Context) error {
 		}
 		p := discoveryParams{uint32(s.ModifiedSince), uint32(s.LastAppid), uint32(s.PageLimit)}
 		raw, _ := json.Marshal(p)
-		req := request{*s.TargetID, catalogCapability, 1, raw, scope{EgressRegion: s.EgressRegion}}
+		req := request{*s.TargetID, catalogCapability, 1, raw, scope{EgressRegion: s.EgressRegion}, 0}
 		if s.JobID == nil {
 			if s.WriterBinding != binding || !s.IntentAt.Valid || now.Sub(s.IntentAt.Time) > 15*time.Minute {
 				// Harvest retains the submission and its Job for much longer than the
