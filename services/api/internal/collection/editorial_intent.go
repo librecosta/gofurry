@@ -26,6 +26,12 @@ func (s *Service) CreateSteamGame(ctx context.Context, cat *catalog.Service, q *
 	if err != nil {
 		return catalog.ManagementResult{}, err
 	}
+	// Keep prefill provenance available until source ownership commits.
+	if s != nil && s.namespace != "" {
+		if err := q.LockSteamPrefillAdmission(ctx, s.namespace); err != nil {
+			return catalog.ManagementResult{}, err
+		}
+	}
 	existing, err := q.ExistingSteamGame(ctx, in.SteamAppID)
 	if err == nil {
 		return catalog.ManagementResult{}, SteamGameExists(existing)

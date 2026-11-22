@@ -72,6 +72,7 @@ func write(ctx context.Context, conn *pgx.Conn, run func(*dbgen.Queries) error) 
 // created when the optional feature is omitted.
 func (s *Service) Run(ctx context.Context, report func(string)) {
 	delay := time.Duration(0)
+	var nextPrefillPrune time.Time
 	for {
 		timer := time.NewTimer(delay)
 		select {
@@ -79,6 +80,12 @@ func (s *Service) Run(ctx context.Context, report func(string)) {
 			timer.Stop()
 			return
 		case <-timer.C:
+		}
+		if s.prefillEnabled() && !time.Now().Before(nextPrefillPrune) {
+			nextPrefillPrune = time.Now().Add(24 * time.Hour)
+			if err := s.pruneSteamPrefills(ctx); err != nil && ctx.Err() == nil {
+				report("steam_prefill_cleanup")
+			}
 		}
 		err := s.Tick(ctx)
 		if err == nil || errors.Is(err, errBusy) {

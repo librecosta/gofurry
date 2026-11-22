@@ -49,18 +49,45 @@ func (s *Service) prefillEnabled() bool {
 	return s != nil && s.remote != nil && s.remote.writer != "" && s.remote.reader != ""
 }
 
+func (s *Service) pruneSteamPrefills(ctx context.Context) error {
+	const batchSize = 100
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	// Commit each batch independently. Do not hold the admission lock between batches.
+	for range 4 {
+		var apps int64
+		if err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+			q := dbgen.New(tx)
+			if err := q.LockSteamPrefillAdmission(ctx, s.namespace); err != nil {
+				return err
+			}
+			var err error
+			apps, err = q.PruneExpiredSteamPrefills(ctx, dbgen.PruneExpiredSteamPrefillsParams{
+				Namespace: s.namespace, BatchSize: batchSize,
+			})
+			return err
+		}); err != nil {
+			return err
+		}
+		if apps < batchSize {
+			break
+		}
+	}
+	return nil
+}
+
 func (s *Service) AdmitSteamPrefill(ctx context.Context, q *dbgen.Queries, app string) error {
 	if !s.prefillEnabled() || !steamID(app) {
 		return ErrIntakeInput
+	}
+	if err := q.LockSteamPrefillAdmission(ctx, s.namespace); err != nil {
+		return err
 	}
 	existing, err := q.ExistingSteamGame(ctx, app)
 	if err == nil {
 		return SteamGameExists(existing)
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
-		return err
-	}
-	if err := q.LockSteamPrefillAdmission(ctx, s.namespace); err != nil {
 		return err
 	}
 	rows, err := s.prefillRows(ctx, q, app)

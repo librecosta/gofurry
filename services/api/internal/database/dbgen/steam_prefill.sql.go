@@ -109,28 +109,67 @@ func (q *Queries) LockSteamPrefillAdmission(ctx context.Context, namespace strin
 	return err
 }
 
+const pruneExpiredSteamPrefills = `-- name: PruneExpiredSteamPrefills :one
+WITH expired AS (
+ SELECT p.app_id
+ FROM steam_editorial_prefills p
+ WHERE p.namespace=$1 AND p.started_at < statement_timestamp()-interval '30 days'
+   AND NOT EXISTS (
+     SELECT 1 FROM steam_editorial_prefills sibling
+     WHERE sibling.namespace=p.namespace AND sibling.app_id=p.app_id
+       AND (sibling.locale < p.locale OR sibling.started_at >= statement_timestamp()-interval '30 days')
+   )
+   AND NOT EXISTS (
+     SELECT 1 FROM game_sources source WHERE source.platform_code='steam' AND source.external_key=p.app_id
+   )
+ ORDER BY p.started_at,p.app_id
+ LIMIT $2::integer
+), deleted AS (
+ DELETE FROM steam_editorial_prefills p USING expired
+ WHERE p.namespace=$1 AND p.app_id=expired.app_id
+ RETURNING p.app_id
+)
+SELECT count(DISTINCT app_id) FROM deleted
+`
+
+type PruneExpiredSteamPrefillsParams struct {
+	Namespace string `json:"namespace"`
+	BatchSize int32  `json:"batch_size"`
+}
+
+func (q *Queries) PruneExpiredSteamPrefills(ctx context.Context, arg PruneExpiredSteamPrefillsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, pruneExpiredSteamPrefills, arg.Namespace, arg.BatchSize)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const replaceSteamPrefill = `-- name: ReplaceSteamPrefill :one
-UPDATE steam_editorial_prefills SET generation=$4,started_at=statement_timestamp(),
+WITH admission AS MATERIALIZED (
+ SELECT pg_advisory_xact_lock(hashtextextended('steam-editorial-prefill:' || $2::text,0))
+)
+UPDATE steam_editorial_prefills SET generation=$1,started_at=statement_timestamp(),
  job_id=NULL,target_id=NULL,submission_code=''
-WHERE namespace=$1 AND app_id=$2 AND locale=$3 AND generation=$5
+FROM admission
+WHERE namespace=$2 AND app_id=$3 AND locale=$4 AND generation=$5
  AND started_at<=statement_timestamp()-interval '1 minute'
-RETURNING namespace, app_id, locale, generation, started_at, submission_code, job_id, target_id, text_observation_id, media_observation_id, name, summary, facts, media
+RETURNING steam_editorial_prefills.namespace, steam_editorial_prefills.app_id, steam_editorial_prefills.locale, steam_editorial_prefills.generation, steam_editorial_prefills.started_at, steam_editorial_prefills.submission_code, steam_editorial_prefills.job_id, steam_editorial_prefills.target_id, steam_editorial_prefills.text_observation_id, steam_editorial_prefills.media_observation_id, steam_editorial_prefills.name, steam_editorial_prefills.summary, steam_editorial_prefills.facts, steam_editorial_prefills.media
 `
 
 type ReplaceSteamPrefillParams struct {
+	NewGeneration      uuid.UUID `json:"new_generation"`
 	Namespace          string    `json:"namespace"`
 	AppID              string    `json:"app_id"`
 	Locale             string    `json:"locale"`
-	NewGeneration      uuid.UUID `json:"new_generation"`
 	ExpectedGeneration uuid.UUID `json:"expected_generation"`
 }
 
 func (q *Queries) ReplaceSteamPrefill(ctx context.Context, arg ReplaceSteamPrefillParams) (SteamEditorialPrefill, error) {
 	row := q.db.QueryRow(ctx, replaceSteamPrefill,
+		arg.NewGeneration,
 		arg.Namespace,
 		arg.AppID,
 		arg.Locale,
-		arg.NewGeneration,
 		arg.ExpectedGeneration,
 	)
 	var i SteamEditorialPrefill
