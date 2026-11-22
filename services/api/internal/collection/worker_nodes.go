@@ -34,13 +34,16 @@ type WorkerNode struct {
 }
 
 type WorkerPath struct {
-	Profile  string `json:"profile"`
-	Mode     string `json:"mode"`
-	ID       string `json:"id"`
-	Kind     string `json:"kind"`
-	Region   string `json:"region"`
-	State    string `json:"state"`
-	Capacity int32  `json:"capacity"`
+	Profile       string     `json:"profile"`
+	Mode          string     `json:"mode"`
+	ID            string     `json:"id"`
+	Kind          string     `json:"kind"`
+	Region        string     `json:"region"`
+	State         string     `json:"state"`
+	Capacity      int32      `json:"capacity"`
+	InFlight      int32      `json:"in_flight,omitempty"`
+	CooldownUntil *time.Time `json:"cooldown_until,omitempty"`
+	CheckedAt     *time.Time `json:"checked_at,omitempty"`
 }
 
 type WorkerTask struct {

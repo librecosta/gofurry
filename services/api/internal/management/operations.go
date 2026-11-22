@@ -62,6 +62,10 @@ func failure(err error) error {
 		return fiber.ErrForbidden
 	case errors.Is(err, collection.ErrCollectionPermission):
 		return fiber.ErrForbidden
+	case errors.Is(err, collection.ErrEgressPolicyInvalid):
+		return fiber.NewError(fiber.StatusUnprocessableEntity, err.Error())
+	case errors.Is(err, collection.ErrEgressPolicyConflict):
+		return fiber.NewError(fiber.StatusConflict, err.Error())
 	case errors.Is(err, catalog.ErrGamePublicationText), errors.Is(err, catalog.ErrGamePublicationReview), errors.Is(err, catalog.ErrGamePublicationPolicy):
 		return fiber.NewError(fiber.StatusBadRequest, err.Error())
 	case errors.Is(err, catalog.ErrGamePreviewChanged):
