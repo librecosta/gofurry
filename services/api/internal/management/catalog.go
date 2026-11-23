@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"strconv"
+	"strings"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/librecosta/gofurry/services/api/internal/catalog"
@@ -54,7 +55,7 @@ type featureChange struct {
 
 func (o *Operations) sites(g fiber.Router) {
 	g.Get("/sites", func(c fiber.Ctx) error {
-		v, err := search(c, "q", "status", "after", "rating", "uncategorized")
+		v, err := search(c, "q", "status", "after", "rating", "uncategorized", "limit")
 		if err != nil {
 			return err
 		}
@@ -67,8 +68,15 @@ func (o *Operations) sites(g fiber.Router) {
 		if uncategorized != "" && uncategorized != "true" {
 			return fiber.ErrBadRequest
 		}
-		rows, err := dbgen.New(o.Pool).ManagementSites(c.Context(), dbgen.ManagementSitesParams{AfterID: v.Get("after"), Keyword: v.Get("q"), State: v.Get("status"), Rating: rating, Uncategorized: uncategorized == "true", TakeRows: pageSize + 1})
-		return page(c, rows, err, func(row dbgen.ManagementSitesRow) string { return row.PublicID })
+		limit := pageSize
+		if v.Has("limit") {
+			limit, err = strconv.Atoi(v.Get("limit"))
+			if err != nil || limit < 1 || limit > pageSize {
+				return fiber.ErrBadRequest
+			}
+		}
+		rows, err := dbgen.New(o.Pool).ManagementSites(c.Context(), dbgen.ManagementSitesParams{AfterID: v.Get("after"), Keyword: v.Get("q"), State: v.Get("status"), Rating: rating, Uncategorized: uncategorized == "true", TakeRows: int32(limit + 1)})
+		return page(c, rows, err, limit, func(row dbgen.ManagementSitesRow) string { return row.PublicID })
 	})
 	g.Get("/sites/taxonomy", func(c fiber.Ctx) error {
 		return c.JSON(fiber.Map{"categories": catalog.NavigationCategories(), "tags": catalog.NavigationTags(), "assets_enabled": o.Assets != nil})
@@ -206,15 +214,15 @@ func (o *Operations) features(g fiber.Router, path, action string, site bool) {
 			return err
 		}
 		slot := c.Params("slot")
-		d := catalog.PublicationDecision{Actor: Current(c).ID.String(), Reason: in.Reason}
-		if !d.Valid() {
-			return fiber.ErrBadRequest
+		audit := receipt(c, action)
+		if site && strings.TrimSpace(in.Reason) == "" {
+			in.Reason = "System: Site featured slot updated by operator"
 		}
-		result, err := o.Catalog.Manage(c.Context(), receipt(c, action), func(ctx context.Context, s *catalog.Service, _ *dbgen.Queries) (catalog.ManagementResult, error) {
+		result, err := o.Catalog.Manage(c.Context(), audit, func(ctx context.Context, s *catalog.Service, _ *dbgen.Queries) (catalog.ManagementResult, error) {
 			var rev int64
 			var err error
 			if site {
-				rev, err = s.SetNavigationFeature(ctx, slot, in.PublicID, in.Revision, d.Actor, d.Reason)
+				rev, err = s.SetNavigationFeature(ctx, slot, in.PublicID, in.Revision, audit.ActorID.String(), in.Reason)
 			} else {
 				rev, err = s.SetGameChannelFeature(ctx, slot, in.PublicID, in.Revision)
 			}
@@ -245,7 +253,7 @@ func (o *Operations) games(g fiber.Router) {
 			return err
 		}
 		rows, err := dbgen.New(o.Pool).ManagementGames(c.Context(), dbgen.ManagementGamesParams{AfterID: v.Get("after"), Keyword: v.Get("q"), State: v.Get("status"), Platform: v.Get("platform"), TakeRows: pageSize + 1})
-		return page(c, rows, err, func(row dbgen.ManagementGamesRow) string { return row.PublicID })
+		return page(c, rows, err, pageSize, func(row dbgen.ManagementGamesRow) string { return row.PublicID })
 	})
 	o.collections(g)
 	g.Get("/games/features", func(c fiber.Ctx) error {
@@ -314,7 +322,7 @@ func (o *Operations) collections(g fiber.Router) {
 			return err
 		}
 		rows, err := dbgen.New(o.Pool).ManagementCollections(c.Context(), dbgen.ManagementCollectionsParams{AfterID: v.Get("after"), Keyword: v.Get("q"), State: v.Get("status"), TakeRows: pageSize + 1})
-		return page(c, rows, err, func(row dbgen.ManagementCollectionsRow) string { return row.PublicID })
+		return page(c, rows, err, pageSize, func(row dbgen.ManagementCollectionsRow) string { return row.PublicID })
 	})
 	g.Get(base+"/:id/rules", readOperation(o.Catalog.ManagementCollectionRules))
 	g.Patch(base+"/:id/rules", editOnly, writeOperation(o, "collection.rules", func(ctx context.Context, s *catalog.Service, _ *dbgen.Queries, id string, in catalog.CollectionRulesEdit, _ catalog.PublicationDecision) (catalog.ManagementResult, error) {

@@ -83,7 +83,7 @@ func failure(err error) error {
 		return fiber.NewError(fiber.StatusConflict, steamDuplicate.Error())
 	case errors.Is(err, catalog.ErrSiteNameRequired), errors.Is(err, catalog.ErrSiteChineseRequired),
 		errors.Is(err, catalog.ErrSiteAddressRequired), errors.Is(err, catalog.ErrSiteAddressInvalid),
-		errors.Is(err, catalog.ErrSiteCategoryRequired), errors.Is(err, catalog.ErrSiteReviewRequired):
+		errors.Is(err, catalog.ErrSiteCategoryRequired), errors.Is(err, catalog.ErrSiteSecondaryConflict), errors.Is(err, catalog.ErrSiteReviewRequired):
 		return fiber.NewError(fiber.StatusUnprocessableEntity, err.Error())
 	case errors.Is(err, catalog.ErrInvalid), errors.Is(err, collection.ErrIntakeInput), errors.Is(err, collection.ErrIntent):
 		return fiber.ErrBadRequest
@@ -167,13 +167,13 @@ func search(c fiber.Ctx, allowed ...string) (url.Values, error) {
 
 const pageSize = 30
 
-func page[T any](c fiber.Ctx, rows []T, err error, id func(T) string) error {
+func page[T any](c fiber.Ctx, rows []T, err error, limit int, id func(T) string) error {
 	if err != nil {
 		return failure(err)
 	}
 	next := ""
-	if len(rows) > pageSize {
-		rows = rows[:pageSize]
+	if len(rows) > limit {
+		rows = rows[:limit]
 		next = id(rows[len(rows)-1])
 	}
 	return c.JSON(fiber.Map{"items": rows, "next": next})

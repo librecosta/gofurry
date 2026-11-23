@@ -18,8 +18,9 @@ type RevisionedSite struct {
 }
 
 type SiteCategories struct {
-	Primary   string   `json:"primary"`
-	Secondary []string `json:"secondary"`
+	Primary       string   `json:"primary"`
+	Secondary     []string `json:"secondary,omitzero"`
+	KeepSecondary bool     `json:"keep_secondary,omitzero"`
 }
 
 type BulkSiteEdit struct {
@@ -32,9 +33,12 @@ func (s *Service) BulkEditSites(ctx context.Context, in BulkSiteEdit, region, ac
 		return ManagementResult{}, ErrInvalid
 	}
 	c := in.Categories
+	// The explicit flag also prevents older Management servers from decoding
+	// a primary-only edit as a category replacement.
+	keepSecondary := c.Secondary == nil
 	secondary, ok := navigationCodes(c.Secondary, 2, NavigationCategory)
-	if !ok || c.Primary == "" && len(secondary) > 0 || c.Primary != "" &&
-		(!NavigationCategory(c.Primary) || slices.Contains(secondary, c.Primary)) {
+	if !ok || c.KeepSecondary && !keepSecondary || c.Primary == "" && len(secondary) > 0 ||
+		c.Primary != "" && (!NavigationCategory(c.Primary) || slices.Contains(secondary, c.Primary)) {
 		return ManagementResult{}, ErrInvalid
 	}
 	targets := slices.Clone(in.Sites)
@@ -54,10 +58,17 @@ func (s *Service) BulkEditSites(ctx context.Context, in BulkSiteEdit, region, ac
 			if err = editable(target.Revision, row.Revision, row.Status); err != nil {
 				return ManagementResult{}, err
 			}
-			if c.Primary == row.PrimaryCategory.String && slices.Equal(secondary, row.SecondaryCategories) {
+			nextSecondary := secondary
+			if keepSecondary {
+				nextSecondary = row.SecondaryCategories
+				if c.Primary == "" && len(nextSecondary) > 0 || slices.Contains(nextSecondary, c.Primary) {
+					return ManagementResult{}, ErrSiteSecondaryConflict
+				}
+			}
+			if c.Primary == row.PrimaryCategory.String && slices.Equal(nextSecondary, row.SecondaryCategories) {
 				continue
 			}
-			edit := NavigationEdit{Rating: row.ContentRating, Primary: c.Primary, Secondary: secondary,
+			edit := NavigationEdit{Rating: row.ContentRating, Primary: c.Primary, Secondary: nextSecondary,
 				Tags: row.NavigationTags, Actor: actor, Reason: "Admin bulk taxonomy edit"}
 			if _, err = s.InTransaction(q).ReviewSiteNavigation(ctx, region, row.PublicID, row.Revision, edit); err != nil {
 				return ManagementResult{}, err

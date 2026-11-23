@@ -325,6 +325,62 @@ WHERE d.reason LIKE 'System: Site%' AND m.target=$1 AND d.actor=m.actor_id::text
 	if decisions != 3 {
 		t.Fatal("status transitions did not record a generated audit linked to the authenticated request")
 	}
+	// Check candidate limits and batch edits against data confined to the temporary schema.
+	_, err = pool.Exec(ctx, `WITH added AS (
+ INSERT INTO sites (id,public_id,slug,status,published_at,content_rating,primary_category,secondary_categories)
+ SELECT uuidv7(),lpad(n::text,16,'0'),'featured-test','published',now(),'sfw','gallery',
+ CASE n WHEN 2 THEN ARRAY['resources'] ELSE ARRAY['community'] END
+ FROM generate_series(2,8) AS n RETURNING id
+) INSERT INTO site_localizations (site_id,locale,name,summary)
+ SELECT id,'en','Test featured candidate','' FROM added`)
+	siteMust(t, err)
+	var candidates struct {
+		Items []dbgen.ManagementSitesRow `json:"items"`
+		Next  string                     `json:"next"`
+	}
+	search := mgmt + "?q=featured&status=published&rating=sfw&limit=6"
+	request("GET", adminURL, search, "owner", nil, 200, &candidates)
+	if len(candidates.Items) != 6 || candidates.Next != candidates.Items[5].PublicID {
+		t.Fatalf("incorrect candidate page: %+v", candidates)
+	}
+	first, second := candidates.Items[0], candidates.Items[1]
+	request("GET", adminURL, search+"&after="+candidates.Next, "owner", nil, 200, &candidates)
+	if len(candidates.Items) != 1 || candidates.Next != "" {
+		t.Fatalf("incorrect last candidate page: %+v", candidates)
+	}
+	request("GET", adminURL, mgmt+"?limit=31", "owner", nil, 400, nil)
+	batch := catalog.BulkSiteEdit{Sites: []catalog.RevisionedSite{{PublicID: first.PublicID, Revision: first.Revision}, {PublicID: second.PublicID, Revision: second.Revision}},
+		Categories: &catalog.SiteCategories{Primary: "community", KeepSecondary: true}}
+	request("POST", adminURL, mgmt+"/bulk", "owner", batch, 422, nil)
+	// Reusing the original revisions verifies rollback, including the first update.
+	batch.Categories.Primary = "knowledge"
+	request("POST", adminURL, mgmt+"/bulk", "owner", batch, 200, nil)
+	wantSecondary := [][]string{{"resources"}, {"community"}}
+	for i, target := range batch.Sites {
+		request("GET", adminURL, mgmt+"/"+target.PublicID, "owner", nil, 200, &detail)
+		if detail.Primary != "knowledge" || !slices.Equal(detail.Secondary, wantSecondary[i]) {
+			t.Fatalf("primary-only batch edited existing categories: %+v", detail)
+		}
+		batch.Sites[i].Revision = detail.Revision
+	}
+	batch.Categories = &catalog.SiteCategories{Primary: "knowledge", Secondary: []string{}}
+	request("POST", adminURL, mgmt+"/bulk", "owner", batch, 200, nil)
+	request("GET", adminURL, mgmt+"/"+first.PublicID, "owner", nil, 200, &detail)
+	if len(detail.Secondary) != 0 {
+		t.Fatal("explicit empty selection did not clear secondary categories")
+	}
+	feature := mgmt + "/features/primary"
+	featureInput := map[string]any{"public_id": first.PublicID, "revision": 0}
+	request("PATCH", adminURL, feature, "developer", featureInput, 403, nil)
+	request("PATCH", adminURL, feature, "operator", featureInput, 200, &changed)
+	request("PATCH", adminURL, feature, "owner", map[string]any{"public_id": "", "revision": changed.Revision}, 200, &changed)
+	var cleared bool
+	siteMust(t, pool.QueryRow(ctx, `SELECT site_id IS NULL AND actor=$1 AND reason LIKE 'System: Site featured%' AND revision=2
+FROM site_navigation_features WHERE slot='primary'`, actor).Scan(&cleared))
+	if !cleared {
+		t.Fatal("clearing the feature did not record its actor and generated audit description")
+	}
+
 	const collections = "/internal/v1/ops/games/collections"
 	var set catalog.ManagementResult
 	request("POST", adminURL, collections, "owner", collectionEdit{
@@ -370,6 +426,24 @@ WHERE d.entity_kind='collection' AND d.reason LIKE 'System: Collection%' AND m.t
 	if decisions != 3 {
 		t.Fatal("collection transitions did not record a generated audit")
 	}
+	for _, item := range []struct{ slot, publicID string }{{"primary", newGame.Target}, {"collection_1", set.Target}} {
+		path := games + "/features/" + item.slot
+		input := map[string]any{"public_id": item.publicID, "revision": 1}
+		request("PATCH", adminURL, path, "developer", input, 403, nil)
+		request("PATCH", adminURL, path, "operator", input, 200, &changed)
+		request("PATCH", adminURL, path, "owner", input, 409, nil)
+		request("PATCH", adminURL, path, "owner", map[string]any{"public_id": "", "revision": changed.Revision}, 200, &changed)
+		siteMust(t, pool.QueryRow(ctx, `SELECT entity_id IS NULL AND revision=3 FROM game_channel_features WHERE slot=$1`, item.slot).Scan(&cleared))
+		if !cleared {
+			t.Fatalf("slot %s was not cleared", item.slot)
+		}
+		siteMust(t, pool.QueryRow(ctx, `SELECT count(*) FROM management_operations
+WHERE action='game.feature' AND target=$1 AND actor_id=$2
+ AND ((actor_role='operator' AND revision=2) OR (actor_role='owner' AND revision=3))`, item.slot, actor).Scan(&decisions))
+		if decisions != 2 {
+			t.Fatalf("slot %s did not record both changes with the authenticated actor and revision", item.slot)
+		}
+	}
 	legacy, err := dbgen.New(pool).PublishedSite(ctx, "0000000000000001")
 	siteMust(t, err)
 	if legacy.Slug != "old-link" {
@@ -407,11 +481,11 @@ func prepareSiteIntakeSchema(ctx context.Context, conn *pgx.Conn, migration, pol
 		return fmt.Errorf("unexpected development database")
 	}
 	return pgx.BeginFunc(ctx, conn, func(tx pgx.Tx) error {
-		for _, table := range []string{"sites", "site_localizations", "site_addresses", "site_navigation_reviews",
+		for _, table := range []string{"sites", "site_localizations", "site_addresses", "site_navigation_reviews", "site_navigation_features",
 			"catalog_publication_decisions", "management_operations", "site_yearbooks", "site_yearbook_revisions",
 			"site_navigation_heat", "site_navigation_heat_state", "collection_bindings", "site_monthly_coverage",
-			"games", "game_sources", "game_localizations", "game_collections", "game_collection_members",
-			"game_source_metadata", "site_daily_coverage", "collection_consumer", "collection_current", "collection_sources", "collection_plans", "collection_plan_bindings"} {
+			"games", "game_sources", "game_localizations", "game_collections", "game_collection_members", "game_channel_features",
+			"game_source_metadata", "game_source_media", "site_daily_coverage", "collection_consumer", "collection_current", "collection_sources", "collection_plans", "collection_plan_bindings"} {
 			if _, err := tx.Exec(ctx, "CREATE TEMP TABLE "+table+" (LIKE public."+table+" INCLUDING ALL)"); err != nil {
 				return err
 			}
@@ -424,7 +498,9 @@ CREATE VIEW site_public_history AS SELECT * FROM sites WHERE status IN ('publish
 CREATE INDEX sites_navigation_languages ON sites USING gin(supported_languages);
 INSERT INTO sites(id,public_id,slug,status,published_at,content_rating,supported_languages)
 VALUES(uuidv7(),'0000000000000001','old-link','published',now(),'sfw',ARRAY['zh']);
-INSERT INTO site_localizations(site_id,locale,name,summary) SELECT id,'zh','存量网站','' FROM sites;`)
+INSERT INTO site_localizations(site_id,locale,name,summary) SELECT id,'zh','存量网站','' FROM sites;
+INSERT INTO site_navigation_features (slot) VALUES ('primary'),('secondary_1'),('secondary_2');
+INSERT INTO game_channel_features (slot) VALUES ('primary'),('collection_1');`)
 		if err != nil {
 			return err
 		}

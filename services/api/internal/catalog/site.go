@@ -19,12 +19,13 @@ func (e siteInputError) Error() string { return string(e) }
 func (e siteInputError) Unwrap() error { return ErrInvalid }
 
 const (
-	ErrSiteNameRequired     = siteInputError("site needs a name")
-	ErrSiteChineseRequired  = siteInputError("site needs a Chinese name")
-	ErrSiteAddressRequired  = siteInputError("site needs a primary URL")
-	ErrSiteAddressInvalid   = siteInputError("site primary URL is invalid")
-	ErrSiteCategoryRequired = siteInputError("site needs a primary category")
-	ErrSiteReviewRequired   = siteInputError("site needs SFW review")
+	ErrSiteNameRequired      = siteInputError("site needs a name")
+	ErrSiteChineseRequired   = siteInputError("site needs a Chinese name")
+	ErrSiteAddressRequired   = siteInputError("site needs a primary URL")
+	ErrSiteAddressInvalid    = siteInputError("site primary URL is invalid")
+	ErrSiteCategoryRequired  = siteInputError("site needs a primary category")
+	ErrSiteSecondaryConflict = siteInputError("site secondary categories conflict with the primary category")
+	ErrSiteReviewRequired    = siteInputError("site needs SFW review")
 )
 
 type SiteAddressConflict struct{ PublicID string }

@@ -119,7 +119,7 @@ func (o *Operations) managedEditorialTags(c fiber.Ctx) error {
 	for _, row := range rows {
 		items = append(items, editorialTag{editorialDefinition{row.Code, row.Localizations, row.Archived}, row.Category, row.CategoryName, row.CategoryArchived})
 	}
-	return page(c, items, err, func(row editorialTag) string { return row.Code })
+	return page(c, items, err, pageSize, func(row editorialTag) string { return row.Code })
 }
 
 func (o *Operations) managedEditorialCategories(c fiber.Ctx) error {
@@ -134,5 +134,5 @@ func (o *Operations) managedEditorialCategories(c fiber.Ctx) error {
 	for _, row := range rows {
 		items = append(items, editorialCategory{editorialDefinition{row.Code, row.Localizations, row.Archived}, row.SortOrder})
 	}
-	return page(c, items, err, func(row editorialCategory) string { return row.Code })
+	return page(c, items, err, pageSize, func(row editorialCategory) string { return row.Code })
 }
