@@ -8,6 +8,7 @@ import type { CatalogParams } from '../catalog/detail'
 import { defaultLocale } from '../locale-path'
 import type { Locale, Region } from '../preferences'
 import { publicID, publicSlug, type List } from './data'
+import { profileMediaPolicy } from './published-media'
 import { countries, profileMediaURL, validApp, type Country, type Insights, type Profile, type Related, type Story } from './profile-data'
 
 type Identity = { id: string; locale: Locale; region: Region }
@@ -122,8 +123,10 @@ export function profileHead(page?: ProfilePage) {
 }
 
 export function profileHeaders(page?: ProfilePage): Record<string, string> {
+  // The catalog enters and leaves profiles via document navigation so this policy stays with the profile.
+  const mediaHeaders = { 'Content-Security-Policy': profileMediaPolicy, 'Referrer-Policy': 'no-referrer' }
   if (page?.state !== 'ready' || !page.profile.localizations.some(c => c.locale === page.locale)) {
-    return { 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex' }
+    return { ...mediaHeaders, 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex' }
   }
-  return { 'Cache-Control': 'public, max-age=0, must-revalidate' }
+  return { ...mediaHeaders, 'Cache-Control': 'public, max-age=0, must-revalidate' }
 }

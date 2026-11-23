@@ -11,25 +11,27 @@ import type { Page } from './load'
 import { text } from './messages'
 import styles from './games.module.scss'
 
-export function GameFrame({ page, children }: { page: Pick<Page, "locale" | "region" | "path" | "criteria">; children: ReactNode }) {
+export function GameFrame({ page, children, profileDocument }: {
+  page: Pick<Page, "locale" | "region" | "path" | "criteria">; children: ReactNode; profileDocument?: boolean
+}) {
   const { locale, region } = page
   const m = text[locale]
   const alternate = locale === 'en' ? 'zh' : 'en'
   const href = localizedPath(page.path, alternate, region) + criteriaQuery({ ...page.criteria, after: undefined })
   return <div className={styles.page}>
     <header className={styles.masthead}>
-      <Link className={styles.brand} to={gamePath('home', locale, region)}>
+      <Link className={styles.brand} reloadDocument={profileDocument} to={gamePath('home', locale, region)}>
         <GameControllerIcon size={22} aria-hidden="true" />GoFurry
       </Link>
       <nav aria-label={m.home}>
-        <Link to={gamePath('home', locale, region)} activeOptions={{ exact: true, includeSearch: false }}>{m.home}</Link>
-        <Link to={gamePath('directory', locale, region)} activeOptions={{ exact: true, includeSearch: false }}>{m.directory}</Link>
-        <Link to={gamePath('collections', locale, region)} activeOptions={{ includeSearch: false }}>{m.collections}</Link>
+        <Link to={gamePath('home', locale, region)} reloadDocument={profileDocument} activeOptions={{ exact: true, includeSearch: false }}>{m.home}</Link>
+        <Link to={gamePath('directory', locale, region)} reloadDocument={profileDocument} activeOptions={{ exact: true, includeSearch: false }}>{m.directory}</Link>
+        <Link to={gamePath('collections', locale, region)} reloadDocument={profileDocument} activeOptions={{ includeSearch: false }}>{m.collections}</Link>
         <Link to={href} lang={alternate} hrefLang={alternate} preload={false}>{m.language}</Link>
       </nav>
     </header>
     <main className={styles.main}>{children}</main>
-    <footer className={styles.footer}><span>GoFurry</span><Link to={localizedPath('/start', locale, region)}>{m.start}</Link></footer>
+    <footer className={styles.footer}><span>GoFurry</span><Link reloadDocument={profileDocument} to={localizedPath('/start', locale, region)}>{m.start}</Link></footer>
   </div>
 }
 
@@ -66,7 +68,7 @@ function Card({ game, page, eager = false, compact = false }: { game: Game; page
   return <article className={compact ? styles.compact : styles.card}>
     {!compact && <Cover game={game} eager={eager} />}
     <div className={styles.cardBody}>
-      <h3><Link to={gameHref(game, page)} lang={localized.locale}>{localized.name}</Link></h3>
+      <h3><Link reloadDocument to={gameHref(game, page)} lang={localized.locale}>{localized.name}</Link></h3>
       {!compact && localized.summary && <p className={styles.summary} lang={localized.locale}>{localized.summary}</p>}
       <ul className={styles.markers}>
         {platforms.map(code => <li key={code}>{code === 'steam' || code === 'itch_io' ? m[code] : code}</li>)}
@@ -159,7 +161,7 @@ function HomePage({ page, home }: { page: Page; home: Home }) {
     </section>}
     {home.news.length > 0 && <section className={styles.lane}><h2>{m.news}</h2>
       <ul className={styles.news}>{home.news.map(item => <li key={item.public_id + ':' + item.gid}>
-        <div><a href={item.url} rel="noopener noreferrer">{item.title}</a><Link to={gameHref(item, page)}>{m.steam} · {item.app_id}</Link></div>
+        <div><a href={item.url} rel="noopener noreferrer">{item.title}</a><Link reloadDocument to={gameHref(item, page)}>{m.steam} · {item.app_id}</Link></div>
         <time dateTime={item.published_at}>{dateLabel(item.published_at, page.locale)}</time>
       </li>)}</ul>
     </section>}

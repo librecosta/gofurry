@@ -5,6 +5,19 @@ export type Country = 'cn' | 'us' | 'hk'
 export type Currency = 'CNY' | 'USD' | 'HKD'
 export const countries = { cn: 'CNY', us: 'USD', hk: 'HKD' } as const
 
+import type { artworkFamilies } from './published-media'
+
+export type PublicGameMediaImage = {
+  asset_type: keyof typeof artworkFamilies; asset_family: 'store' | 'library' | 'community'; url: string
+}
+export type PublicGameScreenshot = { screenshot_id: string; thumbnail_url?: string; full_url?: string }
+export type SteamMovieSources = Partial<Record<'mp4_max' | 'mp4_480' | 'webm_max' | 'webm_480' | 'hls_h264' | 'dash_h264' | 'dash_av1', string>>
+export type PublicGameMovie = { movie_id: string; name: string; thumbnail_url?: string; highlight?: boolean; sources: SteamMovieSources }
+export type PublicGameMedia = {
+  version: 2; locale: Locale; fallback: boolean; cover?: PublicGameMediaImage
+  images: PublicGameMediaImage[]; screenshots: PublicGameScreenshot[]; movies: PublicGameMovie[]
+}
+
 type Evidence = { locale: string; store_country: Country; observed_at: string; status: 'observed' | 'historical' }
 type Label = { id: string; name: string }
 export type StoreDetails = Evidence & {
@@ -20,7 +33,7 @@ export type GameSource = { platform_code: string; external_key: string; active: 
   details?: StoreDetails; media?: StoreMedia; quotes: Quote[]; players?: { count: number; observed_at: string } }
 export type Story = { app_id: string; gid: string; title: string; url: string; published_at: string }
 export type Related = { public_id: string; slug: string; localizations: Copy[]; cover_url?: string }
-export type Profile = Related & { sources: GameSource[]; related: Related[]; news: List<Story>; news_status: 'available' | 'unavailable' }
+export type Profile = Related & { published_media?: PublicGameMedia; sources: GameSource[]; related: Related[]; news: List<Story>; news_status: 'available' | 'unavailable' }
 export type PlayerDay = { day: string; samples: number; maximum: number; average: number; observed_at: string }
 export type PriceDay = { day: string; state: PriceState; final: number | null; original: number | null; discount_percent: number | null
   observed_at: string; observation_id: string }

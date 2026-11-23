@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState } from 'react'
+import { lazy, Suspense, useMemo, useState } from 'react'
 import { Link } from '@tanstack/react-router'
 import { ArrowLeftIcon } from '@phosphor-icons/react/dist/ssr/ArrowLeft'
 import { ArrowUpRightIcon } from '@phosphor-icons/react/dist/ssr/ArrowUpRight'
@@ -8,7 +8,8 @@ import type { Locale } from '../preferences'
 import { gamePath, genres } from './data'
 import { text } from './messages'
 import { marketLabel, profileCopy } from './profile-copy'
-import { money, profileMediaURL, sourceURL, storyURL, utcDate, type GameSource, type Profile, type StoreDetails, type Story } from './profile-data'
+import { money, profileMediaURL, sourceURL, storyURL, utcDate, type GameSource, type Profile, type PublicGameMedia, type StoreDetails, type Story } from './profile-data'
+import { selectPublishedMedia } from './published-media'
 import { readGameExtra, type ProfilePage } from './profile-load'
 import { GameFrame } from './pages'
 import styles from './profile.module.scss'
@@ -22,13 +23,14 @@ function platform(source: GameSource) {
   return source.platform_code === 'steam' ? 'Steam' : source.platform_code
 }
 
-function Cover({ url, hero }: { url?: string; hero?: boolean }) {
-  const safe = profileMediaURL(url)
-  const [failed, setFailed] = useState<string>()
-  return <div className={styles.cover} data-hero-cover={hero || undefined}>
+function Cover({ url, published, hero }: { url?: string; published?: string; hero?: boolean }) {
+  const [failed, setFailed] = useState<string[]>([])
+  const safe = [published, profileMediaURL(url)].find(link => link && !failed.includes(link))
+  return <div className={styles.cover} data-hero-cover={hero || undefined}
+    data-published-cover={published === safe && !!published || undefined}>
     <GameControllerIcon size={42} aria-hidden="true" />
-    {safe && failed !== safe && <img src={safe} alt="" width={460} height={215} loading={hero ? 'eager' : 'lazy'}
-      decoding="async" referrerPolicy="no-referrer" onError={() => setFailed(safe)} />}
+    {safe && <img src={safe} alt="" width={460} height={215} loading={hero ? 'eager' : 'lazy'}
+      decoding="async" referrerPolicy="no-referrer" onError={() => setFailed(current => [...current, safe])} />}
   </div>
 }
 
@@ -121,28 +123,70 @@ function News({ profile, page }: { profile: Profile; page: ProfilePage }) {
   </section>
 }
 
+function GameMediaSection({ media, published, locale, steamLink }: {
+  media: GameSource[]; published?: PublicGameMedia; locale: Locale; steamLink?: string
+}) {
+  const m = profileCopy[locale]
+  const [open, setOpen] = useState(false)
+  const noScriptLinks = published ? [
+    ...published.screenshots.map((shot, i) => ({ label: m.screenshot + ' ' + (i + 1), url: shot.full_url ?? shot.thumbnail_url })),
+    ...published.movies.map((movie, i) => ({
+      label: movie.name || m.video + ' ' + (i + 1),
+      url: movie.sources.mp4_max ?? movie.sources.mp4_480 ?? movie.sources.webm_max ?? movie.sources.webm_480 ?? steamLink,
+    })),
+    ...[...(published.cover ? [published.cover] : []), ...published.images].map((image, i) => ({
+      label: m.artwork + ' ' + (i + 1), url: image.url,
+    })),
+  ] : media.flatMap(({ media: legacy }) => [
+    ...(legacy?.screenshots?.length ? legacy.screenshots : [legacy?.header ?? legacy?.capsule]).map((url, i) => ({
+      label: m.screenshot + ' ' + (i + 1), url: profileMediaURL(url),
+    })),
+    ...(legacy?.movies ?? []).map((url, i) => ({ label: m.video + ' ' + (i + 1), url: profileMediaURL(url, true) })),
+  ])
+  return <section id="media" className={styles.section}>
+    <h2>{m.media}</h2>
+    {published?.fallback && <p className={styles.observation}>{m.mediaFallback} {published.locale === 'en'
+      ? <span lang="en">English</span> : <span lang="zh">中文</span>}</p>}
+    <button type="button" className={styles.button + ' ' + styles.galleryToggle} aria-expanded={open} aria-controls="game-gallery"
+      onClick={() => setOpen(value => !value)}>{open ? m.closeMedia : m.openMedia}</button>
+    <noscript>
+      <p>{m.mediaNoJS}</p>
+      <ul>{noScriptLinks.map(({ label, url }, i) => <li key={i}>
+        {url ? <a href={url} rel="noreferrer">{label}</a> : label}
+      </li>)}</ul>
+    </noscript>
+    <div id="game-gallery">
+      {open && <Suspense fallback={<p role="status">{m.loading}</p>}>
+        <Gallery sources={media} published={published} locale={locale} />
+      </Suspense>}
+    </div>
+  </section>
+}
+
 export function GameProfileView({ page }: { page: ProfilePage }) {
   const m = profileCopy[page.locale]
   const { id, locale, region } = page
-  const [gallery, setGallery] = useState(false)
+  const publishedMedia = page.state === 'ready' ? page.profile.published_media : undefined
+  const published = useMemo(() => selectPublishedMedia(publishedMedia), [publishedMedia])
   const [insights, setInsights] = useState(false)
   const path = page.state === 'ready' ? entityPath('games', id, page.profile.slug, locale, region) : gamePath('directory', locale, region)
   const frame = { locale, region, path, criteria: {} }
-  if (page.state !== 'ready') return <GameFrame page={frame}><h1 className={styles.unavailable}>{m.unavailable}</h1></GameFrame>
+  if (page.state !== 'ready') return <GameFrame page={frame} profileDocument><h1 className={styles.unavailable}>{m.unavailable}</h1></GameFrame>
   const p = page.profile
   const translation = p.localizations.find(entry => entry.locale === locale)
   const display = translation ?? p.localizations[0]
   const steam = p.sources.filter(s => s.platform_code === 'steam')
-  const media = steam.filter(s => s.media)
+  const media = published ? [] : steam.filter(s => s.media)
+  const showMedia = !!published || media.length > 0
   const facts = steam.filter((s): s is GameSource & { details: StoreDetails } => !!s.details)
   const about = facts.find(s => s.details.description)
   const mainSource = p.sources.find(s => s.preferred && s.active && sourceURL(s)) ??
     steam.find(s => s.active && sourceURL(s)) ?? p.sources.find(s => s.active && sourceURL(s))
-  const links = [['overview', m.about], ...(media.length ? [['media',m.media]] : []),
+  const links = [['overview', m.about], ...(showMedia ? [['media',m.media]] : []),
     ['insights',m.insights], ['news',m.news], ...(facts.length ? [['facts',m.details]] : [])]
-  return <GameFrame page={frame}>
+  return <GameFrame page={frame} profileDocument>
     <div className={styles.profile}>
-      <Link className={styles.back} to={gamePath('directory', locale, region)}><ArrowLeftIcon size={17} aria-hidden="true" />{m.browse}</Link>
+      <Link className={styles.back} reloadDocument to={gamePath('directory', locale, region)}><ArrowLeftIcon size={17} aria-hidden="true" />{m.browse}</Link>
       <header className={styles.hero} data-game-profile>
         <div>
           <h1 lang={display?.locale}>{display?.name ?? id}</h1>
@@ -154,7 +198,7 @@ export function GameProfileView({ page }: { page: ProfilePage }) {
           {mainSource && <a className={styles.primary} href={sourceURL(mainSource)} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer">
             {m.visit} {platform(mainSource)} <ArrowUpRightIcon size={18} aria-hidden="true" /></a>}
         </div>
-        {p.cover_url && <Cover url={p.cover_url} hero />}
+        {(p.cover_url || published?.cover) && <Cover url={p.cover_url} published={published?.cover?.url} hero />}
       </header>
       <nav className={styles.sections} aria-label={m.about}>{links.map(([key,label]) => <a key={key} href={'#' + key}>{label}</a>)}
         <a href="#stores">{m.stores}</a>
@@ -168,14 +212,8 @@ export function GameProfileView({ page }: { page: ProfilePage }) {
               <p className={styles.observation}>{m.fromSteam} · {about.external_key} · <time dateTime={about.details.observed_at}>{utcDate(about.details.observed_at, locale)}</time></p>
             </> : <p className={styles.description} lang={display?.locale}>{display?.summary ?? m.noPresentation}</p>}
           </section>
-          {media.length > 0 && <section id="media" className={styles.section}>
-            <h2>{m.media}</h2>
-            <button type="button" className={styles.button} aria-expanded={gallery} aria-controls="game-gallery"
-              onClick={() => setGallery(value => !value)}>{gallery ? m.closeMedia : m.openMedia}</button>
-            <div id="game-gallery">
-              {gallery && <Suspense fallback={<p role="status">{m.loading}</p>}><Gallery sources={media} locale={locale} /></Suspense>}
-            </div>
-          </section>}
+          {showMedia && <GameMediaSection key={id + '/' + locale} media={media} published={published} locale={locale}
+            steamLink={steam.map(sourceURL).find(Boolean)} />}
           <section id="insights" className={styles.section}>
             <h2>{m.insights}</h2>
             {steam.length === 0 ? <p className={styles.muted}>{m.noSteam}</p> : insights

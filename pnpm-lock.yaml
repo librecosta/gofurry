@@ -192,6 +192,9 @@ importers:
       exifr:
         specifier: 7.1.3
         version: 7.1.3
+      hls.js:
+        specifier: 1.6.19
+        version: 1.6.19
       js-yaml:
         specifier: 4.3.2
         version: 4.3.2
@@ -1000,6 +1003,9 @@ packages:
         optional: true
       ocache:
         optional: true
+
+  hls.js@1.6.19:
+    resolution: {integrity: sha512-A//aZeaAgM5rgUCbTURD4gkfyw5Uag2/4Jky7CfDOukL/DN+P5DjbgK2BYteyP3/KnCkPfkGVkbLxQG2T0AbUQ==}
 
   hookable@6.1.2:
     resolution: {integrity: sha512-+abwxtiEA52GCVIsQqut3S/uKTbUwYIp4Pe/vv+6py5XiXBCqMZHg6pA6Y5qhgLSEys0/cYuPbO0z1QFj5ZCmg==}
@@ -2078,6 +2084,8 @@ snapshots:
     optionalDependencies:
       crossws: 0.4.16(srvx@1.0.6)
       ocache: 0.3.1
+
+  hls.js@1.6.19: {}
 
   hookable@6.1.2: {}
 

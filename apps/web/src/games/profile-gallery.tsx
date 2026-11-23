@@ -1,4 +1,4 @@
-import { useRef, useState, type KeyboardEvent } from 'react'
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { Dialog } from '@base-ui/react/dialog'
 import { motion, useReducedMotion } from 'motion/react'
 import { ArrowLeftIcon } from '@phosphor-icons/react/dist/ssr/ArrowLeft'
@@ -8,21 +8,32 @@ import { PlayIcon } from '@phosphor-icons/react/dist/ssr/Play'
 import { ImageIcon } from '@phosphor-icons/react/dist/ssr/Image'
 import type { Locale } from '../preferences'
 import { profileCopy } from './profile-copy'
-import { profileMediaURL, type GameSource } from './profile-data'
+import { profileMediaURL, type GameSource, type PublicGameMedia } from './profile-data'
+import PublishedGallery from './profile-published-gallery'
 import styles from './profile.module.scss'
 
 type Item = { url: string; type: 'screenshot' | 'video'; label: string }
 
 function Media({ item, fallback, full }: { item: Item; fallback: string; full?: boolean }) {
   const [failed, setFailed] = useState(false)
+  const video = useRef<HTMLVideoElement>(null)
+  useEffect(() => {
+    const element = video.current
+    return () => {
+      if (!element) return
+      element.pause()
+      element.removeAttribute('src')
+      element.load()
+    }
+  }, [])
   if (failed) return <p role="status" className={styles.mediaFailed}>{fallback}</p>
   return item.type === 'video'
-    ? <video src={item.url} controls playsInline preload="none" controlsList="nodownload" aria-label={item.label} onError={() => setFailed(true)} />
+    ? <video ref={video} src={item.url} controls playsInline preload="none" controlsList="nodownload" aria-label={item.label} onError={() => setFailed(true)} />
     : <img src={item.url} alt={item.label} width={1280} height={720} loading={full ? 'eager' : 'lazy'}
       referrerPolicy="no-referrer" onError={() => setFailed(true)} />
 }
 
-export default function Gallery({ sources, locale }: { sources: GameSource[]; locale: Locale }) {
+function LegacyGallery({ sources, locale }: { sources: GameSource[]; locale: Locale }) {
   const m = profileCopy[locale]
   const [source, setSource] = useState(0)
   const [index, setIndex] = useState(0)
@@ -83,4 +94,8 @@ export default function Gallery({ sources, locale }: { sources: GameSource[]; lo
       </button>
     </li>)}</ul>
   </div>
+}
+
+export default function Gallery({ sources, published, locale }: { sources: GameSource[]; published?: PublicGameMedia; locale: Locale }) {
+  return published ? <PublishedGallery media={published} locale={locale} /> : <LegacyGallery sources={sources} locale={locale} />
 }
