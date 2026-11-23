@@ -1,6 +1,7 @@
 package collection
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -339,6 +340,25 @@ func TestSteamMediaNative(t *testing.T) {
 			})
 		return err
 	}
+	market := catalog.ChannelMarket{Region: "CN", Egress: "cn"}
+	if _, err := editor.PublicGameProfile(ctx, market, paws.game.PublicID, "en"); !errors.Is(err, catalog.ErrNotFound) {
+		t.Fatalf("draft Game exposed its media: %v", err)
+	}
+	readPublishedMedia := func() *catalog.PublicGameMedia {
+		t.Helper()
+		profile, err := editor.PublicGameProfile(ctx, market, paws.game.PublicID, "en")
+		requirePlanTest(t, err)
+		if profile.PublishedMedia == nil || profile.PublicID != paws.game.PublicID || profile.Slug != paws.game.Slug {
+			t.Fatal("public identity or media changed")
+		}
+		return profile.PublishedMedia
+	}
+	encodedPublishedMedia := func() []byte {
+		t.Helper()
+		data, err := json.Marshal(readPublishedMedia())
+		requirePlanTest(t, err)
+		return data
+	}
 	badPreview := view
 	badPreview.PreviewToken = oldToken
 	if !errors.Is(publish(badPreview, false), catalog.ErrGamePreviewChanged) {
@@ -353,7 +373,7 @@ func TestSteamMediaNative(t *testing.T) {
 	original := view.PublishedMediaV2[0].Media
 	size, _ := json.Marshal(original)
 	t.Logf("published snapshot %d bytes, game=%s", len(size), paws.game.PublicID)
-	publishedProfile, err := editor.PublicGameProfile(ctx, catalog.ChannelMarket{Region: "CN", Egress: "cn"}, paws.game.PublicID, "en")
+	publishedProfile, err := editor.PublicGameProfile(ctx, market, paws.game.PublicID, "en")
 	requirePlanTest(t, err)
 	if publishedProfile.CoverURL != original.Cover.URL {
 		t.Fatal("public profile did not project the adopted cover")
@@ -363,6 +383,17 @@ func TestSteamMediaNative(t *testing.T) {
 			t.Fatal("published a manifest as a direct movie URL")
 		}
 	}
+
+	publicMedia := readPublishedMedia()
+	if publicMedia.Version != 2 || publicMedia.Locale != "en" || publicMedia.Fallback ||
+		publicMedia.Cover == nil || publicMedia.Cover.Type != original.Cover.Type || publicMedia.Cover.URL != original.Cover.URL ||
+		len(publicMedia.Images) != 1 || publicMedia.Images[0].Type != "header" ||
+		len(publicMedia.Screenshots) != 2 || publicMedia.Screenshots[0].ID != original.Screenshots[0].ID ||
+		len(publicMedia.Movies) != 1 || publicMedia.Movies[0].ID != original.Movies[0].ID ||
+		publicMedia.Movies[0].Sources != original.Movies[0].Sources {
+		t.Fatal("public projection lost adopted media, order or formats")
+	}
+	initialMedia := encodedPublishedMedia()
 
 	at := time.Now().UTC()
 	pos++
@@ -437,7 +468,15 @@ func TestSteamMediaNative(t *testing.T) {
 	if !view.HasUnpublishedChanges || view.DraftMediaV2[0].Media.Cover != nil || view.PublishedMediaV2[0].Media.Cover == nil {
 		t.Fatal("draft and publication changed together")
 	}
+	if !bytes.Equal(initialMedia, encodedPublishedMedia()) {
+		t.Fatal("new candidate observations or editing changed the public media before publication")
+	}
 	requirePlanTest(t, publish(view, true))
+	changed := readPublishedMedia()
+	if changed.Cover != nil || len(changed.Screenshots) != 2 || changed.Screenshots[0].ID != original.Screenshots[1].ID {
+		t.Fatal("public media did not update after Publish Changes")
+	}
+	currentMedia := encodedPublishedMedia()
 
 	f.mu.Lock()
 	f.epoch, f.needReset, f.head, f.current, f.changes = uuid.NewV7(), true, "new-epoch", nil, nil
@@ -460,10 +499,10 @@ func TestSteamMediaNative(t *testing.T) {
 		latest.PublishedMediaV2[0].Media.Movies[0].Sources != original.Movies[0].Sources {
 		t.Fatal("reset, outage or publish changes lost durable media")
 	}
-	profile, err := editor.PublicGameProfile(ctx, catalog.ChannelMarket{Region: "CN", Egress: "cn"}, paws.game.PublicID, "en")
+	profile, err := editor.PublicGameProfile(ctx, market, paws.game.PublicID, "en")
 	requirePlanTest(t, err)
-	if profile.Slug != paws.game.Slug {
-		t.Fatal("public identity changed")
+	if profile.Slug != paws.game.Slug || !bytes.Equal(currentMedia, encodedPublishedMedia()) {
+		t.Fatal("reset or outage changed published media or identity")
 	}
 	for _, bad := range []struct {
 		e   event
@@ -516,6 +555,9 @@ func TestSteamMediaNative(t *testing.T) {
 	if len(latest.MediaCandidatesV2) != 3 || len(latest.PublishedMediaV2) != 1 ||
 		slices.ContainsFunc(latest.MediaCandidatesV2, func(c catalog.GameMediaCandidateV2) bool { return c.Media != nil }) {
 		t.Fatal("scope withdrawal did not hide all declared exits or changed the publication")
+	}
+	if !bytes.Equal(currentMedia, encodedPublishedMedia()) {
+		t.Fatal("withdrawing candidates changed published media")
 	}
 }
 

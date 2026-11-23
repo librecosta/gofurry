@@ -14,11 +14,12 @@ import (
 
 type GameProfile struct {
 	Summary
-	CoverURL   string                 `json:"cover_url,omitempty"`
-	Sources    []GameProfileSource    `json:"sources"`
-	News       ChannelPage[GameStory] `json:"news"`
-	NewsStatus string                 `json:"news_status"`
-	Related    []RelatedGame          `json:"related"`
+	PublishedMedia *PublicGameMedia       `json:"published_media,omitempty"`
+	CoverURL       string                 `json:"cover_url,omitempty"`
+	Sources        []GameProfileSource    `json:"sources"`
+	News           ChannelPage[GameStory] `json:"news"`
+	NewsStatus     string                 `json:"news_status"`
+	Related        []RelatedGame          `json:"related"`
 }
 
 type RelatedGame struct {
@@ -253,7 +254,10 @@ func (s *Service) PublicGameProfile(ctx context.Context, market ChannelMarket, i
 	if err != nil {
 		return GameProfile{}, err
 	}
-	out := GameProfile{Summary: p.Summary, Sources: []GameProfileSource{}, Related: []RelatedGame{}, NewsStatus: "available"}
+	out := GameProfile{
+		Summary: p.Summary, PublishedMedia: publishedProfileMedia(p.Presentation, locale),
+		Sources: []GameProfileSource{}, Related: []RelatedGame{}, NewsStatus: "available",
+	}
 	// Keep the publication-selected source first, irrespective of quote freshness.
 	if p.PreferredSource != nil {
 		slices.SortStableFunc(p.Sources, func(a, b GameSourceSnapshot) int {
