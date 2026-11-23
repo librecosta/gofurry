@@ -2,6 +2,7 @@ package management
 
 import (
 	"context"
+	"net/url"
 	"uuid"
 
 	"github.com/gofiber/fiber/v3"
@@ -11,17 +12,25 @@ import (
 
 func (o *Operations) gameMedia(g fiber.Router) {
 	g.Get("/games/:id/media-candidates", func(c fiber.Ctx) error {
-		query, err := search(c, "after")
+		raw := string(c.Request().URI().QueryString())
+		if len(raw) > 1024 {
+			return fiber.ErrBadRequest
+		}
+		query, err := url.ParseQuery(raw)
 		if err != nil {
-			return err
+			return fiber.ErrBadRequest
 		}
 		after := uuid.Nil()
-		if query.Has("after") {
-			raw := query.Get("after")
-			after, err = uuid.Parse(raw)
-			if err != nil || after.String() != raw || after[6]>>4 != 7 || after[8]>>6 != 2 {
+		if len(query) != 0 {
+			values := query["after"]
+			if len(query) != 1 || len(values) != 1 {
 				return fiber.ErrBadRequest
 			}
+			cursor, err := collectionUUID(values[0])
+			if err != nil || cursor == nil {
+				return fiber.ErrBadRequest
+			}
+			after = *cursor
 		}
 		page, err := o.Catalog.ManagementGameMediaCandidates(c.Context(), c.Params("id"), after)
 		if err != nil {
