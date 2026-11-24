@@ -193,7 +193,10 @@ func (s *Service) ManagementGame(ctx context.Context, id string) (out GameManage
 			}
 		}
 		public, err := gamePublicationContent(out.PublishedPresentation)
-		out.HasUnpublishedChanges = gameDraftDiffers(row, draft, public)
+		out.HasUnpublishedChanges, err = gameAssetDraftDiffers(ctx, q, row, draft, public)
+		if err != nil {
+			return out, err
+		}
 		return out, err
 	})
 }

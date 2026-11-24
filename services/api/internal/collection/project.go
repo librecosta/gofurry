@@ -217,8 +217,17 @@ func (s *Service) project(ctx context.Context, q *dbgen.Queries, generation, epo
 }
 
 func (s *Service) saveGameSourceMedia(ctx context.Context, q *dbgen.Queries, generation, epoch uuid.UUID, source *uuid.UUID, scopeKey string) error {
-	return q.SaveGameSourceMedia(ctx, dbgen.SaveGameSourceMediaParams{Generation: generation, Epoch: epoch, Namespace: s.namespace,
+	rows, err := q.SaveGameSourceMedia(ctx, dbgen.SaveGameSourceMediaParams{Generation: generation, Epoch: epoch, Namespace: s.namespace,
 		SourceID: source, ScopeKey: pgtype.Text{String: scopeKey, Valid: scopeKey != ""}})
+	if err != nil {
+		return err
+	}
+	for _, row := range rows {
+		if err := catalog.ProjectGameAssetSource(ctx, q, row); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func saveSiteTechnology(ctx context.Context, q *dbgen.Queries, generation uuid.UUID, source *uuid.UUID, scopeKey string) error {

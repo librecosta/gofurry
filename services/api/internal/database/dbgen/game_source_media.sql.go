@@ -168,7 +168,7 @@ func (q *Queries) SaveGameDraftMediaV2(ctx context.Context, arg SaveGameDraftMed
 	return err
 }
 
-const saveGameSourceMedia = `-- name: SaveGameSourceMedia :exec
+const saveGameSourceMedia = `-- name: SaveGameSourceMedia :many
 WITH eligible AS MATERIALIZED (
  SELECT DISTINCT ON (gs.id,c.capability,c.output_schema,c.scope_key,coalesce(prior_exit.egress_region,c.execution_egress_region))
   gs.id AS game_source_id,src.id AS collection_source_id,b.id AS binding_id,src.target_id,src.namespace,
@@ -204,7 +204,7 @@ WITH eligible AS MATERIALIZED (
    AND c.observation_id IS NOT NULL AND c.data->>'app_id'=gs.external_key))
  ORDER BY gs.id,c.capability,c.output_schema,c.scope_key,coalesce(prior_exit.egress_region,c.execution_egress_region),b.effective_from DESC,c.position DESC,b.id DESC
 )
-INSERT INTO game_source_media AS old (game_source_id,collection_source_id,binding_id,target_id,namespace,capability,output_schema,
+INSERT INTO game_source_media AS stored (game_source_id,collection_source_id,binding_id,target_id,namespace,capability,output_schema,
  locale,store_country,egress_region,requested_egress_region,scope_key,epoch,position,event_at,state,observation_id,content_hash,ruleset,observed_at,confirmed_at,payload)
 SELECT e.game_source_id,e.collection_source_id,e.binding_id,e.target_id,e.namespace,e.capability,e.output_schema,
  e.locale,e.store_country,e.egress_region,e.requested_egress_region,e.scope_key,$1::uuid,e.position,e.received_at,e.state,e.observation_id,
@@ -213,19 +213,20 @@ ORDER BY e.game_source_id,e.namespace,e.capability,e.output_schema,e.scope_key,e
 ON CONFLICT (game_source_id,namespace,capability,output_schema,scope_key,egress_region) DO UPDATE SET
  collection_source_id=excluded.collection_source_id,binding_id=excluded.binding_id,target_id=excluded.target_id,
  epoch=excluded.epoch,position=excluded.position,event_at=excluded.event_at,state=excluded.state,
- observation_id=CASE WHEN (excluded.state,excluded.content_hash,excluded.binding_id)=(old.state,old.content_hash,old.binding_id)
-  THEN old.observation_id ELSE excluded.observation_id END,
+ observation_id=CASE WHEN (excluded.state,excluded.content_hash,excluded.binding_id)=(stored.state,stored.content_hash,stored.binding_id)
+  THEN stored.observation_id ELSE excluded.observation_id END,
  content_hash=excluded.content_hash,ruleset=excluded.ruleset,
- observed_at=CASE WHEN (excluded.state,excluded.content_hash,excluded.binding_id)=(old.state,old.content_hash,old.binding_id)
-  THEN old.observed_at ELSE excluded.observed_at END,
+ observed_at=CASE WHEN (excluded.state,excluded.content_hash,excluded.binding_id)=(stored.state,stored.content_hash,stored.binding_id)
+  THEN stored.observed_at ELSE excluded.observed_at END,
  confirmed_at=excluded.confirmed_at,
- payload=CASE WHEN (excluded.state,excluded.content_hash,excluded.binding_id,excluded.ruleset)=(old.state,old.content_hash,old.binding_id,old.ruleset)
-  THEN old.payload ELSE excluded.payload END
-WHERE (excluded.epoch=old.epoch AND excluded.position>old.position)
- OR (excluded.epoch<>old.epoch AND (excluded.event_at>old.event_at
-  OR (excluded.event_at=old.event_at AND excluded.observation_id=old.observation_id AND excluded.confirmed_at>old.confirmed_at)))
- OR (excluded.epoch=old.epoch AND excluded.position=old.position AND excluded.content_hash=old.content_hash
-  AND excluded.confirmed_at>old.confirmed_at)
+ payload=CASE WHEN (excluded.state,excluded.content_hash,excluded.binding_id,excluded.ruleset)=(stored.state,stored.content_hash,stored.binding_id,stored.ruleset)
+  THEN stored.payload ELSE excluded.payload END
+WHERE (excluded.epoch=stored.epoch AND excluded.position>stored.position)
+ OR (excluded.epoch<>stored.epoch AND (excluded.event_at>stored.event_at
+  OR (excluded.event_at=stored.event_at AND excluded.observation_id=stored.observation_id AND excluded.confirmed_at>stored.confirmed_at)))
+ OR (excluded.epoch=stored.epoch AND excluded.position=stored.position AND excluded.content_hash=stored.content_hash
+  AND excluded.confirmed_at>stored.confirmed_at)
+RETURNING stored.id, stored.game_source_id, stored.collection_source_id, stored.binding_id, stored.target_id, stored.namespace, stored.capability, stored.output_schema, stored.locale, stored.store_country, stored.egress_region, stored.requested_egress_region, stored.scope_key, stored.epoch, stored.position, stored.event_at, stored.state, stored.observation_id, stored.content_hash, stored.ruleset, stored.observed_at, stored.confirmed_at, stored.payload
 `
 
 type SaveGameSourceMediaParams struct {
@@ -236,13 +237,52 @@ type SaveGameSourceMediaParams struct {
 	ScopeKey   pgtype.Text `json:"scope_key"`
 }
 
-func (q *Queries) SaveGameSourceMedia(ctx context.Context, arg SaveGameSourceMediaParams) error {
-	_, err := q.db.Exec(ctx, saveGameSourceMedia,
+func (q *Queries) SaveGameSourceMedia(ctx context.Context, arg SaveGameSourceMediaParams) ([]GameSourceMedium, error) {
+	rows, err := q.db.Query(ctx, saveGameSourceMedia,
 		arg.Epoch,
 		arg.Generation,
 		arg.Namespace,
 		arg.SourceID,
 		arg.ScopeKey,
 	)
-	return err
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GameSourceMedium{}
+	for rows.Next() {
+		var i GameSourceMedium
+		if err := rows.Scan(
+			&i.ID,
+			&i.GameSourceID,
+			&i.CollectionSourceID,
+			&i.BindingID,
+			&i.TargetID,
+			&i.Namespace,
+			&i.Capability,
+			&i.OutputSchema,
+			&i.Locale,
+			&i.StoreCountry,
+			&i.EgressRegion,
+			&i.RequestedEgressRegion,
+			&i.ScopeKey,
+			&i.Epoch,
+			&i.Position,
+			&i.EventAt,
+			&i.State,
+			&i.ObservationID,
+			&i.ContentHash,
+			&i.Ruleset,
+			&i.ObservedAt,
+			&i.ConfirmedAt,
+			&i.Payload,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }

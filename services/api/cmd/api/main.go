@@ -32,6 +32,7 @@ func newCommand() *cobra.Command {
 	cmd.AddCommand(migrateCommand(&cfg))
 	cmd.AddCommand(collectionCommand(&cfg))
 	cmd.AddCommand(gameIntakeCommand(&cfg))
+	cmd.AddCommand(gameAssetCommand(&cfg))
 	cmd.AddCommand(gameDiscoveryCommand(&cfg))
 	cmd.AddCommand(gameChannelCommand(&cfg))
 	cmd.AddCommand(catalogPublicationCommand(&cfg))

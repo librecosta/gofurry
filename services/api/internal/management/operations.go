@@ -209,6 +209,7 @@ func (o *Operations) register(app *fiber.App) {
 	})
 	o.sites(g)
 	o.games(g)
+	o.gameAssets(g)
 	o.entityCollection(g, "sites")
 	o.entityCollection(g, "games")
 	o.collectionControl(g)

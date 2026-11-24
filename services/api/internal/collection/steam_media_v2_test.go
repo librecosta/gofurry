@@ -172,7 +172,7 @@ func TestSteamMediaNative(t *testing.T) {
 	ctx := t.Context()
 	cfg, err := platform.LoadConfig(*steamMediaDB)
 	requirePlanTest(t, err)
-	if cfg.Database == nil || cfg.Database.Host != "127.0.0.1" || cfg.Database.Name != "gofurry_r1c_media_test" {
+	if cfg.Database == nil || cfg.Database.Host != "127.0.0.1" || cfg.Database.Name != "gofurry_r1c_media_test" && !(strings.HasPrefix(cfg.Database.Name, "gofurry_media_u1_consumer") && strings.HasSuffix(cfg.Database.Name, "_test")) {
 		t.Fatal("only the designated isolated loopback database is supported")
 	}
 	pool, err := database.Open(ctx, *cfg.Database)
@@ -279,6 +279,12 @@ func TestSteamMediaNative(t *testing.T) {
 			default:
 				t.Fatal("untyped candidate")
 			}
+		}
+		var unifiedMovies, unifiedShots, officialSlots int
+		requirePlanTest(t, pool.QueryRow(ctx, "SELECT count(*) FILTER (WHERE category='trailer'),count(*) FILTER (WHERE category='screenshot') FROM game_assets WHERE game_id=$1", g.game.ID).Scan(&unifiedMovies, &unifiedShots))
+		requirePlanTest(t, pool.QueryRow(ctx, "SELECT count(*) FROM game_asset_variants t JOIN game_asset_versions v ON v.id=t.version_id JOIN game_assets a ON a.id=v.asset_id WHERE a.game_id=$1 AND a.source_family='steam.assets'", g.game.ID).Scan(&officialSlots))
+		if unifiedMovies != check.movies || unifiedShots != check.shots || officialSlots != check.assets {
+			t.Fatalf("unified projection lost source media: movies=%d screenshots=%d official slots=%d", unifiedMovies, unifiedShots, officialSlots)
 		}
 		t.Logf("app=%s movies=%d screenshots=%d assets=%d", check.app, check.movies, check.shots, check.assets)
 	}
@@ -477,6 +483,24 @@ func TestSteamMediaNative(t *testing.T) {
 		t.Fatal("public media did not update after Publish Changes")
 	}
 	currentMedia := encodedPublishedMedia()
+	// Loss of a current source row must not discard history or make legacy
+	// migration depend on the current candidate identity.
+	_, err = pool.Exec(ctx, "UPDATE game_source_media SET state='withdrawn',payload=NULL,observation_id=NULL,content_hash=NULL WHERE game_source_id=$1 AND egress_region='cn' AND capability='steam.details' AND ruleset='gofurry-steam-media-2'", paws.source)
+	requirePlanTest(t, err)
+	firstImport, err := catalog.BackfillGameAssets(ctx, pool)
+	requirePlanTest(t, err)
+	if firstImport.IssueCount != 0 || firstImport.DraftLocales != 1 || firstImport.PublishedLocales != 1 || firstImport.MappingsAdded != 8 || firstImport.LibraryAdded != 4 {
+		t.Fatalf("legacy media import lost an adopted asset: %+v", firstImport)
+	}
+	secondImport, err := catalog.BackfillGameAssets(ctx, pool)
+	requirePlanTest(t, err)
+	if secondImport.VariantsAdded+int(secondImport.LibraryAdded)+int(secondImport.MappingsAdded)+secondImport.IssueCount != 0 {
+		t.Fatal("second legacy import changed data")
+	}
+	_, err = pool.Exec(ctx, "UPDATE game_source_media SET state='present',payload=$2,observation_id=$3,content_hash=$4 WHERE game_source_id=$1 AND egress_region='cn' AND capability='steam.details' AND ruleset='gofurry-steam-media-2'", paws.source, []byte(paws.media.Observation.Data), paws.media.Observation.ID, paws.media.Observation.Hash)
+	requirePlanTest(t, err)
+	var beforeReset int
+	requirePlanTest(t, pool.QueryRow(ctx, "SELECT count(*) FROM game_asset_versions WHERE game_id=$1", paws.game.ID).Scan(&beforeReset))
 
 	f.mu.Lock()
 	f.epoch, f.needReset, f.head, f.current, f.changes = uuid.NewV7(), true, "new-epoch", nil, nil
@@ -486,6 +510,11 @@ func TestSteamMediaNative(t *testing.T) {
 	requirePlanTest(t, err)
 	if state.Cursor != "new-epoch" || state.AckPending {
 		t.Fatal("410 recovery did not commit new epoch")
+	}
+	var afterReset int
+	requirePlanTest(t, pool.QueryRow(ctx, "SELECT count(*) FROM game_asset_versions WHERE game_id=$1", paws.game.ID).Scan(&afterReset))
+	if beforeReset != afterReset {
+		t.Fatal("410 recovery changed persisted media versions")
 	}
 	f.mu.Lock()
 	f.unavailable = true
@@ -508,7 +537,7 @@ func TestSteamMediaNative(t *testing.T) {
 		e   event
 		err error
 	}{
-		{mediaFixtureEvent(ns, intakeCapability, "media", "en", paws.market, "cn", "cn", 3, paws.target, pos+1, time.Now().UTC(), paws.media.Observation.Data), errSchema},
+		{mediaFixtureEvent(ns, intakeCapability, "media", "en", paws.market, "cn", "cn", 4, paws.target, pos+1, time.Now().UTC(), paws.media.Observation.Data), errSchema},
 		{mediaFixtureEvent(ns, intakeCapability, "media", "en", paws.market, "cn", "cn", 2, paws.target, pos+1, time.Now().UTC(), stray.media.Observation.Data), errMediaIdentity},
 	} {
 		f.mu.Lock()

@@ -134,6 +134,76 @@ type Game struct {
 	DraftSlug           pgtype.Text        `json:"draft_slug"`
 }
 
+type GameAsset struct {
+	ID             uuid.UUID `json:"id"`
+	GameID         uuid.UUID `json:"game_id"`
+	GameSourceID   uuid.UUID `json:"game_source_id"`
+	PlatformCode   string    `json:"platform_code"`
+	ExternalKey    string    `json:"external_key"`
+	Kind           string    `json:"kind"`
+	Category       string    `json:"category"`
+	SourceFamily   string    `json:"source_family"`
+	SourceRole     string    `json:"source_role"`
+	SourceIdentity string    `json:"source_identity"`
+}
+
+type GameAssetLibrary struct {
+	GameID          uuid.UUID          `json:"game_id"`
+	VersionID       uuid.UUID          `json:"version_id"`
+	SelectedAt      pgtype.Timestamptz `json:"selected_at"`
+	SelectedBy      *uuid.UUID         `json:"selected_by"`
+	SelectionOrigin string             `json:"selection_origin"`
+}
+
+type GameAssetPresentation struct {
+	GameID   uuid.UUID `json:"game_id"`
+	Locale   string    `json:"locale"`
+	Surface  string    `json:"surface"`
+	Revision int64     `json:"revision"`
+}
+
+type GameAssetPresentationItem struct {
+	GameID     uuid.UUID   `json:"game_id"`
+	Locale     string      `json:"locale"`
+	Surface    string      `json:"surface"`
+	Slot       string      `json:"slot"`
+	Position   int64       `json:"position"`
+	VersionID  uuid.UUID   `json:"version_id"`
+	VariantKey pgtype.Text `json:"variant_key"`
+}
+
+type GameAssetVariant struct {
+	ID            uuid.UUID   `json:"id"`
+	VersionID     uuid.UUID   `json:"version_id"`
+	VariantKey    string      `json:"variant_key"`
+	Url           string      `json:"url"`
+	Format        pgtype.Text `json:"format"`
+	SourceRole    string      `json:"source_role"`
+	SourceAssetID string      `json:"source_asset_id"`
+	SourceSlot    string      `json:"source_slot"`
+	SourceDigest  string      `json:"source_digest"`
+	SourceFamily  string      `json:"source_family"`
+	SourceOrder   pgtype.Int4 `json:"source_order"`
+	Width         pgtype.Int4 `json:"width"`
+	Height        pgtype.Int4 `json:"height"`
+}
+
+type GameAssetVersion struct {
+	ID            uuid.UUID   `json:"id"`
+	GameID        uuid.UUID   `json:"game_id"`
+	AssetID       uuid.UUID   `json:"asset_id"`
+	BindingID     uuid.UUID   `json:"binding_id"`
+	ObservationID uuid.UUID   `json:"observation_id"`
+	ScopeKey      string      `json:"scope_key"`
+	EgressRegion  string      `json:"egress_region"`
+	Locale        string      `json:"locale"`
+	Origin        []byte      `json:"origin"`
+	Name          string      `json:"name"`
+	OriginalOrder pgtype.Int4 `json:"original_order"`
+	Highlight     pgtype.Bool `json:"highlight"`
+	Truncated     pgtype.Bool `json:"truncated"`
+}
+
 type GameChannelFeature struct {
 	Slot     string     `json:"slot"`
 	EntityID *uuid.UUID `json:"entity_id"`

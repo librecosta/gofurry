@@ -166,7 +166,11 @@ func (s *Service) publishManagementGame(ctx context.Context, id string, in GameP
 				if err != nil {
 					return g, err
 				}
-				if !gameDraftDiffers(g, draft, current) {
+				changed, err := gameAssetDraftDiffers(ctx, q, g, draft, current)
+				if err != nil {
+					return g, err
+				}
+				if !changed {
 					return g, ErrConflict
 				}
 				next, err = q.PublishReviewedGameChanges(ctx, g.ID)
@@ -207,6 +211,9 @@ func (s *Service) publishManagementGame(ctx context.Context, id string, in GameP
 				if err != nil {
 					return g, err
 				}
+			}
+			if err := snapshotGameAssetPresentation(ctx, q, g.ID, next.Revision); err != nil {
+				return g, err
 			}
 			return next, nil
 		})
