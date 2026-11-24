@@ -13,6 +13,7 @@ import { selectPublishedMedia } from './published-media'
 import { readGameExtra, type ProfilePage } from './profile-load'
 import { GameFrame } from './pages'
 import styles from './profile.module.scss'
+import { ProfileRichDetails } from './profile-rich-details'
 
 const Gallery = lazy(() => import('./profile-gallery'))
 const Insights = lazy(() => import('./profile-insights'))
@@ -183,6 +184,7 @@ export function GameProfileView({ page }: { page: ProfilePage }) {
   const mainSource = p.sources.find(s => s.preferred && s.active && sourceURL(s)) ??
     steam.find(s => s.active && sourceURL(s)) ?? p.sources.find(s => s.active && sourceURL(s))
   const links = [['overview', m.about], ...(showMedia ? [['media',m.media]] : []),
+    ...(p.published_details ? [['published-details',m.details]] : []),
     ['insights',m.insights], ['news',m.news], ...(facts.length ? [['facts',m.details]] : [])]
   return <GameFrame page={frame} profileDocument>
     <div className={styles.profile}>
@@ -214,6 +216,7 @@ export function GameProfileView({ page }: { page: ProfilePage }) {
           </section>
           {showMedia && <GameMediaSection key={id + '/' + locale} media={media} published={published} locale={locale}
             steamLink={steam.map(sourceURL).find(Boolean)} />}
+          {p.published_details && <ProfileRichDetails value={p.published_details} locale={locale} />}
           <section id="insights" className={styles.section}>
             <h2>{m.insights}</h2>
             {steam.length === 0 ? <p className={styles.muted}>{m.noSteam}</p> : insights

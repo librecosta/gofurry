@@ -101,7 +101,11 @@ func failure(err error) error {
 func writeOperation[T any](o *Operations, action string, fn func(context.Context, *catalog.Service, *dbgen.Queries, string, T, catalog.PublicationDecision) (catalog.ManagementResult, error)) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		var input T
-		if err := body(c, &input); err != nil {
+		limit := 16384
+		if action == "game.rich_details" {
+			limit = 256 << 10
+		}
+		if err := boundedJSON(c, &input, limit); err != nil {
 			return err
 		}
 		id := c.Params("id")

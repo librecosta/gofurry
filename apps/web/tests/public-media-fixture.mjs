@@ -66,6 +66,13 @@ createServer((request, response) => {
     public_id: 'p00000000000000' + n, slug: 'gallery', cover_url: image + 'legacy-cover.jpg',
     localizations: [{ locale: 'zh', name: '正式游戏' }, { locale: 'en', name: 'Published game' }],
     sources: n <= '3' ? [legacy] : [],
+    published_details: n === '1' ? {
+      locale: 'en', fallback: url.searchParams.get('locale') !== 'en',
+      detailed_description: '<h4>Field report</h4><p>Keep <strong>moving</strong>.</p><ul><li>First item</li></ul>',
+      pc_requirements: { minimum: '<p>4 GB memory</p>' },
+      website: 'https://example.test/game',
+      languages: [{ code: 'en', steam_name: 'English', full_audio: true }],
+    } : undefined,
     published_media: published && { ...published, fallback: url.searchParams.get('locale') !== published.locale },
     related: [], news: { items: [] }, news_status: 'available',
   }))

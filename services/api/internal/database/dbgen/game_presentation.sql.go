@@ -20,7 +20,7 @@ WITH work AS MATERIALIZED (
 )
 SELECT g.public_id,g.slug,g.intake_display_source AS preferred_source,game_published_text(g.id)::jsonb AS localizations,
  coalesce((SELECT jsonb_agg(jsonb_build_object('locale',p.locale,'source_id',p.media_source_id,'media',p.media,
-  'observed_at',p.media_observed_at,'store_country',p.media_store_country,'cover_url',p.cover_url,'media_v2',p.media_v2) ORDER BY p.locale)
+  'observed_at',p.media_observed_at,'store_country',p.media_store_country,'cover_url',p.cover_url,'media_v2',p.media_v2,'rich_details',p.rich_details-'origin') ORDER BY p.locale)
   FROM game_published_localizations p WHERE p.game_id=g.id),'[]')::jsonb AS presentation,
  coalesce((SELECT jsonb_agg(jsonb_build_object(
   'id',s.id,'platform_code',s.platform_code,'external_key',s.external_key,'source_url',nullif(s.source_url,''),'active',s.active,

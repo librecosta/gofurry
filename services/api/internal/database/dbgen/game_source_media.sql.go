@@ -25,7 +25,7 @@ const getGameSourceMediaForSelection = `-- name: GetGameSourceMediaForSelection 
 SELECT m.id, m.game_source_id, m.collection_source_id, m.binding_id, m.target_id, m.namespace, m.capability, m.output_schema, m.locale, m.store_country, m.egress_region, m.requested_egress_region, m.scope_key, m.epoch, m.position, m.event_at, m.state, m.observation_id, m.content_hash, m.ruleset, m.observed_at, m.confirmed_at, m.payload FROM game_sources s JOIN game_source_media m ON m.game_source_id=s.id
  JOIN collection_bindings b ON b.id=m.binding_id AND b.game_source_id=s.id AND b.game_id=s.game_id
  WHERE s.game_id=$1 AND s.id=$2 AND s.active
- AND b.effective_until IS NULL AND m.state='present' AND m.observation_id=$3
+ AND b.effective_until IS NULL AND m.state='present' AND m.ruleset='gofurry-steam-media-2' AND m.observation_id=$3
 `
 
 type GetGameSourceMediaForSelectionParams struct {
@@ -69,7 +69,7 @@ const listGameSourceMedia = `-- name: ListGameSourceMedia :many
 SELECT page.id, page.game_source_id, page.collection_source_id, page.binding_id, page.target_id, page.namespace, page.capability, page.output_schema, page.locale, page.store_country, page.egress_region, page.requested_egress_region, page.scope_key, page.epoch, page.position, page.event_at, page.state, page.observation_id, page.content_hash, page.ruleset, page.observed_at, page.confirmed_at, page.payload FROM game_sources s CROSS JOIN LATERAL (
  SELECT m.id, m.game_source_id, m.collection_source_id, m.binding_id, m.target_id, m.namespace, m.capability, m.output_schema, m.locale, m.store_country, m.egress_region, m.requested_egress_region, m.scope_key, m.epoch, m.position, m.event_at, m.state, m.observation_id, m.content_hash, m.ruleset, m.observed_at, m.confirmed_at, m.payload FROM game_source_media m JOIN collection_bindings b ON b.id=m.binding_id AND b.game_source_id=m.game_source_id
  WHERE m.game_source_id=s.id AND b.game_id=s.game_id AND b.effective_until IS NULL AND m.state IN ('present','confirmed_empty')
-  AND m.id>$1::uuid
+  AND m.ruleset='gofurry-steam-media-2' AND m.id>$1::uuid
  ORDER BY m.id LIMIT $2
 ) page WHERE s.game_id=$3 AND s.active ORDER BY page.id LIMIT $2
 `
@@ -191,7 +191,8 @@ WITH eligible AS MATERIALIZED (
   AND (c.execution_egress_region<>'' OR prior_exit.egress_region IS NOT NULL)
   AND ($4::uuid IS NULL OR c.source_id=$4)
   AND ($5::text IS NULL OR c.scope_key=$5)
-  AND ((c.capability='steam.details' AND c.output_schema=2 AND c.scope->'dimensions'='{"section":"media"}')
+  AND ((c.capability='steam.details' AND c.output_schema IN (2,3) AND c.scope->'dimensions'='{"section":"media"}')
+    OR (c.capability='steam.details' AND c.output_schema=3 AND c.scope->'dimensions'='{"section":"rich_details"}')
     OR (c.capability='steam.assets' AND c.output_schema=1 AND c.scope->'dimensions'='{"section":"assets"}'))
   AND c.scope->>'namespace'=src.namespace AND c.scope->>'locale' IN ('en','zh-cn') AND c.scope->>'region' IN ('cn','us','hk')
   AND p.params->>'store_country'=upper(c.scope->>'region')
@@ -199,7 +200,7 @@ WITH eligible AS MATERIALIZED (
   AND coalesce(c.confirmed_at,c.received_at)>=greatest(b.effective_from,m.attached_at)
   AND (c.received_at>=greatest(b.effective_from,m.attached_at) OR NOT EXISTS (
    SELECT 1 FROM collection_bindings prior WHERE prior.game_source_id=b.game_source_id AND prior.effective_from<b.effective_from))
-  AND (c.state='withdrawn' OR (c.state IN ('present','confirmed_empty') AND c.ruleset='gofurry-steam-media-2'
+  AND (c.state='withdrawn' OR (c.state IN ('present','confirmed_empty') AND c.ruleset=CASE WHEN c.scope#>>'{dimensions,section}'='rich_details' THEN 'gofurry-steam-rich-3' ELSE 'gofurry-steam-media-2' END
    AND c.observation_id IS NOT NULL AND c.data->>'app_id'=gs.external_key))
  ORDER BY gs.id,c.capability,c.output_schema,c.scope_key,coalesce(prior_exit.egress_region,c.execution_egress_region),b.effective_from DESC,c.position DESC,b.id DESC
 )

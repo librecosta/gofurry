@@ -33,7 +33,9 @@ export type GameSource = { platform_code: string; external_key: string; active: 
   details?: StoreDetails; media?: StoreMedia; quotes: Quote[]; players?: { count: number; observed_at: string } }
 export type Story = { app_id: string; gid: string; title: string; url: string; published_at: string }
 export type Related = { public_id: string; slug: string; localizations: Copy[]; cover_url?: string }
-export type Profile = Related & { published_media?: PublicGameMedia; sources: GameSource[]; related: Related[]; news: List<Story>; news_status: 'available' | 'unavailable' }
+import type { PublicGameRichDetails } from './profile-rich-details'
+
+export type Profile = Related & { published_details?: PublicGameRichDetails; published_media?: PublicGameMedia; sources: GameSource[]; related: Related[]; news: List<Story>; news_status: 'available' | 'unavailable' }
 export type PlayerDay = { day: string; samples: number; maximum: number; average: number; observed_at: string }
 export type PriceDay = { day: string; state: PriceState; final: number | null; original: number | null; discount_percent: number | null
   observed_at: string; observation_id: string }

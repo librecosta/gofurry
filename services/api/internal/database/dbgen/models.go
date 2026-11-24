@@ -225,6 +225,12 @@ type GameDraftMedium struct {
 	MediaStoreCountry  string             `json:"media_store_country"`
 }
 
+type GameDraftRichDetail struct {
+	GameID  uuid.UUID `json:"game_id"`
+	Locale  string    `json:"locale"`
+	Details []byte    `json:"details"`
+}
+
 type GameEditorialTag struct {
 	ID            uuid.UUID          `json:"id"`
 	CategoryID    uuid.UUID          `json:"category_id"`
@@ -350,6 +356,7 @@ type GamePublishedLocalization struct {
 	PublishedAt        pgtype.Timestamptz `json:"published_at"`
 	MediaObservationID *uuid.UUID         `json:"media_observation_id"`
 	MediaV2            []byte             `json:"media_v2"`
+	RichDetails        []byte             `json:"rich_details"`
 }
 
 type GameSource struct {

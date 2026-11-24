@@ -11,7 +11,9 @@ import (
 	"uuid"
 )
 
-func body(c fiber.Ctx, value any) error {
+func body(c fiber.Ctx, value any) error { return boundedJSON(c, value, 16384) }
+
+func boundedJSON(c fiber.Ctx, value any, limit int) error {
 	typ, _, e := mime.ParseMediaType(c.Get("Content-Type"))
 	if e != nil || typ != "application/json" {
 		return fiber.ErrUnsupportedMediaType
@@ -20,8 +22,8 @@ func body(c fiber.Ctx, value any) error {
 	if r == nil {
 		r = bytes.NewReader(c.Body())
 	}
-	b, e := io.ReadAll(io.LimitReader(r, 16385))
-	if e != nil || len(b) > 16384 {
+	b, e := io.ReadAll(io.LimitReader(r, int64(limit)+1))
+	if e != nil || len(b) > limit {
 		return fiber.ErrRequestEntityTooLarge
 	}
 	if json.Unmarshal(b, value, json.RejectUnknownMembers(true)) != nil {

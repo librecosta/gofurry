@@ -25,7 +25,7 @@ const (
 var errMediaIdentity = errors.New("Harvest media AppID conflicts with registered Target")
 
 func highFidelityMedia(o observation) bool {
-	return o.Capability == "steam.assets" || o.Capability == intakeCapability && o.Schema == 2 && o.Scope.Dimensions["section"] == "media"
+	return o.Capability == "steam.assets" || o.Capability == intakeCapability && (o.Schema == 2 || o.Schema == 3) && o.Scope.Dimensions["section"] == "media"
 }
 
 func normalizeSteamHighFidelity(o observation, app string) (compact, error) {

@@ -11,6 +11,21 @@ import (
 )
 
 func (o *Operations) gameMedia(g fiber.Router) {
+	g.Get("/games/:id/rich-details/:candidate", func(c fiber.Ctx) error {
+		candidate, err := collectionUUID(c.Params("candidate"))
+		if err != nil || candidate == nil || len(c.Request().URI().QueryString()) != 0 {
+			return fiber.ErrBadRequest
+		}
+		out, err := o.Catalog.ManagementGameRichDetails(c.Context(), c.Params("id"), *candidate)
+		if err != nil {
+			return failure(err)
+		}
+		return c.JSON(out)
+	})
+	g.Patch("/games/:id/rich-details", editOnly, writeOperation(o, "game.rich_details",
+		func(ctx context.Context, s *catalog.Service, _ *dbgen.Queries, id string, in catalog.GameRichEdit, _ catalog.PublicationDecision) (catalog.ManagementResult, error) {
+			return s.SaveManagementGameRichDetails(ctx, id, in)
+		}))
 	g.Get("/games/:id/media-candidates", func(c fiber.Ctx) error {
 		raw := string(c.Request().URI().QueryString())
 		if len(raw) > 1024 {

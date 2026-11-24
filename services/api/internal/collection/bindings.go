@@ -150,7 +150,7 @@ func outputSchema(schema int32) int32 {
 }
 
 func supportedOutput(capability string, schema int32) bool {
-	return schema == 1 || capability == intakeCapability && schema == 2
+	return schema == 1 || capability == intakeCapability && (schema == 2 || schema == 3)
 }
 
 func (p Plan) params(resource, key string) ([]byte, []byte, string, error) {

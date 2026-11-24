@@ -64,6 +64,26 @@ test('SSR/no-JS shows the published cover and direct links with locale fallback'
   } finally { await page.close() }
 })
 
+test('published rich details render in no-JavaScript SSR alongside the media gallery', async ({ browser }) => {
+  const page = await browser.newPage({ javaScriptEnabled: false, viewport: { width: 390, height: 844 } })
+  try {
+    await images(page)
+    expect((await page.goto(fixture + '1/gallery'))?.status()).toBe(200)
+    const details = page.locator('#published-details')
+    await expect(details).toContainText('显示另一语言的已发布内容')
+    await expect(details.locator('[lang=en] h4').first()).toHaveText('Field report')
+    await expect(details.getByRole('listitem').filter({ hasText: 'First item' })).toBeVisible()
+    await expect(details.getByText('4 GB memory')).toBeVisible()
+    await expect(details.getByRole('row').last()).toHaveText(/English.*未知.*未知.*支持/)
+    const website = details.getByRole('link', { name: '游戏官网' })
+    await expect(website).toHaveAttribute('rel', 'noopener noreferrer nofollow')
+    await expect(website).toHaveAttribute('referrerpolicy', 'no-referrer')
+    await expect(page.getByRole('link', { name: 'Direct trailer' })).toBeVisible()
+    await page.goto(path(2))
+    await expect(details).toHaveCount(0)
+  } finally { await page.close() }
+})
+
 for (const [width, colorScheme] of [[390, 'dark'], [1280, 'light']] as const) {
   test('published images have role shape, editorial order and keyboard preview at ' + width, async ({ page }) => {
     await page.setViewportSize({ width, height: 820 })

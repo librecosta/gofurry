@@ -76,17 +76,25 @@ type GameMediaCandidatePage struct {
 	Next  *uuid.UUID             `json:"next,omitempty"`
 }
 
-func mediaCandidate(row dbgen.GameSourceMedium) (out GameMediaCandidateV2, err error) {
-	out.State = row.State
+func mediaOrigin(row dbgen.GameSourceMedium) (out GameMediaOrigin, err error) {
 	if row.ObservationID == nil || !row.ContentHash.Valid {
 		return out, ErrUnavailable
 	}
-	out.GameMediaOrigin = GameMediaOrigin{
+	out = GameMediaOrigin{
 		GameSourceID: row.GameSourceID, CollectionSourceID: row.CollectionSourceID, BindingID: row.BindingID, TargetID: row.TargetID, Namespace: row.Namespace,
 		Capability: row.Capability, OutputSchema: row.OutputSchema, Locale: row.Locale, StoreCountry: row.StoreCountry,
 		EgressRegion: row.EgressRegion, RequestedEgressRegion: row.RequestedEgressRegion, ScopeKey: row.ScopeKey,
 		ObservationID: *row.ObservationID, ContentHash: row.ContentHash.String, Ruleset: row.Ruleset,
 		ObservedAt: row.ObservedAt.Time.UTC(), ConfirmedAt: row.ConfirmedAt.Time.UTC(),
+	}
+	return out, nil
+}
+
+func mediaCandidate(row dbgen.GameSourceMedium) (out GameMediaCandidateV2, err error) {
+	out.State = row.State
+	out.GameMediaOrigin, err = mediaOrigin(row)
+	if err != nil {
+		return out, err
 	}
 	switch row.Capability {
 	case "steam.details":

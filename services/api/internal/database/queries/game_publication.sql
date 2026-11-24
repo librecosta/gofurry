@@ -5,11 +5,12 @@ SELECT coalesce(jsonb_agg(jsonb_build_object('locale',p.locale,'name',p.name,'su
  'media_source_id',m.media_source_id,'media_observation_id',m.media_observation_id,
  'media_source',CASE WHEN ms.id IS NOT NULL THEN jsonb_build_object('platform_code',ms.platform_code,'external_key',ms.external_key,'source_url',ms.source_url) END,
  'media_observed_at',m.media_observed_at,'media_store_country',coalesce(m.media_store_country,''),
- 'media',coalesce(m.media,'{}'),'cover_url',coalesce(m.cover_url,''),'media_v2',v.media) ORDER BY p.locale),'[]')::jsonb AS presentation
+ 'media',coalesce(m.media,'{}'),'cover_url',coalesce(m.cover_url,''),'media_v2',v.media,'rich_details',rd.details) ORDER BY p.locale),'[]')::jsonb AS presentation
 FROM game_localizations p
 LEFT JOIN game_sources ts ON ts.id=p.text_source_id
 LEFT JOIN game_draft_media m ON m.game_id=p.game_id AND m.locale=p.locale
 LEFT JOIN game_draft_media_v2 v ON v.game_id=p.game_id AND v.locale=p.locale
+LEFT JOIN game_draft_rich_details rd ON rd.game_id=p.game_id AND rd.locale=p.locale
 LEFT JOIN game_sources ms ON ms.id=m.media_source_id
 WHERE p.game_id=$1;
 
@@ -20,7 +21,7 @@ SELECT coalesce(jsonb_agg(jsonb_build_object('locale',p.locale,'name',p.name,'su
  'media_source_id',p.media_source_id,'media_observation_id',p.media_observation_id,
  'media_source',CASE WHEN ms.id IS NOT NULL THEN jsonb_build_object('platform_code',ms.platform_code,'external_key',ms.external_key,'source_url',ms.source_url) END,
  'media_observed_at',p.media_observed_at,'media_store_country',p.media_store_country,'media',p.media,'cover_url',p.cover_url,
- 'media_v2',p.media_v2,'publication_revision',p.revision) ORDER BY p.locale),'[]')::jsonb AS presentation
+ 'media_v2',p.media_v2,'rich_details',p.rich_details,'publication_revision',p.revision) ORDER BY p.locale),'[]')::jsonb AS presentation
 FROM game_published_localizations p
 LEFT JOIN game_sources ts ON ts.id=p.text_source_id
 LEFT JOIN game_sources ms ON ms.id=p.media_source_id
@@ -42,8 +43,8 @@ DELETE FROM game_published_localizations WHERE game_id=$1;
 
 -- name: SaveGamePublicationLocale :exec
 INSERT INTO game_published_localizations
- (game_id,locale,name,summary,text_source_id,text_observation_id,media_source_id,media_observation_id,media,media_observed_at,media_store_country,cover_url,revision,media_v2)
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14);
+ (game_id,locale,name,summary,text_source_id,text_observation_id,media_source_id,media_observation_id,media,media_observed_at,media_store_country,cover_url,revision,media_v2,rich_details)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15);
 
 -- name: SetDraftGameRating :one
 UPDATE games SET content_rating=$2,revision=revision+1,updated_at=transaction_timestamp()

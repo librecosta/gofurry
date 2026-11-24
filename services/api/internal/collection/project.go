@@ -14,6 +14,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/librecosta/gofurry/services/api/internal/catalog"
 	"github.com/librecosta/gofurry/services/api/internal/database/dbgen"
 )
 
@@ -53,7 +54,7 @@ func (s *Service) source(ctx context.Context, q *dbgen.Queries, r result, at tim
 	}
 	spec, ok := capabilities[r.Capability]
 	if !ok || src.ResourceType != spec.resource || !strings.HasPrefix(r.Capability, src.Provider+".") ||
-		!slices.Contains(spec.sections, r.Scope.Dimensions["section"]) || !scopeMatches(r.Scope, r.ScopeKey) ||
+		(!slices.Contains(spec.sections, r.Scope.Dimensions["section"]) && !richSteamDetails(r.observation)) || !scopeMatches(r.Scope, r.ScopeKey) ||
 		(!r.Withdrawn && r.Source != src.Provider) {
 		return src, nil, nil, errProtocol
 	}
@@ -72,7 +73,7 @@ func validObservation(r result) bool {
 	return v7(r.ID) && !r.ObservedAt.IsZero() && !r.ReceivedAt.IsZero() &&
 		!r.ObservedAt.After(r.ReceivedAt.Add(2*time.Minute)) && digest.MatchString(r.Hash) &&
 		(r.Evidence == "" || evidenceCode.MatchString(r.Evidence)) && r.Sample == (r.Capability == "steam.players") &&
-		(len(r.Data) <= 32<<10 || highFidelityMedia(r.observation))
+		(len(r.Data) <= 32<<10 || highFidelityMedia(r.observation) || richSteamDetails(r.observation) && len(r.Data) <= catalog.SteamRichDataLimit)
 }
 
 func (s *Service) project(ctx context.Context, q *dbgen.Queries, generation, epoch uuid.UUID, r result, staging bool) error {
@@ -115,7 +116,7 @@ func (s *Service) project(ctx context.Context, q *dbgen.Queries, generation, epo
 	identity := dbgen.CollectionCurrentParams{
 		Generation: generation, SourceID: src.ID, Capability: r.Capability, OutputSchema: r.Schema, ScopeKey: r.ScopeKey,
 	}
-	isMedia := highFidelityMedia(r.observation)
+	isMedia := highFidelityMedia(r.observation) || richSteamDetails(r.observation)
 	if isMedia && !r.Withdrawn {
 		// A withdrawal covers all actual exits under Harvest's declared scope.
 		barrier, err := q.CollectionCurrent(ctx, identity)
@@ -363,7 +364,7 @@ func (s *Service) sweepPage(ctx context.Context, q *dbgen.Queries, generation, e
 			if err := s.project(ctx, q, generation, epoch, r, true); err != nil {
 				return err
 			}
-			if highFidelityMedia(r.observation) {
+			if highFidelityMedia(r.observation) || richSteamDetails(r.observation) {
 				if err := s.saveGameSourceMedia(ctx, q, generation, epoch, nil, r.ScopeKey); err != nil {
 					return err
 				}

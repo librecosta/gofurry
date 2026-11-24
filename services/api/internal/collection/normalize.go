@@ -313,6 +313,9 @@ type players struct {
 }
 
 func normalizeSteam(o observation, key string) (compact, error) {
+	if richSteamDetails(o) {
+		return normalizeSteamRichDetails(o, key)
+	}
 	if highFidelityMedia(o) {
 		return normalizeSteamHighFidelity(o, key)
 	}
@@ -322,7 +325,7 @@ func normalizeSteam(o observation, key string) (compact, error) {
 		return c, errProtocol
 	}
 	if strconv.FormatUint(uint64(src.AppID), 10) != key {
-		if o.Schema == 2 {
+		if o.Schema >= 2 {
 			return c, errMediaIdentity
 		}
 		return c, errProtocol

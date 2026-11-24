@@ -21,7 +21,8 @@ WITH eligible AS MATERIALIZED (
   AND (c.execution_egress_region<>'' OR prior_exit.egress_region IS NOT NULL)
   AND (sqlc.narg(source_id)::uuid IS NULL OR c.source_id=sqlc.narg(source_id))
   AND (sqlc.narg(scope_key)::text IS NULL OR c.scope_key=sqlc.narg(scope_key))
-  AND ((c.capability='steam.details' AND c.output_schema=2 AND c.scope->'dimensions'='{"section":"media"}')
+  AND ((c.capability='steam.details' AND c.output_schema IN (2,3) AND c.scope->'dimensions'='{"section":"media"}')
+    OR (c.capability='steam.details' AND c.output_schema=3 AND c.scope->'dimensions'='{"section":"rich_details"}')
     OR (c.capability='steam.assets' AND c.output_schema=1 AND c.scope->'dimensions'='{"section":"assets"}'))
   AND c.scope->>'namespace'=src.namespace AND c.scope->>'locale' IN ('en','zh-cn') AND c.scope->>'region' IN ('cn','us','hk')
   AND p.params->>'store_country'=upper(c.scope->>'region')
@@ -29,7 +30,7 @@ WITH eligible AS MATERIALIZED (
   AND coalesce(c.confirmed_at,c.received_at)>=greatest(b.effective_from,m.attached_at)
   AND (c.received_at>=greatest(b.effective_from,m.attached_at) OR NOT EXISTS (
    SELECT 1 FROM collection_bindings prior WHERE prior.game_source_id=b.game_source_id AND prior.effective_from<b.effective_from))
-  AND (c.state='withdrawn' OR (c.state IN ('present','confirmed_empty') AND c.ruleset='gofurry-steam-media-2'
+  AND (c.state='withdrawn' OR (c.state IN ('present','confirmed_empty') AND c.ruleset=CASE WHEN c.scope#>>'{dimensions,section}'='rich_details' THEN 'gofurry-steam-rich-3' ELSE 'gofurry-steam-media-2' END
    AND c.observation_id IS NOT NULL AND c.data->>'app_id'=gs.external_key))
  ORDER BY gs.id,c.capability,c.output_schema,c.scope_key,coalesce(prior_exit.egress_region,c.execution_egress_region),b.effective_from DESC,c.position DESC,b.id DESC
 )
@@ -60,7 +61,7 @@ WHERE (excluded.epoch=old.epoch AND excluded.position>old.position)
 SELECT page.* FROM game_sources s CROSS JOIN LATERAL (
  SELECT m.* FROM game_source_media m JOIN collection_bindings b ON b.id=m.binding_id AND b.game_source_id=m.game_source_id
  WHERE m.game_source_id=s.id AND b.game_id=s.game_id AND b.effective_until IS NULL AND m.state IN ('present','confirmed_empty')
-  AND m.id>sqlc.arg(after_id)::uuid
+  AND m.ruleset='gofurry-steam-media-2' AND m.id>sqlc.arg(after_id)::uuid
  ORDER BY m.id LIMIT sqlc.arg(take_rows)
 ) page WHERE s.game_id=sqlc.arg(game_id) AND s.active ORDER BY page.id LIMIT sqlc.arg(take_rows);
 
@@ -68,7 +69,7 @@ SELECT page.* FROM game_sources s CROSS JOIN LATERAL (
 SELECT m.* FROM game_sources s JOIN game_source_media m ON m.game_source_id=s.id
  JOIN collection_bindings b ON b.id=m.binding_id AND b.game_source_id=s.id AND b.game_id=s.game_id
  WHERE s.game_id=sqlc.arg(game_id) AND s.id=sqlc.arg(game_source_id) AND s.active
- AND b.effective_until IS NULL AND m.state='present' AND m.observation_id=sqlc.arg(observation_id);
+ AND b.effective_until IS NULL AND m.state='present' AND m.ruleset='gofurry-steam-media-2' AND m.observation_id=sqlc.arg(observation_id);
 
 -- name: ReadGameDraftMediaV2 :many
 SELECT locale,media FROM game_draft_media_v2 WHERE game_id=$1 ORDER BY locale;

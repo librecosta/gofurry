@@ -84,7 +84,7 @@ func TestSteamMediaWireValidation(t *testing.T) {
 	if _, err := normalizeSteam(o, "1332010"); !errors.Is(err, errMediaIdentity) {
 		t.Fatal("wrong AppID was not distinguished from malformed media")
 	}
-	o.Schema = 3
+	o.Schema = 4
 	if !errors.Is(observationSchema(o), errSchema) {
 		t.Fatal("accepted unknown version")
 	}

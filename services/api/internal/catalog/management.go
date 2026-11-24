@@ -94,6 +94,7 @@ type GameManagement struct {
 	DraftPresentation     []GamePublicationLocale          `json:"draft_presentation"`
 	PublishedPresentation []GamePublicationLocale          `json:"published_presentation"`
 	SourceCandidates      []GameSourceCandidate            `json:"source_candidates"`
+	RichDetailCandidates  []GameRichCandidateSummary       `json:"rich_detail_candidates,omitempty"`
 	MediaCandidatesV2     []GameMediaCandidateV2           `json:"media_candidates_v2"`
 	MediaCandidatesV2Next *uuid.UUID                       `json:"media_candidates_v2_next,omitempty"`
 	DraftMediaV2          []GameMediaLocaleV2              `json:"draft_media_v2"`
@@ -161,6 +162,10 @@ func (s *Service) ManagementGame(ctx context.Context, id string) (out GameManage
 			return out, err
 		}
 		out.MediaCandidatesV2, out.MediaCandidatesV2Next = page.Items, page.Next
+		out.RichDetailCandidates, err = listGameRichDetails(ctx, q, row.ID)
+		if err != nil {
+			return out, err
+		}
 		out.DraftMediaV2, err = readGameDraftMediaV2(ctx, q, row.ID)
 		if err != nil {
 			return out, err

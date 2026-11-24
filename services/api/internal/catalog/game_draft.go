@@ -148,6 +148,11 @@ func saveGameDraft(ctx context.Context, q *dbgen.Queries, game dbgen.Game, in Ga
 			}
 		}
 	}
+	if textChanged {
+		if err := q.DeleteOrphanGameDraftRichDetails(ctx, game.ID); err != nil {
+			return game, err
+		}
+	}
 	if mediaChanged {
 		if err := q.ClearGameDraftMedia(ctx, game.ID); err != nil {
 			return game, err
