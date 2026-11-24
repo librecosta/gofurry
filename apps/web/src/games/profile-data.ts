@@ -41,7 +41,21 @@ export const newsArticleID = (value: unknown): value is string => typeof value =
 export type Related = { public_id: string; slug: string; localizations: Copy[]; cover_url?: string }
 import type { PublicGameRichDetails } from './profile-rich-details'
 
-export type Profile = Related & { published_details?: PublicGameRichDetails; published_media?: PublicGameMedia; sources: GameSource[]; related: Related[]; news: List<Story>; news_status: 'available' | 'unavailable' }
+type CanonicalRelease = { state: string; precision: string; window_start?: string; window_end?: string }
+type PriceValue = { state: PriceState; currency: string; final?: number; original?: number; discount?: number }
+type ChangeValue = boolean | CanonicalRelease | PriceValue | null
+export type PublicSteamChange = { day: string; code: string; market: Country; before: ChangeValue; after: ChangeValue; quality: 'observed' }
+export type SteamFacts = {
+  official_release?: CanonicalRelease
+  release_observed_at?: string; first_available?: { window_start: string; window_end: string }
+  languages?: { steam_name: string; interface?: boolean; subtitles?: boolean; full_audio?: boolean; sort_order: number }[]
+  free?: boolean; platforms: { windows?: boolean; mac?: boolean; linux?: boolean }
+  quality: Record<string, { quality: 'observed' | 'not_observed' | 'stale' | 'unavailable'; observed_at?: string }>
+  prices: { market: Country; state: PriceState; currency: string; final?: number; discount?: number; observed_at: string; quality: string }[]
+  players: { days: number; samples: number; missing_days: number; observed_at?: string; quality: string }
+  changes: PublicSteamChange[]
+}
+export type Profile = Related & { steam_facts?: SteamFacts; published_details?: PublicGameRichDetails; published_media?: PublicGameMedia; sources: GameSource[]; related: Related[]; news: List<Story>; news_status: 'available' | 'unavailable' }
 export type PlayerDay = { day: string; samples: number; maximum: number; average: number; observed_at: string }
 export type PriceDay = { day: string; state: PriceState; final: number | null; original: number | null; discount_percent: number | null
   observed_at: string; observation_id: string }
@@ -84,6 +98,6 @@ export function utcDate(raw: string, locale: Locale, clock = false) {
   }).format(parsed) + (clock ? ' UTC' : '') : raw
 }
 
-export function money(amount: number, currency: Currency, locale: Locale) {
+export function money(amount: number, currency: string, locale: Locale) {
   return new Intl.NumberFormat(locale === 'zh' ? 'zh-CN' : 'en', { style: 'currency', currency, currencyDisplay: 'code' }).format(amount / 100)
 }

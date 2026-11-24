@@ -16,6 +16,7 @@ type GameProfile struct {
 	Summary
 	PublishedDetails *PublicGameRichDetails `json:"published_details,omitempty"`
 	PublishedMedia   *PublicGameMedia       `json:"published_media,omitempty"`
+	SteamFacts       *PublicSteamFacts      `json:"steam_facts,omitempty"`
 	CoverURL         string                 `json:"cover_url,omitempty"`
 	Sources          []GameProfileSource    `json:"sources"`
 	News             ChannelPage[GameStory] `json:"news"`
@@ -259,6 +260,20 @@ func (s *Service) PublicGameProfile(ctx context.Context, market ChannelMarket, i
 		Summary: p.Summary, PublishedMedia: publishedProfileMedia(p.Presentation, locale),
 		PublishedDetails: publishedGameRichDetails(p.Presentation, locale),
 		Sources:          []GameProfileSource{}, Related: []RelatedGame{}, NewsStatus: "available",
+	}
+	facts, err := readSteamFacts(ctx, q, id, egress, country, steamLocale(locale), false)
+	if err != nil {
+		return GameProfile{}, classify(err)
+	}
+	if facts.AppID != "" && (len(facts.Sources)+len(facts.Prices) > 0 || facts.Players.Samples > 0 || facts.FirstAvailable != nil) {
+		recent, err := steamChanges(ctx, q, id, egress, SteamChangeFilter{Market: country}, true)
+		if err != nil {
+			return GameProfile{}, classify(err)
+		}
+		for _, row := range recent.Items[:min(5, len(recent.Items))] {
+			facts.Changes = append(facts.Changes, publicSteamChange(row))
+		}
+		out.SteamFacts = &facts.PublicSteamFacts
 	}
 	// Keep the publication-selected source first, irrespective of quote freshness.
 	if p.PreferredSource != nil {

@@ -27,6 +27,7 @@ type Operations struct {
 	Discovery         *collection.Discovery
 	Collector         *collection.Service
 	Namespace, Region string
+	Egress            string
 	ReconcileEnabled  bool
 	assetSlots        chan struct{}
 }

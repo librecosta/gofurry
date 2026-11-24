@@ -118,7 +118,11 @@ func (s *Service) project(ctx context.Context, q *dbgen.Queries, generation, epo
 	}
 	isMedia := highFidelityMedia(r.observation) || richSteamDetails(r.observation)
 	isEvents := steamEvents(r.observation)
-	if (isMedia || isEvents) && !r.Withdrawn {
+	r4Price := r.Capability == intakeCapability && r.Schema == 3 && r.Scope.Dimensions["section"] == "price"
+	if r4Price && !r.Withdrawn && !scopePart.MatchString(r.ExecutionEgressRegion) {
+		return nil
+	}
+	if (isMedia || isEvents || r4Price) && !r.Withdrawn {
 		// A withdrawal covers all actual exits under Harvest's declared scope.
 		barrier, err := q.CollectionCurrent(ctx, identity)
 		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
@@ -141,7 +145,7 @@ func (s *Service) project(ctx context.Context, q *dbgen.Queries, generation, epo
 	var id *uuid.UUID
 	if !r.Withdrawn {
 		id = &r.ID
-	} else if isMedia || isEvents {
+	} else if isMedia || isEvents || r4Price {
 		if err := q.ApplyCollectionMediaWithdrawal(ctx, dbgen.ApplyCollectionMediaWithdrawalParams{
 			Generation: generation, SourceID: src.ID, Capability: r.Capability, OutputSchema: r.Schema,
 			ScopeKey: r.ScopeKey, WithdrawalPosition: r.Position,
@@ -156,15 +160,28 @@ func (s *Service) project(ctx context.Context, q *dbgen.Queries, generation, epo
 		ConfirmedAt: timestamp(r.Confirmed), ContentHash: r.Hash, Evidence: r.Evidence, Ruleset: c.Ruleset, Data: c.Data, Facts: facts,
 		ExecutionEgressRegion: identity.ExecutionEgressRegion,
 	})
-	if err != nil || staging {
+	if err != nil {
 		return err
+	}
+	if staging {
+		if !r.Withdrawn && (richSteamDetails(r.observation) || r.Capability == intakeCapability && r.Scope.Dimensions["section"] == "price" && (r.Schema == 1 || r.Schema == 3)) {
+			return q.StageSteamFactInput(ctx, dbgen.StageSteamFactInputParams{Generation: generation, SourceID: src.ID, OutputSchema: r.Schema,
+				ScopeKey: r.ScopeKey, Egress: identity.ExecutionEgressRegion, ObservationID: r.ID})
+		}
+		return nil
 	}
 	if src.Provider == "steam" {
 		if isEvents {
 			return s.saveSteamEvents(ctx, q, generation, &src.ID, r.ScopeKey)
 		}
 		if isMedia {
-			return s.saveGameSourceMedia(ctx, q, generation, epoch, &src.ID, r.ScopeKey)
+			if err := s.saveGameSourceMedia(ctx, q, generation, epoch, &src.ID, r.ScopeKey); err != nil {
+				return err
+			}
+			if richSteamDetails(r.observation) && !r.Withdrawn {
+				return saveSteamCanonicalFacts(ctx, q, generation, &src.ID, r.ScopeKey)
+			}
+			return nil
 		}
 		if r.Capability == intakeCapability && r.Scope.Dimensions["section"] == "details" {
 			if err := refreshIntakeProfiles(ctx, q, generation, &src.ID, r.ScopeKey); err != nil {
@@ -377,6 +394,11 @@ func (s *Service) sweepPage(ctx context.Context, q *dbgen.Queries, generation, e
 			if highFidelityMedia(r.observation) || richSteamDetails(r.observation) {
 				if err := s.saveGameSourceMedia(ctx, q, generation, epoch, nil, r.ScopeKey); err != nil {
 					return err
+				}
+				if richSteamDetails(r.observation) {
+					if err := saveSteamCanonicalFacts(ctx, q, generation, nil, r.ScopeKey); err != nil {
+						return err
+					}
 				}
 				continue
 			}

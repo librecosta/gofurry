@@ -138,7 +138,7 @@ WITH bounds AS (
  SELECT (transaction_timestamp() AT TIME ZONE 'UTC')::date AS last_day,
   (transaction_timestamp() AT TIME ZONE 'UTC')::date+1-$1::integer AS first_day
 ), market AS NOT MATERIALIZED (
- SELECT p.game_source_id, p.binding_id, p.observation_id, p.egress_region, p.store_country, p.currency, p.locale, p.utc_day, p.observed_at, p.state, p.original, p.final, p.discount FROM game_price_observations p
+ SELECT p.game_source_id, p.binding_id, p.observation_id, p.egress_region, p.store_country, p.currency, p.locale, p.utc_day, p.observed_at, p.state, p.original, p.final, p.discount, p.confirmed_at, p.output_schema FROM game_price_observations p
  WHERE p.game_source_id=$2::uuid AND p.egress_region=$3::text AND p.store_country=$4::text
   AND p.currency=$5::text AND p.observed_at<=transaction_timestamp()
 ), language AS MATERIALIZED (
@@ -146,20 +146,20 @@ WITH bounds AS (
   (SELECT p.locale FROM market p WHERE p.locale=$6::text LIMIT 1),
   (SELECT p.locale FROM market p LIMIT 1)) AS locale
 ), scoped AS NOT MATERIALIZED (
- SELECT m.game_source_id, m.binding_id, m.observation_id, m.egress_region, m.store_country, m.currency, m.locale, m.utc_day, m.observed_at, m.state, m.original, m.final, m.discount FROM market m JOIN language l USING(locale)
+ SELECT m.game_source_id, m.binding_id, m.observation_id, m.egress_region, m.store_country, m.currency, m.locale, m.utc_day, m.observed_at, m.state, m.original, m.final, m.discount, m.confirmed_at, m.output_schema FROM market m JOIN language l USING(locale)
 ), eligible AS (
- SELECT p.game_source_id, p.binding_id, p.observation_id, p.egress_region, p.store_country, p.currency, p.locale, p.utc_day, p.observed_at, p.state, p.original, p.final, p.discount FROM scoped p,bounds WHERE p.utc_day BETWEEN first_day AND last_day
+ SELECT p.game_source_id, p.binding_id, p.observation_id, p.egress_region, p.store_country, p.currency, p.locale, p.utc_day, p.observed_at, p.state, p.original, p.final, p.discount, p.confirmed_at, p.output_schema FROM scoped p,bounds WHERE p.utc_day BETWEEN first_day AND last_day
  UNION ALL
- (SELECT p.game_source_id, p.binding_id, p.observation_id, p.egress_region, p.store_country, p.currency, p.locale, p.utc_day, p.observed_at, p.state, p.original, p.final, p.discount FROM scoped p,bounds WHERE p.utc_day<first_day ORDER BY p.utc_day DESC,p.observed_at DESC,p.observation_id DESC LIMIT 1)
+ (SELECT p.game_source_id, p.binding_id, p.observation_id, p.egress_region, p.store_country, p.currency, p.locale, p.utc_day, p.observed_at, p.state, p.original, p.final, p.discount, p.confirmed_at, p.output_schema FROM scoped p,bounds WHERE p.utc_day<first_day ORDER BY p.utc_day DESC,p.observed_at DESC,p.observation_id DESC LIMIT 1)
 ), points AS (
- SELECT p.game_source_id, p.binding_id, p.observation_id, p.egress_region, p.store_country, p.currency, p.locale, p.utc_day, p.observed_at, p.state, p.original, p.final, p.discount,lag(jsonb_build_array(state,original,final,discount)) OVER (ORDER BY observed_at,observation_id) AS previous,
+ SELECT p.game_source_id, p.binding_id, p.observation_id, p.egress_region, p.store_country, p.currency, p.locale, p.utc_day, p.observed_at, p.state, p.original, p.final, p.discount, p.confirmed_at, p.output_schema,lag(jsonb_build_array(state,original,final,discount)) OVER (PARTITION BY binding_id ORDER BY observed_at,observation_id) AS previous,
   row_number() OVER (PARTITION BY utc_day ORDER BY observed_at DESC,observation_id DESC) AS last_in_day
  FROM eligible p
 ), flags AS (
- SELECT p.game_source_id, p.binding_id, p.observation_id, p.egress_region, p.store_country, p.currency, p.locale, p.utc_day, p.observed_at, p.state, p.original, p.final, p.discount, p.previous, p.last_in_day,last_in_day=1 AS daily,previous IS NOT NULL AND previous<>jsonb_build_array(state,original,final,discount) AS changed
+ SELECT p.game_source_id, p.binding_id, p.observation_id, p.egress_region, p.store_country, p.currency, p.locale, p.utc_day, p.observed_at, p.state, p.original, p.final, p.discount, p.confirmed_at, p.output_schema, p.previous, p.last_in_day,last_in_day=1 AS daily,previous IS NOT NULL AND previous<>jsonb_build_array(state,original,final,discount) AS changed
  FROM points p,bounds WHERE utc_day>=first_day
 ), capped AS (
- SELECT game_source_id, binding_id, observation_id, egress_region, store_country, currency, locale, utc_day, observed_at, state, original, final, discount, previous, last_in_day, daily, changed,count(*) FILTER (WHERE changed) OVER (ORDER BY observed_at DESC,observation_id DESC) AS change_rank
+ SELECT game_source_id, binding_id, observation_id, egress_region, store_country, currency, locale, utc_day, observed_at, state, original, final, discount, confirmed_at, output_schema, previous, last_in_day, daily, changed,count(*) FILTER (WHERE changed) OVER (ORDER BY observed_at DESC,observation_id DESC) AS change_rank
  FROM flags
 )
 SELECT utc_day::text AS day,observed_at,observation_id,state,original,final,discount,locale,daily::boolean AS daily,

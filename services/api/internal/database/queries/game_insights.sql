@@ -34,7 +34,7 @@ WITH bounds AS (
  UNION ALL
  (SELECT p.* FROM scoped p,bounds WHERE p.utc_day<first_day ORDER BY p.utc_day DESC,p.observed_at DESC,p.observation_id DESC LIMIT 1)
 ), points AS (
- SELECT p.*,lag(jsonb_build_array(state,original,final,discount)) OVER (ORDER BY observed_at,observation_id) AS previous,
+ SELECT p.*,lag(jsonb_build_array(state,original,final,discount)) OVER (PARTITION BY binding_id ORDER BY observed_at,observation_id) AS previous,
   row_number() OVER (PARTITION BY utc_day ORDER BY observed_at DESC,observation_id DESC) AS last_in_day
  FROM eligible p
 ), flags AS (

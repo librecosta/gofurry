@@ -9,7 +9,7 @@ import { defaultLocale } from '../locale-path'
 import type { Locale, Region } from '../preferences'
 import { publicID, publicSlug, type List } from './data'
 import { profileMediaPolicy } from './published-media'
-import { countries, newsArticleID, profileMediaURL, storyURL, validApp, type NewsArticle, type Country, type Insights, type Profile, type Related, type Story } from './profile-data'
+import { countries, newsArticleID, profileMediaURL, storyURL, validApp, type NewsArticle, type Country, type Insights, type Profile, type PublicSteamChange, type Related, type Story } from './profile-data'
 
 type Identity = { id: string; locale: Locale; region: Region }
 type Extra = Identity & { app?: string; country?: Country; range?: number; after?: string }
@@ -99,6 +99,19 @@ export const readGameExtra = createServerFn({ method: 'GET' }).validator((input:
   } catch {
     return { state: 'unavailable' }
   }
+})
+
+export const readGameChanges = createServerFn({ method: 'GET' }).validator((input: Identity & { after?: string }) => {
+  validate(input)
+  if (input.after !== undefined && !/^\d{4}-\d{2}-\d{2}~[0-9a-f-]{36}$/.test(input.after)) throw new Error('Invalid change cursor')
+  return input
+}).handler(async ({ data }): Promise<List<PublicSteamChange> | null> => {
+  try {
+    const params = new URLSearchParams()
+    if (data.after) params.set('after', data.after)
+    const result: List<PublicSteamChange> | null = await fetchProfile(data, '/changes', params, 128 << 10)
+    return result && Array.isArray(result.items) && result.items.length <= 30 ? result : null
+  } catch { return null }
 })
 
 const readArticle = createServerFn({ method: 'GET' }).validator((input: Identity & { article: string }) => {

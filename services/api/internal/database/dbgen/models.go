@@ -338,6 +338,8 @@ type GamePriceObservation struct {
 	Original      pgtype.Int8        `json:"original"`
 	Final         pgtype.Int8        `json:"final"`
 	Discount      pgtype.Int4        `json:"discount"`
+	ConfirmedAt   pgtype.Timestamptz `json:"confirmed_at"`
+	OutputSchema  int32              `json:"output_schema"`
 }
 
 type GamePublishedLocalization struct {
@@ -782,6 +784,31 @@ type StartWallpaper struct {
 	PublishedAt   pgtype.Timestamptz `json:"published_at"`
 }
 
+type SteamChangeCheckpoint struct {
+	Detector         string             `json:"detector"`
+	Version          int32              `json:"version"`
+	SourceStart      pgtype.Date        `json:"source_start"`
+	ProcessedThrough pgtype.Date        `json:"processed_through"`
+	UpstreamThrough  pgtype.Date        `json:"upstream_through"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+}
+
+type SteamChangeDay struct {
+	BindingID  uuid.UUID          `json:"binding_id"`
+	Day        pgtype.Date        `json:"day"`
+	Failures   int32              `json:"failures"`
+	RetryAfter pgtype.Timestamptz `json:"retry_after"`
+}
+
+type SteamChangeRegistry struct {
+	Detector       string   `json:"detector"`
+	Version        int32    `json:"version"`
+	SourceContract string   `json:"source_contract"`
+	Policy         string   `json:"policy"`
+	Codes          []string `json:"codes"`
+	Enabled        bool     `json:"enabled"`
+}
+
 type SteamDiscoveryState struct {
 	Namespace     string             `json:"namespace"`
 	Paused        bool               `json:"paused"`
@@ -827,6 +854,90 @@ type SteamEditorialPrefill struct {
 	Summary            string             `json:"summary"`
 	Facts              []byte             `json:"facts"`
 	Media              []byte             `json:"media"`
+}
+
+type SteamFactInput struct {
+	Generation            uuid.UUID          `json:"generation"`
+	SourceID              uuid.UUID          `json:"source_id"`
+	Capability            string             `json:"capability"`
+	OutputSchema          int32              `json:"output_schema"`
+	ScopeKey              string             `json:"scope_key"`
+	Scope                 []byte             `json:"scope"`
+	State                 string             `json:"state"`
+	Ruleset               string             `json:"ruleset"`
+	ObservationID         *uuid.UUID         `json:"observation_id"`
+	ObservedAt            pgtype.Timestamptz `json:"observed_at"`
+	ConfirmedAt           pgtype.Timestamptz `json:"confirmed_at"`
+	ExecutionEgressRegion string             `json:"execution_egress_region"`
+	Data                  []byte             `json:"data"`
+}
+
+type SteamFactResetInput struct {
+	Generation            uuid.UUID          `json:"generation"`
+	SourceID              uuid.UUID          `json:"source_id"`
+	Capability            string             `json:"capability"`
+	OutputSchema          int32              `json:"output_schema"`
+	ScopeKey              string             `json:"scope_key"`
+	Scope                 []byte             `json:"scope"`
+	State                 string             `json:"state"`
+	Ruleset               string             `json:"ruleset"`
+	ObservationID         uuid.UUID          `json:"observation_id"`
+	ObservedAt            pgtype.Timestamptz `json:"observed_at"`
+	ConfirmedAt           pgtype.Timestamptz `json:"confirmed_at"`
+	ExecutionEgressRegion string             `json:"execution_egress_region"`
+	Data                  []byte             `json:"data"`
+	RecordedAt            pgtype.Timestamptz `json:"recorded_at"`
+}
+
+type SteamFirstAvailableReview struct {
+	ID          uuid.UUID          `json:"id"`
+	BindingID   uuid.UUID          `json:"binding_id"`
+	Revision    int64              `json:"revision"`
+	WindowStart pgtype.Date        `json:"window_start"`
+	WindowEnd   pgtype.Date        `json:"window_end"`
+	EvidenceUrl string             `json:"evidence_url"`
+	Reason      string             `json:"reason"`
+	ActorID     uuid.UUID          `json:"actor_id"`
+	RecordedAt  pgtype.Timestamptz `json:"recorded_at"`
+}
+
+type SteamGameAvailabilityEvidence struct {
+	ID            uuid.UUID          `json:"id"`
+	BindingID     uuid.UUID          `json:"binding_id"`
+	ObservedAt    pgtype.Timestamptz `json:"observed_at"`
+	ObservationID uuid.UUID          `json:"observation_id"`
+}
+
+type SteamGameChange struct {
+	ID             uuid.UUID          `json:"id"`
+	BindingID      uuid.UUID          `json:"binding_id"`
+	Day            pgtype.Date        `json:"day"`
+	Detector       string             `json:"detector"`
+	Version        int32              `json:"version"`
+	Code           string             `json:"code"`
+	Market         string             `json:"market"`
+	Locale         string             `json:"locale"`
+	Egress         string             `json:"egress"`
+	BeforeValue    []byte             `json:"before_value"`
+	AfterValue     []byte             `json:"after_value"`
+	ObservationID  uuid.UUID          `json:"observation_id"`
+	ObservedAt     pgtype.Timestamptz `json:"observed_at"`
+	MaterializedAt pgtype.Timestamptz `json:"materialized_at"`
+}
+
+type SteamGameDailyFact struct {
+	ID            uuid.UUID          `json:"id"`
+	BindingID     uuid.UUID          `json:"binding_id"`
+	Day           pgtype.Date        `json:"day"`
+	Locale        string             `json:"locale"`
+	Market        string             `json:"market"`
+	Egress        string             `json:"egress"`
+	Kind          string             `json:"kind"`
+	Value         []byte             `json:"value"`
+	ObservationID uuid.UUID          `json:"observation_id"`
+	ObservedAt    pgtype.Timestamptz `json:"observed_at"`
+	ConfirmedAt   pgtype.Timestamptz `json:"confirmed_at"`
+	Normalizer    int32              `json:"normalizer"`
 }
 
 type WallpaperAuditLog struct {

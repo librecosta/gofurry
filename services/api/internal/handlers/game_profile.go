@@ -51,6 +51,18 @@ func GameProfile(service *catalog.Service, market catalog.ChannelMarket) fiber.H
 	}
 }
 
+func GameChanges(service *catalog.Service, market catalog.ChannelMarket) fiber.Handler {
+	return func(c fiber.Ctx) error {
+		args, ok := gameProfileParams(c, "after", "code", "from", "through")
+		if !ok {
+			return catalogResponse(c, nil, catalog.ErrInvalid)
+		}
+		out, err := service.PublicSteamChanges(c.Context(), c.Params("publicID"), market,
+			catalog.SteamChangeFilter{After: args["after"], Code: args["code"], From: args["from"], Through: args["through"]})
+		return catalogResponse(c, out, err)
+	}
+}
+
 func GameProfileSecondary(service *catalog.Service, market catalog.ChannelMarket, news bool) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		id := c.Params("publicID")

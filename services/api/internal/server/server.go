@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"strings"
@@ -168,6 +169,14 @@ func New(logger zerolog.Logger, cfg platform.Config) *Server {
 			logger.Warn().Msg("Yearbook maintenance pool unavailable")
 		}
 	}
+	if collector != nil {
+		check, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		err := directory.ValidateSteamDetectors(check)
+		cancel()
+		if err != nil && s.initErr == nil {
+			s.initErr = fmt.Errorf("Steam change registry: %w", err)
+		}
+	}
 	var runCollection sync.Once
 	var collectionWG sync.WaitGroup
 	var intake *collection.Intake
@@ -183,7 +192,7 @@ func New(logger zerolog.Logger, cfg platform.Config) *Server {
 			s.initErr = err
 		}
 		if s.initErr == nil {
-			ops := &management.Operations{Pool: pool, Catalog: directory, Assets: objects, Intake: intake, Discovery: steamDiscovery, Collector: collector, Region: cfg.Deployment.Region}
+			ops := &management.Operations{Pool: pool, Catalog: directory, Assets: objects, Intake: intake, Discovery: steamDiscovery, Collector: collector, Region: cfg.Deployment.Region, Egress: market.Egress}
 			if collector != nil {
 				ops.Namespace = cfg.Harvest.Namespace
 				ops.ReconcileEnabled = cfg.Harvest.WriterToken != ""
@@ -206,6 +215,11 @@ func New(logger zerolog.Logger, cfg platform.Config) *Server {
 	s.App.Hooks().OnListen(func(data fiber.ListenData) error {
 		runCollection.Do(func() {
 			if collector != nil {
+				collectionWG.Go(func() {
+					directory.RunSteamChanges(collectionCtx, func(err error) {
+						logger.Warn().Err(err).Msg("Steam change projection deferred")
+					})
+				})
 				collectionWG.Go(func() {
 					collector.Run(collectionCtx, func(code string) {
 						logger.Warn().Str("reason", code).Msg("Harvest collection deferred")
