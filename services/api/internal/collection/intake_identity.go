@@ -230,7 +230,7 @@ func attachIntakePlan(ctx context.Context, q *dbgen.Queries, sourceID, bindingID
 	if err != nil {
 		return err
 	}
-	ok, err := q.AttachCollectionPlan(ctx, dbgen.AttachCollectionPlanParams{PlanID: id, BindingID: bindingID, SourceID: sourceID})
+	ok, err := q.AttachCollectionPlan(ctx, dbgen.AttachCollectionPlanParams{PlanID: id, BindingID: bindingID, SourceID: sourceID, Enabled: true})
 	if err == nil && !ok {
 		err = ErrIntakeState
 	}

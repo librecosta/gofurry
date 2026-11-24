@@ -114,6 +114,7 @@ func (s *Service) Unbind(ctx context.Context, id uuid.UUID) error {
 type Plan struct {
 	Capability   string
 	OutputSchema int32
+	Disabled     bool
 	Locale       string
 	Region       string
 	EgressRegion string
@@ -255,7 +256,9 @@ func (s *Service) AddPlan(ctx context.Context, binding uuid.UUID, p Plan) (uuid.
 				return err
 			}
 			id = plan.ID
-			owned, err := q.AttachCollectionPlan(ctx, dbgen.AttachCollectionPlanParams{PlanID: plan.ID, BindingID: binding, SourceID: row.SourceID})
+			owned, err := q.AttachCollectionPlan(ctx, dbgen.AttachCollectionPlanParams{
+				PlanID: plan.ID, BindingID: binding, SourceID: row.SourceID, Enabled: !p.Disabled,
+			})
 			if err == nil && !owned {
 				return ErrIntent
 			}

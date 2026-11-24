@@ -77,8 +77,8 @@ WITH owned AS MATERIALIZED (
  FROM collection_plans p JOIN collection_bindings b ON b.source_id=p.source_id AND b.effective_until IS NULL
  WHERE p.id=sqlc.arg(plan_id) AND b.id=sqlc.arg(binding_id) AND p.source_id=sqlc.arg(source_id)
 ), attached AS (
- INSERT INTO collection_plan_bindings (plan_id,binding_id,source_id)
- SELECT plan_id,binding_id,source_id FROM owned ON CONFLICT (plan_id,binding_id) DO NOTHING
+ INSERT INTO collection_plan_bindings (plan_id,binding_id,source_id,enabled)
+ SELECT plan_id,binding_id,source_id,sqlc.arg(enabled) FROM owned ON CONFLICT (plan_id,binding_id) DO NOTHING
 )
 SELECT EXISTS (SELECT 1 FROM owned)::boolean;
 

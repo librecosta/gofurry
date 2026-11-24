@@ -158,7 +158,7 @@ func (s *Service) attachEditorialPlan(ctx context.Context, q *dbgen.Queries, bin
 	if err != nil {
 		return uuid.Nil(), err
 	}
-	attached, err := q.AttachCollectionPlan(ctx, dbgen.AttachCollectionPlanParams{PlanID: id, BindingID: b.ID, SourceID: b.SourceID})
+	attached, err := q.AttachCollectionPlan(ctx, dbgen.AttachCollectionPlanParams{PlanID: id, BindingID: b.ID, SourceID: b.SourceID, Enabled: true})
 	if err == nil && !attached {
 		err = ErrIntent
 	}

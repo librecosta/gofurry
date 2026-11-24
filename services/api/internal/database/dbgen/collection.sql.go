@@ -329,8 +329,8 @@ WITH owned AS MATERIALIZED (
  FROM collection_plans p JOIN collection_bindings b ON b.source_id=p.source_id AND b.effective_until IS NULL
  WHERE p.id=$1 AND b.id=$2 AND p.source_id=$3
 ), attached AS (
- INSERT INTO collection_plan_bindings (plan_id,binding_id,source_id)
- SELECT plan_id,binding_id,source_id FROM owned ON CONFLICT (plan_id,binding_id) DO NOTHING
+ INSERT INTO collection_plan_bindings (plan_id,binding_id,source_id,enabled)
+ SELECT plan_id,binding_id,source_id,$4 FROM owned ON CONFLICT (plan_id,binding_id) DO NOTHING
 )
 SELECT EXISTS (SELECT 1 FROM owned)::boolean
 `
@@ -339,10 +339,16 @@ type AttachCollectionPlanParams struct {
 	PlanID    uuid.UUID `json:"plan_id"`
 	BindingID uuid.UUID `json:"binding_id"`
 	SourceID  uuid.UUID `json:"source_id"`
+	Enabled   bool      `json:"enabled"`
 }
 
 func (q *Queries) AttachCollectionPlan(ctx context.Context, arg AttachCollectionPlanParams) (bool, error) {
-	row := q.db.QueryRow(ctx, attachCollectionPlan, arg.PlanID, arg.BindingID, arg.SourceID)
+	row := q.db.QueryRow(ctx, attachCollectionPlan,
+		arg.PlanID,
+		arg.BindingID,
+		arg.SourceID,
+		arg.Enabled,
+	)
 	var column_1 bool
 	err := row.Scan(&column_1)
 	return column_1, err
