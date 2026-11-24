@@ -9,12 +9,12 @@ import { defaultLocale } from '../locale-path'
 import type { Locale, Region } from '../preferences'
 import { publicID, publicSlug, type List } from './data'
 import { profileMediaPolicy } from './published-media'
-import { countries, profileMediaURL, validApp, type Country, type Insights, type Profile, type Related, type Story } from './profile-data'
+import { countries, newsArticleID, profileMediaURL, storyURL, validApp, type NewsArticle, type Country, type Insights, type Profile, type Related, type Story } from './profile-data'
 
 type Identity = { id: string; locale: Locale; region: Region }
 type Extra = Identity & { app?: string; country?: Country; range?: number; after?: string }
 type Page = { state: 'ready'; profile: Profile; origin: string }
-export type ProfilePage = Identity & (Page | { state: 'unavailable' })
+export type ProfilePage = Identity & (Page & { article?: NewsArticle | null } | { state: 'unavailable' })
 
 function validate<T extends Identity>(input: T): T {
   if (!input || typeof input.id !== 'string' || input.id.length !== 16 || !publicID.test(input.id) ||
@@ -22,7 +22,7 @@ function validate<T extends Identity>(input: T): T {
   return input
 }
 
-async function fetchProfile(input: Identity, suffix: string, query: URLSearchParams) {
+async function fetchProfile(input: Identity, suffix: string, query: URLSearchParams, limit = 0) {
   const region = webConfig().region
   if (region !== input.region) throw new Error('Game API region mismatch')
   const url = new URL('/api/v1/games/' + input.id + suffix, webConfig().api_origin)
@@ -34,7 +34,21 @@ async function fetchProfile(input: Identity, suffix: string, query: URLSearchPar
         response.headers.get('x-gofurry-content-mode') === 'SFW') return null
     throw new Error('Game API unavailable')
   }
-  return await response.json()
+  if (!limit) return await response.json()
+  if (!response.body) throw new Error('Missing game API response')
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder('utf-8', { fatal: true })
+  let size = 0
+  let text = ''
+  try {
+    for (;;) {
+      const { value, done } = await reader.read()
+      if (done) return JSON.parse(text + decoder.decode())
+      size += value.byteLength
+      if (size > limit) throw new Error('Game API response exceeded its budget')
+      text += decoder.decode(value, { stream: true })
+    }
+  } finally { await reader.cancel() }
 }
 
 function identityOK(p: Related | undefined, id?: string) {
@@ -66,7 +80,7 @@ export const readGameExtra = createServerFn({ method: 'GET' }).validator((input:
   return input
 }).handler(async ({ data }): Promise<{ state: 'ready'; data: Insights | List<Story> } | { state: 'unavailable' }> => {
   try {
-    const query = new URLSearchParams()
+    const query = new URLSearchParams({ locale: data.locale })
     if (data.app) query.set('app_id', data.app)
     if (data.view === 'insights') {
       query.set('locale', data.locale)
@@ -87,7 +101,23 @@ export const readGameExtra = createServerFn({ method: 'GET' }).validator((input:
   }
 })
 
-export async function loadGameProfile(params: CatalogParams, pathname: string, region: Region, signal: AbortSignal): Promise<ProfilePage> {
+const readArticle = createServerFn({ method: 'GET' }).validator((input: Identity & { article: string }) => {
+  validate(input)
+  if (!newsArticleID(input.article)) throw new Error('Invalid article ID')
+  return input
+}).handler(async ({ data }): Promise<NewsArticle | null> => {
+  try {
+    const article: NewsArticle | null = await fetchProfile(data, '/news/' + data.article, new URLSearchParams(), 512 << 10)
+    if (!article || article.id !== data.article || !['en', 'zh'].includes(article.locale) ||
+      typeof article.title !== 'string' || typeof article.html !== 'string' || !validApp(article.app_id) ||
+      !storyURL({ app_id: article.app_id, url: article.url, title: article.title, published_at: article.published_at, gid: '' })) return null
+    return article
+  } catch { return null }
+})
+
+export async function loadGameProfile(params: CatalogParams, pathname: string, region: Region, signal: AbortSignal, search = ''): Promise<ProfilePage> {
+  const article = new URLSearchParams(search).get('article')
+  const articleID = newsArticleID(article) ? article : undefined
   const { publicId: id, slug, language } = params
   const path = (language ? '/' + language : '') + '/games/' + id + (slug ? '/' + slug : '')
   if ((pathname !== path && pathname !== path + '/') || id.length !== 16 || !publicID.test(id) ||
@@ -97,8 +127,10 @@ export async function loadGameProfile(params: CatalogParams, pathname: string, r
   if (result.state === 'missing') throw notFound()
   if (result.state !== 'ready') return { state: 'unavailable', locale, region, id }
   const canonicalPath = entityPath('games', id, result.profile.slug, locale, region)
-  if (pathname !== canonicalPath) throw redirect({ href: canonicalPath, statusCode: 301, headers: { 'Cache-Control': 'no-store' } })
-  return { ...result, locale, region, id }
+  const articlePath = articleID ? '?article=' + articleID + '#news' : ''
+  if (pathname !== canonicalPath) throw redirect({ href: canonicalPath + articlePath, statusCode: 301, headers: { 'Cache-Control': 'no-store' } })
+  const fullArticle = articleID ? await readArticle({ data: { id, locale, region, article: articleID }, signal }) : undefined
+  return { ...result, locale, region, id, article: fullArticle }
 }
 
 export function profileHead(page?: ProfilePage) {

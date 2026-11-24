@@ -73,7 +73,7 @@ func validObservation(r result) bool {
 	return v7(r.ID) && !r.ObservedAt.IsZero() && !r.ReceivedAt.IsZero() &&
 		!r.ObservedAt.After(r.ReceivedAt.Add(2*time.Minute)) && digest.MatchString(r.Hash) &&
 		(r.Evidence == "" || evidenceCode.MatchString(r.Evidence)) && r.Sample == (r.Capability == "steam.players") &&
-		(len(r.Data) <= 32<<10 || highFidelityMedia(r.observation) || richSteamDetails(r.observation) && len(r.Data) <= catalog.SteamRichDataLimit)
+		(len(r.Data) <= 32<<10 || highFidelityMedia(r.observation) || richSteamDetails(r.observation) && len(r.Data) <= catalog.SteamRichDataLimit || steamEvents(r.observation) && len(r.Data) <= steamEventsLimit)
 }
 
 func (s *Service) project(ctx context.Context, q *dbgen.Queries, generation, epoch uuid.UUID, r result, staging bool) error {
@@ -107,7 +107,7 @@ func (s *Service) project(ctx context.Context, q *dbgen.Queries, generation, epo
 			c, err = normalizeSteam(r.observation, src.ExternalKey)
 		}
 		if err != nil {
-			if src.Provider == "steam" && (r.Capability == intakeCapability || r.Capability == "steam.assets") && !errors.Is(err, errMediaIdentity) {
+			if src.Provider == "steam" && (r.Capability == intakeCapability || r.Capability == "steam.assets" || steamEvents(r.observation)) && !errors.Is(err, errMediaIdentity) {
 				return nil // A malformed known payload cannot replace verified evidence.
 			}
 			return err
@@ -117,7 +117,8 @@ func (s *Service) project(ctx context.Context, q *dbgen.Queries, generation, epo
 		Generation: generation, SourceID: src.ID, Capability: r.Capability, OutputSchema: r.Schema, ScopeKey: r.ScopeKey,
 	}
 	isMedia := highFidelityMedia(r.observation) || richSteamDetails(r.observation)
-	if isMedia && !r.Withdrawn {
+	isEvents := steamEvents(r.observation)
+	if (isMedia || isEvents) && !r.Withdrawn {
 		// A withdrawal covers all actual exits under Harvest's declared scope.
 		barrier, err := q.CollectionCurrent(ctx, identity)
 		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
@@ -140,7 +141,7 @@ func (s *Service) project(ctx context.Context, q *dbgen.Queries, generation, epo
 	var id *uuid.UUID
 	if !r.Withdrawn {
 		id = &r.ID
-	} else if isMedia {
+	} else if isMedia || isEvents {
 		if err := q.ApplyCollectionMediaWithdrawal(ctx, dbgen.ApplyCollectionMediaWithdrawalParams{
 			Generation: generation, SourceID: src.ID, Capability: r.Capability, OutputSchema: r.Schema,
 			ScopeKey: r.ScopeKey, WithdrawalPosition: r.Position,
@@ -159,6 +160,9 @@ func (s *Service) project(ctx context.Context, q *dbgen.Queries, generation, epo
 		return err
 	}
 	if src.Provider == "steam" {
+		if isEvents {
+			return s.saveSteamEvents(ctx, q, generation, &src.ID, r.ScopeKey)
+		}
 		if isMedia {
 			return s.saveGameSourceMedia(ctx, q, generation, epoch, &src.ID, r.ScopeKey)
 		}
@@ -355,7 +359,7 @@ func (s *Service) sweepPage(ctx context.Context, q *dbgen.Queries, generation, e
 		if err := observationSchema(item.observation); err != nil {
 			return err
 		}
-		if item.Source == "steam" && (item.Capability == intakeCapability || item.Capability == "steam.assets") &&
+		if item.Source == "steam" && (item.Capability == intakeCapability || item.Capability == "steam.assets" || steamEvents(item.observation)) &&
 			(item.State == "present" || item.State == "confirmed_empty") {
 			if item.Confirmed.IsZero() || item.Confirmed.Before(item.ReceivedAt) {
 				return errProtocol
@@ -363,6 +367,12 @@ func (s *Service) sweepPage(ctx context.Context, q *dbgen.Queries, generation, e
 			r := result{observation: item.observation, Position: item.Position, Confirmed: item.Confirmed}
 			if err := s.project(ctx, q, generation, epoch, r, true); err != nil {
 				return err
+			}
+			if steamEvents(r.observation) {
+				if err := s.saveSteamEvents(ctx, q, generation, nil, r.ScopeKey); err != nil {
+					return err
+				}
+				continue
 			}
 			if highFidelityMedia(r.observation) || richSteamDetails(r.observation) {
 				if err := s.saveGameSourceMedia(ctx, q, generation, epoch, nil, r.ScopeKey); err != nil {

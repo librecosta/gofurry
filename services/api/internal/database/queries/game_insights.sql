@@ -86,8 +86,25 @@ WITH work AS MATERIALIZED (
    WHERE m.binding_id=b.id AND m.source_id=src.id AND m.attached_at<=n.observed_at AND p.capability='steam.news'
     AND p.scope->>'egress_region'=sqlc.arg(egress)::text)
  ORDER BY s.external_key,n.gid,n.observed_at DESC,n.observation_id DESC
+), events AS MATERIALIZED (
+ SELECT DISTINCT ON (s.external_key,e.announcement_gid) s.external_key AS app_id,e.announcement_gid AS gid,
+  e.published_at,e.headline AS title,'https://store.steampowered.com/news/app/'||s.external_key||'/view/'||e.announcement_gid AS url,
+  e.id AS article_id,e.language, e.hidden OR NOT e.eligible AS suppressed,v.summary
+ FROM sources s JOIN game_steam_events e ON e.game_source_id=s.id
+ JOIN game_sources active ON active.id=s.id AND active.active
+ JOIN game_steam_event_versions v ON v.event_id=e.id AND v.body_hash=e.body_hash
+ WHERE e.egress_region=sqlc.arg(egress)::text AND e.language IN (0,6) AND e.published_at<=transaction_timestamp()
+ ORDER BY s.external_key,e.announcement_gid,
+   (e.language=CASE sqlc.arg(locale)::text WHEN 'zh' THEN 6 ELSE 0 END) DESC,e.observed_at DESC,e.id
+), combined AS (
+ SELECT e.app_id,e.gid,e.published_at,e.title,e.url,e.article_id,e.language,e.summary
+ FROM events e WHERE NOT e.suppressed
+ UNION ALL
+ SELECT n.app_id,n.gid,n.published_at,n.title,n.url,'00000000-0000-0000-0000-000000000000'::uuid,-1,''::text FROM latest n
+ WHERE NOT EXISTS (SELECT 1 FROM events e WHERE e.app_id=n.app_id AND
+  (e.gid=n.gid OR e.gid=substring(n.url FROM '/([0-9]+)$')))
 )
-SELECT app_id,gid,published_at,observed_at,observation_id,title::text AS title,url::text AS url FROM latest
+SELECT app_id,gid,published_at,title::text AS title,url::text AS url,article_id,language::integer,summary::text FROM combined
 WHERE (published_at,gid,app_id)<(sqlc.arg(after_time)::timestamptz,sqlc.arg(after_gid)::text,sqlc.arg(after_app)::text)
 ORDER BY published_at DESC,gid DESC,app_id DESC LIMIT sqlc.arg(take_rows)::integer;
 

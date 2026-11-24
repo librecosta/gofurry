@@ -138,6 +138,8 @@ func (s *Service) CreateManagedPlan(ctx context.Context, q *dbgen.Queries, kind,
 	switch in.Capability {
 	case "steam.details", "steam.assets":
 		p.Interval, p.Locale, p.Region = 24*time.Hour, in.Locale, in.StoreCountry
+	case steamEventsCapability:
+		p.Interval, p.Locale = 24*time.Hour, in.Locale
 	case "steam.news", "web.http", "web.dns", "web.tls":
 		p.Interval = 24 * time.Hour
 	case "steam.players":
@@ -147,7 +149,8 @@ func (s *Service) CreateManagedPlan(ctx context.Context, q *dbgen.Queries, kind,
 	default:
 		return ErrIntent
 	}
-	if p.Capability != "steam.details" && p.Capability != "steam.assets" && (in.Locale != "" || in.StoreCountry != "") {
+	if p.Capability != "steam.details" && p.Capability != "steam.assets" &&
+		(in.StoreCountry != "" || p.Capability != steamEventsCapability && in.Locale != "") {
 		return ErrIntent
 	}
 	if in.IntervalSeconds != 0 {

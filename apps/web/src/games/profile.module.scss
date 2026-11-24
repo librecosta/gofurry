@@ -324,6 +324,14 @@
   .galleryToggle { display: none; }
 }
 
+.officialArticle {
+  display: grid;
+  gap: 0.9rem;
+  max-width: 75ch;
+  margin-block: 1.2rem 1.5rem;
+  overflow-wrap: anywhere;
+}
+
 .richBody {
   max-inline-size: 72ch;
   line-height: 1.7;

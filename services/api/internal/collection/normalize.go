@@ -313,6 +313,9 @@ type players struct {
 }
 
 func normalizeSteam(o observation, key string) (compact, error) {
+	if steamEvents(o) {
+		return normalizeSteamEvents(o, key)
+	}
 	if richSteamDetails(o) {
 		return normalizeSteamRichDetails(o, key)
 	}

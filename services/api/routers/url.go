@@ -51,6 +51,7 @@ func registerURLs(v1 fiber.Router, backgrounds, suggestions, location, weather, 
 			group.Get("/collections/:publicID", handlers.GameChannel(directory, market, "members"))
 			group.Get("/:publicID/insights", handlers.GameProfileSecondary(directory, market, false))
 			group.Get("/:publicID/news", handlers.GameProfileSecondary(directory, market, true))
+			group.Get("/:publicID/news/:article", handlers.GameNewsArticle(directory, market))
 		}
 		group.Get("/", route.page)
 		group.Get("/:publicID", route.detail)

@@ -427,6 +427,47 @@ type GameSourceTextHistory struct {
 	EgressRegion  pgtype.Text        `json:"egress_region"`
 }
 
+type GameSteamEvent struct {
+	ID                 uuid.UUID          `json:"id"`
+	GameSourceID       uuid.UUID          `json:"game_source_id"`
+	CollectionSourceID uuid.UUID          `json:"collection_source_id"`
+	BindingID          uuid.UUID          `json:"binding_id"`
+	TargetID           uuid.UUID          `json:"target_id"`
+	Namespace          string             `json:"namespace"`
+	ScopeKey           string             `json:"scope_key"`
+	RequestedLocale    string             `json:"requested_locale"`
+	EgressRegion       string             `json:"egress_region"`
+	ObservationID      uuid.UUID          `json:"observation_id"`
+	ContentHash        string             `json:"content_hash"`
+	ObservedAt         pgtype.Timestamptz `json:"observed_at"`
+	ConfirmedAt        pgtype.Timestamptz `json:"confirmed_at"`
+	EventGid           string             `json:"event_gid"`
+	AnnouncementGid    string             `json:"announcement_gid"`
+	Language           int32              `json:"language"`
+	Headline           string             `json:"headline"`
+	PublishedAt        pgtype.Timestamptz `json:"published_at"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+	Eligible           bool               `json:"eligible"`
+	Hidden             bool               `json:"hidden"`
+	Revision           int32              `json:"revision"`
+	BodyHash           string             `json:"body_hash"`
+	Metadata           []byte             `json:"metadata"`
+	Metrics            []byte             `json:"metrics"`
+}
+
+type GameSteamEventVersion struct {
+	EventID       uuid.UUID          `json:"event_id"`
+	BodyHash      string             `json:"body_hash"`
+	Headline      string             `json:"headline"`
+	RawBody       string             `json:"raw_body"`
+	Html          string             `json:"html"`
+	PlainText     string             `json:"plain_text"`
+	Summary       string             `json:"summary"`
+	ObservationID uuid.UUID          `json:"observation_id"`
+	ObservedAt    pgtype.Timestamptz `json:"observed_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+}
+
 type LegacyEditorialID struct {
 	LegacyDeployment string             `json:"legacy_deployment"`
 	Kind             string             `json:"kind"`

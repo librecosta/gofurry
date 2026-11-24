@@ -5,7 +5,8 @@ import { loadGameProfile, profileHead, profileHeaders } from '../games/profile-l
 import { GameProfileView } from '../games/profile'
 
 export const Route = createFileRoute('/{-$language}/games/$publicId/{-$slug}')({
-  loader: ({ params, location, context, abortController }) => loadGameProfile(params, location.pathname, context.preferences.region, abortController.signal),
+  loader: ({ params, location, context, abortController }) =>
+    loadGameProfile(params, location.pathname, context.preferences.region, abortController.signal, location.searchStr),
   head: ({ loaderData }) => profileHead(loaderData),
   headers: ({ loaderData }) => profileHeaders(loaderData),
   notFoundComponent: MissingDetail,

@@ -31,7 +31,13 @@ export type Quote = { locale: string; store_country: Country; currency: Currency
   amounts: null | { currency: Currency; initial: number; final: number; discount_percent: number } }
 export type GameSource = { platform_code: string; external_key: string; active: boolean; preferred: boolean; source_url?: string
   details?: StoreDetails; media?: StoreMedia; quotes: Quote[]; players?: { count: number; observed_at: string } }
-export type Story = { app_id: string; gid: string; title: string; url: string; published_at: string }
+export type Story = { app_id: string; gid: string; title: string; url: string; published_at: string
+  article_id?: string; locale?: 'en' | 'zh'; summary?: string }
+export type NewsArticle = { id: string; app_id: string; title: string; locale: 'en' | 'zh'; published_at: string
+  updated_at?: string; url: string; html: string; summary: string; tags?: string[]
+  metrics?: { comment_count?: number; vote_up_count?: number; vote_down_count?: number } }
+export const newsArticleID = (value: unknown): value is string => typeof value === 'string' &&
+  /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(value)
 export type Related = { public_id: string; slug: string; localizations: Copy[]; cover_url?: string }
 import type { PublicGameRichDetails } from './profile-rich-details'
 

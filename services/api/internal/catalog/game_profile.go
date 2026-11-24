@@ -321,7 +321,7 @@ func (s *Service) PublicGameProfile(ctx context.Context, market ChannelMarket, i
 		}
 		out.Related = append(out.Related, RelatedGame{Summary: item, CoverURL: profileMedia(row.Cover, false)})
 	}
-	out.News, err = gameProfileNews(ctx, q, id, "", egress, "", 6)
+	out.News, err = gameProfileNews(ctx, q, id, "", egress, locale, "", 6)
 	if err != nil {
 		return GameProfile{}, err
 	}

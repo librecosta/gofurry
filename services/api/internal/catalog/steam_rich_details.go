@@ -181,6 +181,24 @@ func richMarkup(value string) (string, bool) {
 	return strings.TrimSpace(out.String()), false
 }
 
+// CleanSteamEventBody uses the same final allowlist as published rich details.
+func CleanSteamEventBody(raw string) (string, string, string) {
+	prepared, err := markup.CleanSteamContent(raw, markup.WithVideoTags(false))
+	if err != nil {
+		return "", "", ""
+	}
+	clean, overflow := richMarkup(prepared)
+	if overflow || clean == "" || len(clean) > 256<<10 {
+		return "", "", ""
+	}
+	plain := richTextSummary(clean)
+	if len(plain) > 256<<10 {
+		return "", "", ""
+	}
+	summary := []rune(strings.Join(strings.Fields(plain), " "))
+	return clean, plain, strings.TrimSpace(string(summary[:min(180, len(summary))]))
+}
+
 func richTextSummary(clean string) string {
 	text, _ := markup.PlainText(clean)
 	return text

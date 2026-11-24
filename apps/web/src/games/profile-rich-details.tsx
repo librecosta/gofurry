@@ -27,7 +27,7 @@ const messages = {
     platforms: '平台支持', controller: '控制器支持', fallback: '显示另一语言的已发布内容' },
 }
 
-function RichHTML({ html }: { html: string }) {
+export function RichHTML({ html }: { html: string }) {
   // The public DTO contains the canonical, reviewed GoFurry HTML snapshot.
   return <div className={styles.richBody} dangerouslySetInnerHTML={{ __html: html }} />
 }

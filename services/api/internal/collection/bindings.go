@@ -130,14 +130,15 @@ type capabilitySpec struct {
 }
 
 var capabilities = map[string]capabilitySpec{
-	"web.http":      {"origin", 15 * time.Minute, []string{"http", "html", "tls"}},
-	"web.tls":       {"origin", 6 * time.Hour, []string{"tls"}},
-	"web.dns":       {"domain", time.Hour, []string{"dns"}},
-	"web.rdap":      {"domain", 7 * 24 * time.Hour, []string{"rdap"}},
-	"steam.details": {"app", time.Hour, []string{"details", "price", "media"}},
-	"steam.assets":  {"app", 6 * time.Hour, []string{"assets"}},
-	"steam.news":    {"app", time.Hour, []string{"news"}},
-	"steam.players": {"app", 30 * time.Minute, []string{"players"}},
+	"web.http":            {"origin", 15 * time.Minute, []string{"http", "html", "tls"}},
+	"web.tls":             {"origin", 6 * time.Hour, []string{"tls"}},
+	"web.dns":             {"domain", time.Hour, []string{"dns"}},
+	"web.rdap":            {"domain", 7 * 24 * time.Hour, []string{"rdap"}},
+	"steam.details":       {"app", time.Hour, []string{"details", "price", "media"}},
+	"steam.assets":        {"app", 6 * time.Hour, []string{"assets"}},
+	"steam.news":          {"app", time.Hour, []string{"news"}},
+	steamEventsCapability: {"app", time.Hour, []string{"events"}},
+	"steam.players":       {"app", 30 * time.Minute, []string{"players"}},
 }
 
 var dnsTypes = []string{"a", "aaaa", "caa", "cname", "mx", "ns", "soa", "txt"}
@@ -197,6 +198,17 @@ func (p Plan) params(resource, key string) ([]byte, []byte, string, error) {
 			Language string `json:"language"`
 			Country  string `json:"store_country"`
 		}{lang, strings.ToUpper(fields.Region)}
+	case steamEventsCapability:
+		if fields.Region != "" || !slices.Contains([]string{"en", "zh-cn"}, fields.Locale) {
+			return nil, nil, "", ErrIntent
+		}
+		language := "english"
+		if fields.Locale == "zh-cn" {
+			language = "schinese"
+		}
+		params = struct {
+			Language string `json:"language"`
+		}{language}
 	case "steam.news", "steam.players":
 		if fields.Locale != "" || fields.Region != "" {
 			return nil, nil, "", ErrIntent

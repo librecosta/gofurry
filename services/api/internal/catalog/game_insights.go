@@ -8,12 +8,16 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"uuid"
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/librecosta/gofurry/services/api/internal/database/dbgen"
 )
 
 type GameStory struct {
+	ArticleID   string    `json:"article_id,omitempty"`
+	Locale      string    `json:"locale,omitempty"`
+	Summary     string    `json:"summary,omitempty"`
 	AppID       string    `json:"app_id"`
 	GID         string    `json:"gid"`
 	Title       string    `json:"title"`
@@ -23,6 +27,7 @@ type GameStory struct {
 
 type gameNewsCursor struct {
 	Game, App, GID, Source string
+	Locale                 string `json:",omitempty"`
 	Time                   int64
 }
 
@@ -46,12 +51,12 @@ func officialStoryURL(raw, app string) string {
 	return ""
 }
 
-func gameProfileNews(ctx context.Context, q *dbgen.Queries, id, app, egress, after string, limit int32) (ChannelPage[GameStory], error) {
+func gameProfileNews(ctx context.Context, q *dbgen.Queries, id, app, egress, locale, after string, limit int32) (ChannelPage[GameStory], error) {
 	pos := gameNewsCursor{Game: id, Source: app, Time: time.Now().Add(time.Minute).UnixMicro(), GID: "~", App: "~"}
 	if after != "" {
 		raw, err := base64.RawURLEncoding.Strict().DecodeString(after)
 		if len(after) > 512 || err != nil || json.Unmarshal(raw, &pos) != nil || pos.Game != id || pos.Source != app ||
-			!validAppID(pos.App) || pos.Time <= 0 || pos.Time > time.Now().UnixMicro() {
+			!validAppID(pos.App) || pos.Time <= 0 || pos.Time > time.Now().UnixMicro() || pos.Locale != "" && pos.Locale != locale {
 			return ChannelPage[GameStory]{}, ErrInvalid
 		}
 		gid, err := strconv.ParseUint(pos.GID, 10, 64)
@@ -59,7 +64,7 @@ func gameProfileNews(ctx context.Context, q *dbgen.Queries, id, app, egress, aft
 			return ChannelPage[GameStory]{}, ErrInvalid
 		}
 	}
-	rows, err := q.GameProfileNews(ctx, dbgen.GameProfileNewsParams{PublicID: id, AppID: app, Egress: egress, AfterTime: channelTime(pos.Time),
+	rows, err := q.GameProfileNews(ctx, dbgen.GameProfileNewsParams{PublicID: id, AppID: app, Egress: egress, Locale: locale, AfterTime: channelTime(pos.Time),
 		AfterGid: pos.GID, AfterApp: pos.App, TakeRows: limit + 1})
 	if err != nil {
 		return ChannelPage[GameStory]{}, classify(err)
@@ -67,12 +72,16 @@ func gameProfileNews(ctx context.Context, q *dbgen.Queries, id, app, egress, aft
 	out := ChannelPage[GameStory]{Items: []GameStory{}}
 	for _, row := range rows[:min(len(rows), int(limit))] {
 		if safe := officialStoryURL(row.Url, row.AppID); safe != "" {
-			out.Items = append(out.Items, GameStory{AppID: row.AppID, GID: row.Gid, Title: row.Title, URL: safe, PublishedAt: row.PublishedAt.Time.UTC()})
+			item := GameStory{AppID: row.AppID, GID: row.Gid, Title: row.Title, URL: safe, PublishedAt: row.PublishedAt.Time.UTC()}
+			if row.ArticleID != uuid.Nil() {
+				item.ArticleID, item.Locale, item.Summary = row.ArticleID.String(), eventLocale(row.Language), row.Summary
+			}
+			out.Items = append(out.Items, item)
 		}
 	}
 	if len(rows) > int(limit) {
 		last := rows[limit-1]
-		raw, _ := json.Marshal(gameNewsCursor{Game: id, Source: app, GID: last.Gid, App: last.AppID, Time: last.PublishedAt.Time.UnixMicro()})
+		raw, _ := json.Marshal(gameNewsCursor{Game: id, Source: app, Locale: locale, GID: last.Gid, App: last.AppID, Time: last.PublishedAt.Time.UnixMicro()})
 		out.After = base64.RawURLEncoding.EncodeToString(raw)
 	}
 	return out, nil
@@ -111,7 +120,25 @@ type GameInsights struct {
 	News         []GameStory  `json:"news"`
 }
 
-func (s *Service) PublicGameNews(ctx context.Context, market ChannelMarket, id, app, after string) (ChannelPage[GameStory], error) {
+func (s *Service) PublicGameNews(ctx context.Context, market ChannelMarket, id, app, after string, locales ...string) (ChannelPage[GameStory], error) {
+	locale := "zh"
+	if market.Region == "INTL" {
+		locale = "en"
+	}
+	if len(locales) != 0 && locales[0] != "" {
+		locale = locales[0]
+	} else if len(after) <= 512 {
+		// Older callers send only the cursor returned by the Profile.
+		// Continue that page's locale without requiring a new query parameter.
+		raw, err := base64.RawURLEncoding.Strict().DecodeString(after)
+		var cursor gameNewsCursor
+		if err == nil && json.Unmarshal(raw, &cursor) == nil && cursor.Locale != "" {
+			locale = cursor.Locale
+		}
+	}
+	if locale != "en" && locale != "zh" {
+		return ChannelPage[GameStory]{}, ErrInvalid
+	}
 	if !ValidPublicID(id) {
 		return ChannelPage[GameStory]{}, ErrNotFound
 	}
@@ -132,7 +159,7 @@ func (s *Service) PublicGameNews(ctx context.Context, market ChannelMarket, id, 
 	if _, err := q.PublicGameIdentity(ctx, id); err != nil {
 		return ChannelPage[GameStory]{}, classify(err)
 	}
-	out, err := gameProfileNews(ctx, q, id, app, egress, after, 6)
+	out, err := gameProfileNews(ctx, q, id, app, egress, locale, after, 6)
 	if err != nil {
 		return ChannelPage[GameStory]{}, err
 	}
@@ -184,7 +211,7 @@ func (s *Service) PublicGameInsights(ctx context.Context, market ChannelMarket, 
 		if err := loadGameInsights(ctx, q, source, egress, steamLocale(locale), &out); err != nil {
 			return GameInsights{}, err
 		}
-		news, err := gameProfileNews(ctx, q, id, source.ExternalKey, egress, "", 20)
+		news, err := gameProfileNews(ctx, q, id, source.ExternalKey, egress, locale, "", 20)
 		if err != nil {
 			return GameInsights{}, err
 		}

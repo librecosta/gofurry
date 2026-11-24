@@ -55,11 +55,11 @@ func GameProfileSecondary(service *catalog.Service, market catalog.ChannelMarket
 	return func(c fiber.Ctx) error {
 		id := c.Params("publicID")
 		if news {
-			params, valid := gameProfileParams(c, "app_id", "after")
+			params, valid := gameProfileParams(c, "app_id", "after", "locale")
 			if !valid {
 				return catalogResponse(c, nil, catalog.ErrInvalid)
 			}
-			data, err := service.PublicGameNews(c.Context(), market, id, params["app_id"], params["after"])
+			data, err := service.PublicGameNews(c.Context(), market, id, params["app_id"], params["after"], params["locale"])
 			return catalogResponse(c, data, err)
 		}
 		params, valid := gameProfileParams(c, "app_id", "country", "locale", "range")

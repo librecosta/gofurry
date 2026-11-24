@@ -8,11 +8,12 @@ import type { Locale } from '../preferences'
 import { gamePath, genres } from './data'
 import { text } from './messages'
 import { marketLabel, profileCopy } from './profile-copy'
-import { money, profileMediaURL, sourceURL, storyURL, utcDate, type GameSource, type Profile, type PublicGameMedia, type StoreDetails, type Story } from './profile-data'
+import { money, newsArticleID, profileMediaURL, sourceURL, storyURL, utcDate, type GameSource, type Profile, type PublicGameMedia, type StoreDetails, type Story } from './profile-data'
 import { selectPublishedMedia } from './published-media'
 import { readGameExtra, type ProfilePage } from './profile-load'
 import { GameFrame } from './pages'
 import styles from './profile.module.scss'
+import { NewsArticleView } from './profile-news-article'
 import { ProfileRichDetails } from './profile-rich-details'
 
 const Gallery = lazy(() => import('./profile-gallery'))
@@ -111,11 +112,15 @@ function News({ profile, page }: { profile: Profile; page: ProfilePage }) {
     const href = storyURL(item)
     return href ? [<li key={item.app_id + '/' + item.gid}>
       <p><span>Steam · {item.app_id}</span><time dateTime={item.published_at}>{utcDate(item.published_at, page.locale)}</time></p>
-      <a href={href} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer">{item.title} <ArrowUpRightIcon size={15} aria-hidden="true" /></a>
+      {newsArticleID(item.article_id) ? <a href={'?article=' + item.article_id + '#news'} lang={item.locale}>{item.title}</a>
+        : <a href={href} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer">{item.title} <ArrowUpRightIcon size={15} aria-hidden="true" /></a>}
+      {item.summary && <p lang={item.locale}>{item.summary}</p>}
     </li>] : []
   })
   return <section id="news" className={styles.section}>
     <h2>{m.news}</h2>
+    {page.state === 'ready' && (page.article ? <NewsArticleView article={page.article} locale={page.locale} />
+      : page.article === null ? <p role="status">{m.articleUnavailable}</p> : null)}
     {rows.length > 0 ? <ol className={styles.news}>{rows}</ol>
       : <p className={styles.muted}>{unavailable ? m.newsError : m.noNews}</p>}
     {status === 'failed' && <p role="status">{m.newsError}</p>}
